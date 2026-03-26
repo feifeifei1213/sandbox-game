@@ -1,0 +1,759 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>沙盘经营系统 - 管理端 Demo</title>
+  <style>
+    :root {
+      --bg: #eff3f8;
+      --shell: #ffffff;
+      --line: #d6dbe3;
+      --panel: #f7f9fc;
+      --head: #f2f4f7;
+      --accent: #165dff;
+      --accent-soft: #e9f1ff;
+      --ok: #067647;
+      --warn: #b54708;
+      --danger: #b42318;
+      --teal: #d9efee;
+      --warm: #f4decb;
+      --mint: #cfe5be;
+      --calc: #fff59d;
+      --locked: #eef2f7;
+      --text: #1f2937;
+      --muted: #667085;
+      --shadow: 0 18px 46px rgba(15, 23, 42, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(22, 93, 255, 0.08), transparent 25%),
+        linear-gradient(180deg, #edf2f7 0%, #f8fafc 100%);
+    }
+
+    .page { padding: 20px; min-height: 100vh; }
+    .shell {
+      width: min(1700px, calc(100vw - 40px));
+      margin: 0 auto;
+      background: var(--shell);
+      border: 1px solid #d9e1ea;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      background: linear-gradient(180deg, #fbfdff 0%, #eff4fb 100%);
+      border-bottom: 1px solid #dde5ef;
+    }
+
+    .brand strong { display:block; font-size: 19px; margin-bottom: 4px; }
+    .brand span, .status span { font-size: 13px; color: var(--muted); }
+    .status { display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end; }
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid #d7e0ea;
+      font-size: 13px;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      min-height: calc(100vh - 120px);
+    }
+
+    .nav {
+      border-right: 1px solid #dde5ef;
+      background: linear-gradient(180deg, #fbfcfe 0%, #f4f7fb 100%);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .nav h3 {
+      margin: 2px 0 4px;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+
+    .nav-btn {
+      text-align: left;
+      border: 1px solid #d8e0ea;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .nav-btn strong { display:block; margin-bottom: 4px; }
+    .nav-btn span { font-size: 12px; color: var(--muted); }
+    .nav-btn.active {
+      background: var(--accent-soft);
+      border-color: #b9d0ff;
+      box-shadow: inset 0 0 0 1px rgba(22, 93, 255, 0.06);
+    }
+
+    .main {
+      padding: 18px;
+      background: #f7f9fc;
+      overflow: auto;
+    }
+
+    .panel { display:none; }
+    .panel.active { display:block; }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .hero h2 { margin:0 0 6px; font-size: 22px; }
+    .hero p { margin:0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+    .hero-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+    .btn {
+      border: 1px solid #cfd7e2;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color:#fff; }
+
+    .layout { display:grid; gap:14px; }
+    .cards-4 { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:14px; }
+    .cards-3 { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:14px; }
+
+    .card {
+      background:#fff;
+      border:1px solid #dbe2ea;
+      border-radius:16px;
+      padding:14px;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+    .card h3 { margin:0 0 10px; font-size:15px; }
+    .card p { margin:0; color: var(--muted); font-size:13px; line-height:1.6; }
+
+    .metric {
+      font-size: 28px;
+      font-weight: 800;
+      margin: 8px 0 4px;
+    }
+
+    .tag {
+      display:inline-flex;
+      align-items:center;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+    }
+    .tag.ok { background:#e8f7ee; color:var(--ok); }
+    .tag.warn { background:#fff7ed; color:var(--warn); }
+    .tag.danger { background:#fee4e2; color:var(--danger); }
+    .tag.info { background:#eaf2ff; color:#185adb; }
+
+    .sheet-wrap {
+      background:#fff;
+      border:1px solid #dbe2ea;
+      border-radius:16px;
+      overflow:hidden;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+
+    .sheet-head {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+      padding:12px 14px;
+      background:#f5f7fa;
+      border-bottom:1px solid #dde5ef;
+    }
+
+    .sheet-head strong { font-size:15px; }
+    .sheet-head span { color:var(--muted); font-size:13px; }
+
+    .sheet-scroll { overflow:auto; }
+    table.sheet {
+      width:100%;
+      min-width: 1180px;
+      border-collapse:collapse;
+      background:#fff;
+    }
+    .sheet th, .sheet td {
+      border:1px solid var(--line);
+      padding:10px 12px;
+      font-size:14px;
+      vertical-align:middle;
+    }
+    .sheet th {
+      background:var(--head);
+      font-weight:700;
+      text-align:center;
+    }
+    .year-head { background:#f6e1cf !important; }
+    .sub-head { background:#f9fafb !important; font-size:13px; }
+    .row-title { background:#fbfbfc; font-weight:700; }
+    .right { text-align:right; }
+    .center { text-align:center; }
+    .summary-ok { color:var(--ok); font-weight:700; }
+    .summary-danger { color:var(--danger); font-weight:700; }
+    .placeholder {
+      padding:16px;
+      border-top:1px solid #dde5ef;
+      background:#fffdf7;
+      color:#8a5b14;
+      font-size:13px;
+    }
+
+    .split {
+      display:grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+      gap:14px;
+    }
+
+    .form-grid {
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap:12px;
+    }
+
+    .field label {
+      display:block;
+      margin-bottom:6px;
+      font-size:13px;
+      color:var(--muted);
+      font-weight:700;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width:100%;
+      border:1px solid #cfd7e2;
+      background:#fff;
+      border-radius:12px;
+      padding:10px 12px;
+      font:inherit;
+      resize:vertical;
+    }
+
+    .stack { display:grid; gap:12px; }
+    .timeline { display:grid; gap:10px; }
+    .timeline-item {
+      border-left: 3px solid #c9d7f2;
+      padding-left: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .timeline-item strong { display:block; color:var(--text); margin-bottom:4px; }
+
+    .mini-sheet {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 900px;
+      background:#fff;
+    }
+    .mini-sheet th, .mini-sheet td {
+      border:1px solid var(--line);
+      padding:8px 10px;
+      font-size:13px;
+    }
+    .mini-sheet th { background:var(--head); }
+    .input-green { background: var(--mint); }
+    .calc-yellow { background: var(--calc); font-weight:700; }
+    .readonly-gray { background: var(--locked); color:#98a2b3; }
+
+    .footer {
+      padding: 12px 16px 18px;
+      color: var(--muted);
+      font-size: 13px;
+      background: #eef2f6;
+      border-top: 1px solid #dde5ef;
+    }
+
+    @media (max-width: 1100px) {
+      .page { padding:10px; }
+      .shell { width:100%; }
+      .workspace,
+      .cards-4,
+      .cards-3,
+      .split,
+      .form-grid { grid-template-columns: 1fr; }
+      .status { justify-content:flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <div class="topbar">
+        <div class="brand">
+          <strong>沙盘经营系统 · 管理端展示 Demo</strong>
+          <span>展示重点：首版菜单只保留 汇总 / 年度控制 / 初始基线 / 组数据，页面以“现场可推进、规则不跑偏”为主。</span>
+        </div>
+        <div class="status">
+          <div class="pill">管理员：admin</div>
+          <div class="pill">最终年份：3年</div>
+          <div class="pill">当前开放：1年</div>
+          <div class="pill">共享初始基线：已提交</div>
+        </div>
+      </div>
+
+      <div class="workspace">
+        <aside class="nav">
+          <h3>管理员菜单</h3>
+          <button class="nav-btn active" data-panel-target="summary">
+            <strong>汇总</strong>
+            <span>年度汇总区 + 最终排名区</span>
+          </button>
+          <button class="nav-btn" data-panel-target="control">
+            <strong>年度控制</strong>
+            <span>最终年份、当前开放年份、下一年开放</span>
+          </button>
+          <button class="nav-btn" data-panel-target="baseline">
+            <strong>初始基线</strong>
+            <span>共享模板录入，提交后应用到全部小组</span>
+          </button>
+          <button class="nav-btn" data-panel-target="group-data">
+            <strong>组数据</strong>
+            <span>查看任意组、任意年、任意页面并执行异常解锁</span>
+          </button>
+        </aside>
+
+        <main class="main">
+          <section class="panel active" data-panel="summary">
+            <div class="hero">
+              <div>
+                <h2>汇总</h2>
+                <p>同一个页面分为两个展示区：上方是年度汇总区，下方是最终排名区。首版不做单独排名页面，也不做导出。</p>
+              </div>
+              <div class="hero-actions">
+                <button class="btn">刷新汇总</button>
+                <button class="btn">查看说明</button>
+              </div>
+            </div>
+
+            <div class="layout">
+              <div class="sheet-wrap">
+                <div class="sheet-head">
+                  <div>
+                    <strong>年度汇总区</strong>
+                    <span>从 1年 开始展示正式汇总数据；0年不进入正式汇总</span>
+                  </div>
+                  <span>当前演示：最终年份已开放前的正常查看状态</span>
+                </div>
+                <div class="sheet-scroll">
+                  <table class="sheet">
+                    <thead>
+                      <tr>
+                        <th rowspan="2">小组</th>
+                        <th class="year-head" colspan="3">1年</th>
+                        <th class="year-head" colspan="3">2年</th>
+                        <th class="year-head" colspan="3">3年</th>
+                        <th rowspan="2">经营状态</th>
+                      </tr>
+                      <tr>
+                        <th class="sub-head">收入</th>
+                        <th class="sub-head">利润</th>
+                        <th class="sub-head">权益</th>
+                        <th class="sub-head">收入</th>
+                        <th class="sub-head">利润</th>
+                        <th class="sub-head">权益</th>
+                        <th class="sub-head">收入</th>
+                        <th class="sub-head">利润</th>
+                        <th class="sub-head">权益</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="row-title">第1组</td>
+                        <td class="right">58</td><td class="right">6</td><td class="right">66</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center"><span class="tag ok">正常</span></td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">第2组</td>
+                        <td class="right">61</td><td class="right">7</td><td class="right">69</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center"><span class="tag ok">正常</span></td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">第3组</td>
+                        <td class="right">49</td><td class="right">2</td><td class="right">52</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center"><span class="tag ok">正常</span></td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">第4组</td>
+                        <td class="right">43</td><td class="right">-2</td><td class="right">45</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center"><span class="tag danger">已破产</span></td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">第5组</td>
+                        <td class="right">55</td><td class="right">5</td><td class="right">63</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center">--</td><td class="center">--</td><td class="center">--</td>
+                        <td class="center"><span class="tag ok">正常</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="sheet-wrap">
+                <div class="sheet-head">
+                  <div>
+                    <strong>最终排名区</strong>
+                    <span>未满足开放条件时，这里显示状态提示；当前演示展示“已开放状态”样式</span>
+                  </div>
+                  <span class="tag info">演示状态：已开放</span>
+                </div>
+                <div class="sheet-scroll">
+                  <table class="sheet" style="min-width:520px;">
+                    <thead>
+                      <tr>
+                        <th>排名</th>
+                        <th>小组</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td class="center">1</td><td>第2组</td></tr>
+                      <tr><td class="center">2</td><td>第1组</td></tr>
+                      <tr><td class="center">3</td><td>第5组</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="placeholder">未满足开放条件时，这里显示：最终排名暂未开放，请等待所有未破产小组完成最终年度财报后查看。</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="control">
+            <div class="hero">
+              <div>
+                <h2>年度控制</h2>
+                <p>这不是重型总控台，而是一个轻量控制页：看最终年份、看当前开放年份、判断能不能开下一年、执行管理员推进动作。</p>
+              </div>
+              <div class="hero-actions">
+                <button class="btn">刷新状态</button>
+                <button class="btn primary">开放下一年</button>
+              </div>
+            </div>
+
+            <div class="cards-4">
+              <div class="card">
+                <h3>最终年份</h3>
+                <div class="metric">3</div>
+                <p>管理员可配置，但不得小于当前开放年份。</p>
+              </div>
+              <div class="card">
+                <h3>当前开放年份</h3>
+                <div class="metric">1</div>
+                <p>玩家季度自行推进，年度由管理员统一推进。</p>
+              </div>
+              <div class="card">
+                <h3>能否开放下一年</h3>
+                <div class="metric">可以</div>
+                <p>当前已满足全部未破产组完成本年财报的条件。</p>
+              </div>
+              <div class="card">
+                <h3>最近动作</h3>
+                <div class="metric" style="font-size:18px; line-height:1.4;">提交初始基线</div>
+                <p>admin · 2026-03-26 10:45</p>
+              </div>
+            </div>
+
+            <div class="split" style="margin-top:14px;">
+              <div class="card">
+                <h3>控制区</h3>
+                <div class="form-grid">
+                  <div class="field">
+                    <label>最终年份</label>
+                    <select>
+                      <option>2</option>
+                      <option selected>3</option>
+                      <option>4</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>准备开放到</label>
+                    <input value="2年" readonly>
+                  </div>
+                </div>
+                <div class="stack" style="margin-top:12px;">
+                  <div class="tag ok">可以开放下一年</div>
+                  <div class="tag warn">若未满足条件，这里只显示原因摘要，不展开逐组列表</div>
+                </div>
+                <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                  <button class="btn">保存最终年份</button>
+                  <button class="btn primary">确认开放 2年</button>
+                </div>
+              </div>
+
+              <div class="card">
+                <h3>阻塞原因展示规则</h3>
+                <div class="timeline">
+                  <div class="timeline-item">
+                    <strong>当前演示</strong>
+                    无阻塞，可直接推进下一年。
+                  </div>
+                  <div class="timeline-item">
+                    <strong>若不可推进</strong>
+                    仅提示“当前仍有未完成财报的小组”，不展示复杂明细列表。
+                  </div>
+                  <div class="timeline-item">
+                    <strong>到达最终年份</strong>
+                    提示“已达到最终年份，无法继续开放”。
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="baseline">
+            <div class="hero">
+              <div>
+                <h2>初始基线</h2>
+                <p>页面语义是“1 份共享模板”，不是 10 组逐个录。提交后由后端应用到全部小组，并整体锁定。</p>
+              </div>
+              <div class="hero-actions">
+                <button class="btn">查看历史提交</button>
+                <button class="btn primary">提交并应用到全部小组</button>
+              </div>
+            </div>
+
+            <div class="split">
+              <div class="sheet-wrap">
+                <div class="sheet-head">
+                  <div>
+                    <strong>共享初始基线模板</strong>
+                    <span>演示页保留 Excel 风格输入感，方便和原始表切换</span>
+                  </div>
+                  <span class="tag ok">当前状态：已提交并锁定</span>
+                </div>
+                <div class="sheet-scroll">
+                  <table class="mini-sheet">
+                    <thead>
+                      <tr>
+                        <th>项目</th>
+                        <th>值</th>
+                        <th>说明</th>
+                        <th>状态</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="row-title">初始现金</td>
+                        <td class="input-green">50</td>
+                        <td>管理员赛前统一录入</td>
+                        <td class="center">共享模板</td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">初始短期负债</td>
+                        <td class="input-green">20</td>
+                        <td>提交后应用到全部小组</td>
+                        <td class="center">共享模板</td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">固定资产</td>
+                        <td class="input-green">40</td>
+                        <td>这里只展示基线录入，不承载复杂计算</td>
+                        <td class="center">共享模板</td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">股东资本</td>
+                        <td class="calc-yellow">50</td>
+                        <td>可按需要做部分自动带出</td>
+                        <td class="center">自动项</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="stack">
+                <div class="card">
+                  <h3>提交状态</h3>
+                  <div class="timeline">
+                    <div class="timeline-item">
+                      <strong>提交人</strong>
+                      admin
+                    </div>
+                    <div class="timeline-item">
+                      <strong>提交时间</strong>
+                      2026-03-26 10:45
+                    </div>
+                    <div class="timeline-item">
+                      <strong>应用数量</strong>
+                      10 个小组
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h3>首版口径</h3>
+                  <p>首版不做复杂版本管理，也不支持提交后再编辑。若后续业务要求变更，应重新走管理员操作流程，不在本页做回滚链路。</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="group-data">
+            <div class="hero">
+              <div>
+                <h2>组数据</h2>
+                <p>管理员按“组 → 年 → 页面类型”查看数据。默认进入经营页，只读预览玩家真实页面结构，并提供异常解锁入口。</p>
+              </div>
+              <div class="hero-actions">
+                <button class="btn">刷新</button>
+                <button class="btn primary">异常解锁</button>
+              </div>
+            </div>
+
+            <div class="split">
+              <div class="sheet-wrap">
+                <div class="sheet-head">
+                  <div>
+                    <strong>组数据只读预览</strong>
+                    <span>这里复用玩家端 Excel 风格页面的只读视图</span>
+                  </div>
+                  <span class="tag info">当前：第3组 · 1年 · 经营页</span>
+                </div>
+                <div class="sheet-scroll">
+                  <table class="mini-sheet">
+                    <thead>
+                      <tr>
+                        <th>区域</th>
+                        <th>字段</th>
+                        <th>值</th>
+                        <th>页面状态</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="row-title">年初区</td>
+                        <td>计划收入</td>
+                        <td class="calc-yellow">32</td>
+                        <td class="readonly-gray center">已锁定</td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">Q1 区</td>
+                        <td>订单收入</td>
+                        <td class="calc-yellow">8</td>
+                        <td class="readonly-gray center">已锁定</td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">Q2 区</td>
+                        <td>订单收入</td>
+                        <td class="readonly-gray">12</td>
+                        <td class="readonly-gray center">未开放</td>
+                      </tr>
+                      <tr>
+                        <td class="row-title">财报页</td>
+                        <td>状态</td>
+                        <td class="calc-yellow">未提交</td>
+                        <td class="readonly-gray center">未完成</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="stack">
+                <div class="card">
+                  <h3>查看条件</h3>
+                  <div class="form-grid">
+                    <div class="field">
+                      <label>小组</label>
+                      <select>
+                        <option>第1组</option>
+                        <option>第2组</option>
+                        <option selected>第3组</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>年份</label>
+                      <select>
+                        <option>0年</option>
+                        <option selected>1年</option>
+                        <option>2年</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>页面类型</label>
+                      <select>
+                        <option selected>经营页</option>
+                        <option>财报页</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>经营状态</label>
+                      <input value="正常" readonly>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h3>异常解锁</h3>
+                  <p>前端不预判能不能解锁。管理员现场确认后直接提交原因，服务端只做最小硬校验。</p>
+                  <div class="field" style="margin-top:10px;">
+                    <label>解锁原因</label>
+                    <textarea rows="5">现场核对后发现该组 Q2 数据录入错误，需要恢复为可修改状态并重新提交。</textarea>
+                  </div>
+                  <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn primary">提交异常解锁</button>
+                    <button class="btn">查看解锁日志</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <div class="footer">这个管理端 Demo 重点展示的是页面信息架构和操作心智，不是最终视觉稿。当前方向偏“轻控制 + 高信息密度”，方便现场主持人快速推进游戏。</div>
+    </div>
+  </div>
+
+  <script>
+    const navButtons = document.querySelectorAll('.nav-btn');
+    const panels = document.querySelectorAll('.panel');
+
+    navButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        navButtons.forEach((item) => item.classList.remove('active'));
+        panels.forEach((panel) => panel.classList.remove('active'));
+        button.classList.add('active');
+        document.querySelector('.panel[data-panel="' + button.dataset.panelTarget + '"]').classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+﻿.cache/
+.gocache/
+.idea/
+
+dist/
+node_modules/
+
+*.log
+*.tmp
+*.temp
+*.exe

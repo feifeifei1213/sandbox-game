@@ -1,0 +1,755 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>沙盘经营系统 - 玩家端 Demo</title>
+  <style>
+    :root {
+      --bg: #eef2f7;
+      --shell: #ffffff;
+      --sheet: #fbfbfc;
+      --line: #d4d8de;
+      --head: #f3f5f7;
+      --mint: #cfe5be;
+      --locked: #edf1f6;
+      --calc: #fff59d;
+      --accent: #185adb;
+      --teal: #d8efee;
+      --warm: #f6decb;
+      --end: #dff0d2;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --shadow: 0 18px 46px rgba(15, 23, 42, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(24, 90, 219, 0.08), transparent 26%),
+        linear-gradient(180deg, #eef3f9 0%, #f8fafc 100%);
+    }
+
+    .page {
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    .shell {
+      width: min(1680px, calc(100vw - 40px));
+      margin: 0 auto;
+      background: var(--shell);
+      border: 1px solid #dbe2ea;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      background: linear-gradient(180deg, #fbfdff 0%, #eef4fb 100%);
+      border-bottom: 1px solid #dde5ef;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 19px;
+      margin-bottom: 4px;
+    }
+
+    .brand span,
+    .status-strip span,
+    .sheet-tab.disabled {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid #d7e0ea;
+      font-size: 13px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 14px;
+      background: #eef2f6;
+      border-bottom: 1px solid #dde4ec;
+    }
+
+    .toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .btn {
+      border: 1px solid #cfd7e2;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .formula {
+      display: grid;
+      grid-template-columns: 60px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .namebox,
+    .fxbox {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      border: 1px solid #cfd7e2;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+
+    .fxbox span {
+      color: var(--muted);
+      font-weight: 700;
+      margin-right: 8px;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 292px;
+      align-items: start;
+    }
+
+    .main {
+      min-width: 0;
+      border-right: 1px solid #dde4ec;
+      background: var(--sheet);
+    }
+
+    .sheet-panel { display: none; }
+    .sheet-panel.active { display: block; }
+
+    .sheet-scroll {
+      overflow: auto;
+      max-height: calc(100vh - 230px);
+      border-bottom: 1px solid #dde4ec;
+      background: #ffffff;
+    }
+
+    table.sheet {
+      border-collapse: collapse;
+      min-width: 1540px;
+      background: #ffffff;
+    }
+
+    .sheet th,
+    .sheet td {
+      border: 1px solid var(--line);
+      padding: 0;
+      vertical-align: middle;
+    }
+
+    .corner,
+    .col-head,
+    .row-head {
+      background: var(--head);
+      text-align: center;
+      color: #4b5563;
+      font-weight: 600;
+    }
+
+    .corner,
+    .col-head { height: 30px; font-size: 12px; }
+    .row-head { width: 48px; min-width: 48px; font-size: 12px; }
+
+    .cell {
+      min-height: 34px;
+      padding: 6px 8px;
+      font-size: 14px;
+      line-height: 1.35;
+      background: #ffffff;
+    }
+
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .small { font-size: 12px; }
+    .band {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      letter-spacing: 2px;
+      font-weight: 700;
+      width: 36px;
+      min-width: 36px;
+      text-align: center;
+    }
+
+    .band.start { background: var(--warm); }
+    .band.quarter { background: var(--teal); }
+    .band.end { background: var(--end); }
+    .title { background: #fbfbfb; font-weight: 700; }
+    .note { background: #fbfbfb; color: #111827; }
+    .calc { background: var(--calc); font-weight: 700; text-align: center; }
+    .input { background: var(--mint); }
+    .input input,
+    .input select {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: transparent;
+      padding: 8px 10px;
+      font: inherit;
+      outline: none;
+    }
+
+    .locked {
+      background: var(--locked);
+      color: #98a2b3;
+    }
+
+    .locked input { color: #98a2b3; cursor: not-allowed; }
+    .strong { font-weight: 700; }
+
+    .sheet-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 10px 10px 12px;
+      overflow-x: auto;
+      background: #eef2f6;
+    }
+
+    .sheet-tab {
+      border: 1px solid #cfd7e2;
+      background: #e8ecf1;
+      border-radius: 10px 10px 0 0;
+      padding: 10px 14px;
+      white-space: nowrap;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .sheet-tab.active {
+      background: #ffffff;
+      border-bottom-color: #ffffff;
+      font-weight: 700;
+    }
+
+    .sidebar {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      background: linear-gradient(180deg, #fbfcff 0%, #f3f7fb 100%);
+    }
+
+    .card {
+      border: 1px solid #dbe2ea;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+
+    .card h3 { margin: 0 0 10px; font-size: 15px; }
+    .card p { margin: 0; color: #475467; font-size: 13px; line-height: 1.6; }
+
+    .grid-list { display: grid; gap: 8px; }
+    .grid-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #e5e7eb;
+      font-size: 13px;
+      color: #475467;
+    }
+    .grid-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .grid-row strong { color: #111827; }
+
+    .notice {
+      border: 1px solid #fed7aa;
+      background: #fff7ed;
+      color: #b45309;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .inputbox {
+      width: 100%;
+      border: 1px solid #cfd7e2;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      margin-bottom: 8px;
+      background: #ffffff;
+    }
+
+    .footer {
+      padding: 12px 16px 18px;
+      font-size: 13px;
+      color: var(--muted);
+      background: #eef2f6;
+    }
+
+    @media (max-width: 980px) {
+      .page { padding: 10px; }
+      .shell { width: 100%; }
+      .topbar,
+      .toolbar,
+      .workspace { grid-template-columns: 1fr; }
+      .main { border-right: none; border-bottom: 1px solid #dde4ec; }
+      .status-strip { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <div class="topbar">
+        <div class="brand">
+          <strong>沙盘经营系统 · 玩家端展示 Demo</strong>
+          <span>展示重点：默认进入 0年经营，整页保持 Excel 结构，未来阶段可见但锁定，右侧只保留轻量工作栏。</span>
+        </div>
+        <div class="status-strip">
+          <div class="pill">第 3 组</div>
+          <div class="pill">当前年份：0年</div>
+          <div class="pill">当前阶段：Q1</div>
+          <div class="pill">状态：草稿已自动保存</div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-actions">
+          <button class="btn">自动保存</button>
+          <button class="btn">必填检查</button>
+          <button class="btn">现金核对</button>
+          <button class="btn primary">提交 Q1</button>
+        </div>
+        <div class="formula">
+          <div class="namebox">E10</div>
+          <div class="fxbox"><span>fx</span> 当前演示为 Q1，所以只有“年初区 + Q1 区”开放；Q2/Q3/Q4/年末区全部保留原位但锁定。</div>
+        </div>
+        <div class="small" style="color:#6b7280;">绿色可填，黄色为公式结果，灰色锁定</div>
+      </div>
+
+      <div class="workspace">
+        <main class="main">
+          <section class="sheet-panel active" data-sheet="operate">
+            <div class="sheet-scroll">
+              <table class="sheet">
+                <colgroup>
+                  <col style="width:48px">
+                  <col style="width:40px">
+                  <col style="width:220px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                  <col style="width:128px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th class="corner"></th>
+                    <th class="col-head">A</th>
+                    <th class="col-head">B</th>
+                    <th class="col-head">C</th>
+                    <th class="col-head">D</th>
+                    <th class="col-head">E</th>
+                    <th class="col-head">F</th>
+                    <th class="col-head">G</th>
+                    <th class="col-head">H</th>
+                    <th class="col-head">I</th>
+                    <th class="col-head">J</th>
+                    <th class="col-head">K</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th class="row-head">1</th>
+                    <td class="band start cell" rowspan="5">年初工作</td>
+                    <td class="title cell">1. 支付上年度所得税</td>
+                    <td class="note cell center" colspan="5">税率规则现场已确认，系统首版只做结果展示与填写边界控制</td>
+                    <td class="calc cell">0</td>
+                    <td class="note cell center" colspan="3">年初区随 Q1 一起提交</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">2</th>
+                    <td class="title cell">2. 年度经营会议</td>
+                    <td class="note cell center">计划收入</td>
+                    <td class="input cell"><input value="32"></td>
+                    <td class="note cell center">计划利润</td>
+                    <td class="input cell"><input value="6"></td>
+                    <td class="note cell center">计划权益</td>
+                    <td class="calc cell">58</td>
+                    <td class="note cell center" colspan="3">与 Excel 的格位关系尽量保持接近</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">3</th>
+                    <td class="title cell">3. 市场投入</td>
+                    <td class="note cell center">本地</td>
+                    <td class="input cell"><input value="4"></td>
+                    <td class="note cell center">全国</td>
+                    <td class="input cell"><input value="3"></td>
+                    <td class="note cell center">全球</td>
+                    <td class="input cell"><input value="0"></td>
+                    <td class="calc cell">总投入 7</td>
+                    <td class="note cell center" colspan="2">0 必须显式填写</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">4</th>
+                    <td class="title cell">4. 贷款计划</td>
+                    <td class="note cell center">短贷新增</td>
+                    <td class="input cell"><input value="20"></td>
+                    <td class="note cell center">付息</td>
+                    <td class="input cell"><input value="2"></td>
+                    <td class="note cell center">贷款余额</td>
+                    <td class="calc cell">20</td>
+                    <td class="note cell center" colspan="3">季度提交后提醒玩家检查贷款更新</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">5</th>
+                    <td class="title cell">5. 现金口径</td>
+                    <td class="note cell center">系统现金</td>
+                    <td class="calc cell">45</td>
+                    <td class="note cell center">沙盘现金</td>
+                    <td class="input cell"><input value="45"></td>
+                    <td class="note cell center">核对</td>
+                    <td class="calc cell">一致</td>
+                    <td class="note cell center" colspan="3">首版仍保留现金核对工作栏提示</td>
+                  </tr>
+
+                  <tr>
+                    <th class="row-head">6</th>
+                    <td class="band quarter cell" rowspan="10">每季度工作</td>
+                    <td class="title cell">Q1 区</td>
+                    <td class="note cell center">订单收入</td>
+                    <td class="input cell"><input value="8"></td>
+                    <td class="note cell center">直接成本</td>
+                    <td class="input cell"><input value="4"></td>
+                    <td class="note cell center">综合费用</td>
+                    <td class="input cell"><input value="2"></td>
+                    <td class="calc cell">Q1 利润 2</td>
+                    <td class="note cell center" colspan="2">当前阶段可编辑</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">7</th>
+                    <td class="title cell">Q1 交付进度</td>
+                    <td class="note cell center">贸易项目</td>
+                    <td class="input cell"><input value="3"></td>
+                    <td class="note cell center">集成项目</td>
+                    <td class="input cell"><input value="2"></td>
+                    <td class="note cell center">服务项目</td>
+                    <td class="input cell"><input value="1"></td>
+                    <td class="calc cell">合计 6</td>
+                    <td class="note cell center" colspan="2">和 Excel 同屏填写</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">8</th>
+                    <td class="title cell">Q2 区</td>
+                    <td class="note cell center">订单收入</td>
+                    <td class="input locked cell"><input disabled value=""></td>
+                    <td class="note cell center">直接成本</td>
+                    <td class="input locked cell"><input disabled value=""></td>
+                    <td class="note cell center">综合费用</td>
+                    <td class="input locked cell"><input disabled value=""></td>
+                    <td class="locked cell center strong">未开放</td>
+                    <td class="note cell center" colspan="2">可见但不可填</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">9</th>
+                    <td class="title cell">Q2 交付进度</td>
+                    <td class="note cell center">贸易项目</td>
+                    <td class="input locked cell"><input disabled value=""></td>
+                    <td class="note cell center">集成项目</td>
+                    <td class="input locked cell"><input disabled value=""></td>
+                    <td class="note cell center">服务项目</td>
+                    <td class="input locked cell"><input disabled value=""></td>
+                    <td class="locked cell center strong">锁定</td>
+                    <td class="note cell center" colspan="2">玩家自己推进季度</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">10</th>
+                    <td class="title cell">Q3 区</td>
+                    <td class="locked cell center" colspan="7">Q3 全区保留显示，但当前不开放</td>
+                    <td class="locked cell center strong">锁定</td>
+                    <td class="note cell center" colspan="2">避免分页造成理解断层</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">11</th>
+                    <td class="title cell">Q4 区</td>
+                    <td class="locked cell center" colspan="7">Q4 全区保留显示，但当前不开放</td>
+                    <td class="locked cell center strong">锁定</td>
+                    <td class="note cell center" colspan="2">仍然按 Excel 一整页展示</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">12</th>
+                    <td class="title cell">年末区</td>
+                    <td class="locked cell center" colspan="7">年末手工项当前只读，等前四季度完成后开放</td>
+                    <td class="locked cell center strong">锁定</td>
+                    <td class="note cell center" colspan="2">年末提交后才开放本年财报</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">13</th>
+                    <td class="title cell">本年累计收入</td>
+                    <td class="calc cell">8</td>
+                    <td class="title cell">本年累计利润</td>
+                    <td class="calc cell">2</td>
+                    <td class="title cell">本年累计权益</td>
+                    <td class="calc cell">52</td>
+                    <td class="note cell center" colspan="3">黄色区为系统自动带出</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">14</th>
+                    <td class="title cell">草稿保存说明</td>
+                    <td class="note cell" colspan="8">首版采用 5 分钟自动保存草稿；季度提交和财报提交仍是单独动作。</td>
+                    <td class="note cell center" colspan="2">已保存 10:25</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">15</th>
+                    <td class="title cell">提交提示</td>
+                    <td class="note cell" colspan="8">Q1 提交时仅校验“年初区 + Q1 区”的必填项，不会重复校验 Q2/Q3/Q4/年末。</td>
+                    <td class="note cell center" colspan="2">需求已确认</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="sheet-panel" data-sheet="report">
+            <div class="sheet-scroll">
+              <table class="sheet" style="min-width:1320px;">
+                <colgroup>
+                  <col style="width:48px">
+                  <col style="width:56px">
+                  <col style="width:220px">
+                  <col style="width:120px">
+                  <col style="width:56px">
+                  <col style="width:220px">
+                  <col style="width:120px">
+                  <col style="width:56px">
+                  <col style="width:220px">
+                  <col style="width:120px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th class="corner"></th>
+                    <th class="col-head">A</th>
+                    <th class="col-head">B</th>
+                    <th class="col-head">C</th>
+                    <th class="col-head">D</th>
+                    <th class="col-head">E</th>
+                    <th class="col-head">F</th>
+                    <th class="col-head">G</th>
+                    <th class="col-head">H</th>
+                    <th class="col-head">I</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th class="row-head">1</th>
+                    <td class="cell"></td>
+                    <td class="title cell center" colspan="2">损益表</td>
+                    <td class="cell"></td>
+                    <td class="title cell center" colspan="2">资产负债表</td>
+                    <td class="cell"></td>
+                    <td class="title cell center" colspan="2">负债 + 权益</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">2</th>
+                    <td class="cell"></td>
+                    <td class="note cell">销售收入</td>
+                    <td class="calc cell">32</td>
+                    <td class="cell"></td>
+                    <td class="note cell">固定资产</td>
+                    <td class="calc cell">43</td>
+                    <td class="cell"></td>
+                    <td class="note cell">短期负债</td>
+                    <td class="calc cell">20</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">3</th>
+                    <td class="cell"></td>
+                    <td class="note cell">直接成本</td>
+                    <td class="calc cell">18</td>
+                    <td class="cell"></td>
+                    <td class="note cell">现金</td>
+                    <td class="calc cell">35</td>
+                    <td class="cell"></td>
+                    <td class="note cell">长期负债</td>
+                    <td class="calc cell">0</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">4</th>
+                    <td class="cell"></td>
+                    <td class="note cell">综合费用</td>
+                    <td class="calc cell">10</td>
+                    <td class="cell"></td>
+                    <td class="note cell">在制品</td>
+                    <td class="input cell"><input value="6"></td>
+                    <td class="cell"></td>
+                    <td class="note cell">股东资本</td>
+                    <td class="calc cell">50</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">5</th>
+                    <td class="cell"></td>
+                    <td class="note cell">营业利润</td>
+                    <td class="calc cell">4</td>
+                    <td class="cell"></td>
+                    <td class="note cell">成品</td>
+                    <td class="input cell"><input value="4"></td>
+                    <td class="cell"></td>
+                    <td class="note cell">利润留存</td>
+                    <td class="calc cell">17</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">6</th>
+                    <td class="cell"></td>
+                    <td class="note cell">财务收支</td>
+                    <td class="calc cell">-1</td>
+                    <td class="cell"></td>
+                    <td class="note cell">原料</td>
+                    <td class="input cell"><input value="3"></td>
+                    <td class="cell"></td>
+                    <td class="note cell">年度净利润</td>
+                    <td class="calc cell">3</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">7</th>
+                    <td class="cell"></td>
+                    <td class="note cell">所得税税率</td>
+                    <td class="input cell">
+                      <select>
+                        <option selected>0.25</option>
+                        <option>0.15</option>
+                        <option>0</option>
+                      </select>
+                    </td>
+                    <td class="cell"></td>
+                    <td class="note cell">总资产</td>
+                    <td class="calc cell">91</td>
+                    <td class="cell"></td>
+                    <td class="note cell">总负债 + 权益</td>
+                    <td class="calc cell">91</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">8</th>
+                    <td class="cell"></td>
+                    <td class="note cell">所得税</td>
+                    <td class="calc cell">1</td>
+                    <td class="cell"></td>
+                    <td class="note cell center" colspan="2">绿色单元格 = 手工输入边界</td>
+                    <td class="cell"></td>
+                    <td class="note cell center" colspan="2">提交时校验总资产平衡</td>
+                  </tr>
+                  <tr>
+                    <th class="row-head">9</th>
+                    <td class="cell"></td>
+                    <td class="note cell">年度净利润</td>
+                    <td class="calc cell">3</td>
+                    <td class="cell"></td>
+                    <td class="note cell" colspan="2">本年经营完成后才开放财报页；提交后本年度完成。</td>
+                    <td class="cell"></td>
+                    <td class="calc cell center" colspan="2">当前校验结果：通过</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div class="sheet-tabs">
+            <button class="sheet-tab active" data-target="operate">0年经营</button>
+            <button class="sheet-tab" data-target="report">0年财报</button>
+            <button class="sheet-tab disabled">1年经营</button>
+            <button class="sheet-tab disabled">1年财报</button>
+            <button class="sheet-tab disabled">2年经营</button>
+            <button class="sheet-tab disabled">2年财报</button>
+            <button class="sheet-tab disabled">3年经营</button>
+            <button class="sheet-tab disabled">3年财报</button>
+          </div>
+        </main>
+
+        <aside class="sidebar">
+          <section class="card">
+            <h3>当前状态</h3>
+            <div class="grid-list">
+              <div class="grid-row"><span>当前年份</span><strong>0年</strong></div>
+              <div class="grid-row"><span>当前阶段</span><strong>Q1 可提交</strong></div>
+              <div class="grid-row"><span>财报页</span><strong>未开放</strong></div>
+              <div class="grid-row"><span>经营状态</span><strong>正常</strong></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h3>现金核对</h3>
+            <input class="inputbox" type="text" value="45">
+            <div class="grid-list">
+              <div class="grid-row"><span>系统现金</span><strong>45</strong></div>
+              <div class="grid-row"><span>桌面现金</span><strong>45</strong></div>
+              <div class="grid-row"><span>核对结果</span><strong>一致</strong></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <h3>贷款提醒</h3>
+            <p>季度提交后只做提醒，不强制拦截。因为有的小组可能本季度没有贷款动作。</p>
+            <div class="notice" style="margin-top:10px;">Q1 提交后提醒：请检查短期贷款账期与利息更新。</div>
+          </section>
+
+          <section class="card">
+            <h3>提交动作</h3>
+            <div class="toolbar-actions" style="display:grid;">
+              <button class="btn primary" type="button">提交当前阶段</button>
+              <button class="btn" type="button">查看缺失项</button>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <div class="footer">这个页面用于展示玩家端方向：主页默认是 0年经营，经营页与财报页都保持 Excel 风格整页，不把流程拆碎成很多弹窗式表单。</div>
+    </div>
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('.sheet-tab[data-target]');
+    const panels = document.querySelectorAll('.sheet-panel');
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((item) => item.classList.remove('active'));
+        panels.forEach((panel) => panel.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelector('.sheet-panel[data-sheet="' + tab.dataset.target + '"]').classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

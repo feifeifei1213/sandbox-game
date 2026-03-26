@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandbox Game Demo</title>
+  <style>
+    :root {
+      --bg: #f0eadb;
+      --paper: rgba(255, 250, 239, 0.92);
+      --card: rgba(247, 241, 224, 0.88);
+      --ink: #1f2a1f;
+      --muted: #5d6558;
+      --forest: #2f5f4a;
+      --moss: #7ba66b;
+      --gold: #d9a441;
+      --signal: #c24f3d;
+      --mint: #bfdca5;
+      --sky: #a8c7d9;
+      --shadow: 0 18px 40px rgba(60, 49, 27, 0.16);
+      --line: rgba(31, 42, 31, 0.16);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(217, 164, 65, 0.14), transparent 36%),
+        radial-gradient(circle at bottom right, rgba(123, 166, 107, 0.2), transparent 28%),
+        linear-gradient(135deg, #efe6d0 0%, #efe9dc 48%, #efe4ce 100%);
+      color: var(--ink);
+      font-family: "Bahnschrift", "Microsoft YaHei", "Trebuchet MS", sans-serif;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(47, 95, 74, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(47, 95, 74, 0.045) 1px, transparent 1px);
+      background-size: 28px 28px;
+      pointer-events: none;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), transparent 85%);
+    }
+
+    .page {
+      width: min(1500px, calc(100vw - 32px));
+      margin: 20px auto 40px;
+      animation: fade-up 0.7s ease both;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      padding: 18px 22px;
+      background: rgba(255, 248, 234, 0.8);
+      border: 1px solid rgba(31, 42, 31, 0.08);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-mark {
+      width: 56px;
+      height: 56px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: linear-gradient(160deg, rgba(217, 164, 65, 0.88), rgba(47, 95, 74, 0.92));
+      color: #fff7e8;
+      font-family: "STZhongsong", "KaiTi", serif;
+      font-size: 24px;
+      letter-spacing: 1px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-family: "STZhongsong", "KaiTi", serif;
+      font-size: clamp(1.7rem, 2vw, 2.4rem);
+      letter-spacing: 0.05em;
+      font-weight: 700;
+    }
+
+    .brand p,
+    .status-pills p,
+    .panel-note,
+    .metric-label,
+    .stage-caption,
+    .card-meta,
+    .timeline-note,
+    .mini-note,
+    .footer-note {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .status-pills {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+      max-width: 700px;
+    }
+
+    .pill {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(31, 42, 31, 0.08);
+      background: rgba(255, 253, 245, 0.86);
+      font-size: 0.92rem;
+      white-space: nowrap;
+    }
+
+    .pill strong {
+      color: var(--forest);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .rail,
+    .board section,
+    .floating-panel {
+      background: var(--paper);
+      border: 1px solid rgba(31, 42, 31, 0.08);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .rail {
+      padding: 18px;
+      position: sticky;
+      top: 18px;
+      height: fit-content;
+    }
+
+    .rail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .rail h2,
+    .hero h2,
+    .section-title h3,
+    .card h4,
+    .floating-panel h4 {
+      margin: 0;
+      font-weight: 700;
+    }
+
+    .rail h2 {
+      font-family: "STZhongsong", "KaiTi", serif;
+      font-size: 1.1rem;
+    }
+
+    .mode-switch {
+      display: inline-flex;
+      background: rgba(47, 95, 74, 0.08);
+      padding: 4px;
+      border-radius: 999px;
+      gap: 4px;
+    }
+
+    .mode-switch button,
+    .stage-button,
+    .chip {
+      border: none;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .mode-switch button {
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: transparent;
+      color: var(--muted);
+      transition: 180ms ease;
+    }
+
+    .mode-switch button.active {
+      background: #fff9ee;
+      color: var(--forest);
+      box-shadow: 0 6px 16px rgba(47, 95, 74, 0.12);
+    }
+
+    .stage-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .stage-button {
+      text-align: left;
+      width: 100%;
+      padding: 14px;
+      border-radius: var(--radius-lg);
+      background: rgba(255, 251, 242, 0.7);
+      border: 1px solid transparent;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .stage-button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(47, 95, 74, 0.18);
+      background: rgba(255, 253, 247, 0.95);
+    }
+
+    .stage-button.active {
+      background: linear-gradient(160deg, rgba(191, 220, 165, 0.55), rgba(255, 248, 233, 0.96));
+      border-color: rgba(47, 95, 74, 0.24);
+    }
+
+    .stage-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .stage-title {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .stage-tag {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(47, 95, 74, 0.1);
+      color: var(--forest);
+    }
+
+    .board {
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero {
+      padding: 24px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(360px, 0.9fr);
+      gap: 20px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -60px;
+      top: -40px;
+      width: 240px;
+      height: 240px;
+      background: radial-gradient(circle, rgba(217, 164, 65, 0.18), transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-copy {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(47, 95, 74, 0.08);
+      color: var(--forest);
+      width: fit-content;
+      font-size: 0.9rem;
+    }
+
+    .hero h2 {
+      font-family: "STZhongsong", "KaiTi", serif;
+      font-size: clamp(2rem, 3vw, 3.2rem);
+      line-height: 1.1;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 720px;
+      color: #384236;
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    .hero-metrics {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric-card {
+      padding: 16px;
+      border-radius: var(--radius-lg);
+      background: rgba(255, 252, 245, 0.85);
+      border: 1px solid rgba(31, 42, 31, 0.08);
+    }
+
+    .metric-card strong {
+      display: block;
+      margin-top: 8px;
+      font-size: clamp(1.3rem, 1.8vw, 2rem);
+      color: var(--forest);
+    }
+
+    .metric-card.alert strong {
+      color: var(--signal);
+    }
+
+    .meter {
+      margin-top: 8px;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(31, 42, 31, 0.08);
+      overflow: hidden;
+    }
+
+    .meter > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--forest), var(--gold));
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 12px 16px;
+      border-radius: 999px;
+      background: rgba(47, 95, 74, 0.1);
+      color: var(--forest);
+      transition: background 160ms ease, transform 160ms ease;
+    }
+
+    .chip:hover {
+      background: rgba(47, 95, 74, 0.16);
+      transform: translateY(-1px);
+    }
+
+    .chip.primary {
+      background: linear-gradient(130deg, var(--forest), #42785f);
+      color: #fff9ec;
+    }
+
+    .chip.warn {
+      background: rgba(194, 79, 61, 0.12);
+      color: var(--signal);
+    }
+
+    .section-block {
+      padding: 22px;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .section-title h3 {
+      font-family: "STZhongsong", "KaiTi", serif;
+      font-size: 1.3rem;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      padding: 18px;
+      border-radius: var(--radius-lg);
+      background: rgba(255, 252, 246, 0.76);
+      border: 1px solid rgba(31, 42, 31, 0.08);
+      display: grid;
+      gap: 14px;
+      min-height: 180px;
+    }
+
+    .card.wide {
+      grid-column: span 7;
+    }
+
+    .card.tall {
+      grid-column: span 5;
+    }
+
+    .card.quarter {
+      grid-column: span 3;
+      min-height: 220px;
+    }
+
+    .card h4 {
+      font-size: 1.05rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      display: inline-grid;
+      place-items: center;
+      background: rgba(47, 95, 74, 0.12);
+      color: var(--forest);
+      font-size: 0.95rem;
+    }
+
+    .bid-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .bid-row,
+    .track-row,
+    .command-row,
+    .summary-row {
+      display: grid;
+      grid-template-columns: minmax(100px, 1fr) repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: center;
+    }
+
+    .bid-cell,
+    .command-cell,
+    .track-cell,
+    .summary-cell {
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(191, 220, 165, 0.24);
+      border: 1px solid rgba(47, 95, 74, 0.08);
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .bid-row .label,
+    .track-row .label,
+    .command-row .label,
+    .summary-row .label {
+      font-weight: 700;
+      color: #384236;
+      background: transparent;
+      border: none;
+      padding: 0;
+    }
+
+    .score-badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(217, 164, 65, 0.18);
+      color: #855d14;
+      font-size: 0.78rem;
+    }
+
+    .quarter-board {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .quarter-card {
+      padding: 16px;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, rgba(255, 252, 246, 0.92), rgba(244, 237, 218, 0.85));
+      border: 1px solid rgba(31, 42, 31, 0.08);
+      min-height: 280px;
+      display: grid;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .quarter-card::after {
+      content: "";
+      position: absolute;
+      right: -24px;
+      bottom: -24px;
+      width: 96px;
+      height: 96px;
+      border-radius: 32px;
+      background: rgba(123, 166, 107, 0.14);
+      transform: rotate(18deg);
+    }
+
+    .quarter-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .quarter-title strong {
+      font-size: 1.1rem;
+      color: var(--forest);
+    }
+
+    .step-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .step {
+      display: flex;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px dashed rgba(47, 95, 74, 0.14);
+    }
+
+    .step-index {
+      min-width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      background: rgba(47, 95, 74, 0.1);
+      color: var(--forest);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.93rem;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1fr;
+      gap: 16px;
+    }
+
+    .summary-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .summary-cell {
+      background: rgba(255, 247, 214, 0.88);
+    }
+
+    .summary-value {
+      font-weight: 700;
+      color: #855d14;
+      font-size: 1rem;
+    }
+
+    .floating-panel {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width: min(340px, calc(100vw - 32px));
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      animation: float-in 0.6s ease 0.25s both;
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .risk-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .risk-item {
+      padding: 12px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 252, 247, 0.9);
+      border: 1px solid rgba(31, 42, 31, 0.08);
+    }
+
+    .risk-item strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .risk-item.warn strong {
+      color: var(--signal);
+    }
+
+    .footer-note {
+      text-align: center;
+      margin: 22px 0 4px;
+      font-size: 0.92rem;
+    }
+
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes float-in {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 1260px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        position: static;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .cards-grid,
+      .decision-grid,
+      .quarter-board {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card.wide,
+      .card.tall,
+      .card.quarter {
+        grid-column: auto;
+      }
+
+      .floating-panel {
+        position: static;
+        width: 100%;
+        margin-top: 20px;
+      }
+    }
+
+    @media (max-width: 820px) {
+      .page {
+        width: min(100vw - 18px, 100%);
+        margin-top: 10px;
+      }
+
+      .topbar,
+      .hero,
+      .section-block,
+      .rail,
+      .floating-panel {
+        border-radius: 22px;
+      }
+
+      .cards-grid,
+      .decision-grid,
+      .quarter-board,
+      .metrics-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .status-pills {
+        justify-content: flex-start;
+      }
+
+      .bid-row,
+      .track-row,
+      .command-row,
+      .summary-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">盘</div>
+        <div>
+          <h1>数智经营沙盘</h1>
+          <p>把 Excel 经营表改造成更有氛围的游戏控制台，先看结构，再决定需求落点。</p>
+        </div>
+      </div>
+      <div class="status-pills">
+        <div class="pill"><strong>赛季</strong> 第 3 年 / 第 2 季度</div>
+        <div class="pill"><strong>团队</strong> 第 1 组 · 星港数据工坊</div>
+        <div class="pill"><strong>模式</strong> 教学演练优先</div>
+        <div class="pill"><strong>阶段状态</strong> 可编辑 · 未提交</div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="rail">
+        <div class="rail-header">
+          <h2>经营流程轨道</h2>
+          <div class="mode-switch" aria-label="mode switch">
+            <button class="active" data-mode="player">玩家端</button>
+            <button data-mode="admin">管理端</button>
+          </div>
+        </div>
+        <p class="panel-note" id="rail-mode-copy">玩家视角下，界面强调“这一步能做什么、会影响什么、什么时候要提交”。</p>
+
+        <div class="stage-list">
+          <button class="stage-button active" data-stage="year-start">
+            <div class="stage-row">
+              <span class="stage-title">年初筹划</span>
+              <span class="stage-tag">当前</span>
+            </div>
+            <p class="stage-caption">缴税、经营会议、市场竞标、年度计划。</p>
+          </button>
+          <button class="stage-button" data-stage="q1">
+            <div class="stage-row">
+              <span class="stage-title">Q1 执行</span>
+              <span class="stage-tag">季节拍</span>
+            </div>
+            <p class="stage-caption">短贷、材料、项目推进、人力与研发动作。</p>
+          </button>
+          <button class="stage-button" data-stage="q2">
+            <div class="stage-row">
+              <span class="stage-title">Q2 执行</span>
+              <span class="stage-tag">季节拍</span>
+            </div>
+            <p class="stage-caption">延续经营动作，开始体现交付与回款压力。</p>
+          </button>
+          <button class="stage-button" data-stage="q3">
+            <div class="stage-row">
+              <span class="stage-title">Q3 执行</span>
+              <span class="stage-tag">季节拍</span>
+            </div>
+            <p class="stage-caption">中程决策阶段，现金与产能会明显分化。</p>
+          </button>
+          <button class="stage-button" data-stage="q4">
+            <div class="stage-row">
+              <span class="stage-title">Q4 执行</span>
+              <span class="stage-tag">季节拍</span>
+            </div>
+            <p class="stage-caption">冲刺交付、回收应收、准备年末动作。</p>
+          </button>
+          <button class="stage-button" data-stage="year-end">
+            <div class="stage-row">
+              <span class="stage-title">年末处理</span>
+              <span class="stage-tag">结算</span>
+            </div>
+            <p class="stage-caption">长期贷款、设备维护、数据中心、折旧与培育。</p>
+          </button>
+          <button class="stage-button" data-stage="misc">
+            <div class="stage-row">
+              <span class="stage-title">杂项事件</span>
+              <span class="stage-tag">裁判</span>
+            </div>
+            <p class="stage-caption">折现、奖励、罚款、复核与重算入口。</p>
+          </button>
+        </div>
+      </aside>
+
+      <main class="board">
+        <section class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow" id="hero-eyebrow">当前阶段：年初筹划</div>
+            <h2 id="hero-title">把经营表改造成有节奏、有压迫感、也更好教学的游戏页面。</h2>
+            <p id="hero-copy">
+              这个原型把原来的 Excel 大表拆成了流程轨道、季度面板、现金仪表、项目推进与年末动作区。
+              目标不是还原单元格，而是让玩家一眼看懂自己现在在哪个阶段、能做哪些动作、哪些动作会让现金和利润发生变化。
+            </p>
+            <div class="hero-actions">
+              <button class="chip primary">进入当前阶段</button>
+              <button class="chip">打开试算板</button>
+              <button class="chip">查看本队财报</button>
+              <button class="chip warn">提交前体检</button>
+            </div>
+          </div>
+
+          <div class="hero-metrics">
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <span class="metric-label">现金舱</span>
+                <strong>45M</strong>
+                <div class="meter"><span style="width: 72%"></span></div>
+                <p class="mini-note">本季支出高于均值，仍处安全区。</p>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">订单压力</span>
+                <strong>128M</strong>
+                <div class="meter"><span style="width: 56%"></span></div>
+                <p class="mini-note">市场投入拉动明显，但交付节奏偏慢。</p>
+              </div>
+              <div class="metric-card alert">
+                <span class="metric-label">风险热度</span>
+                <strong>68 / 100</strong>
+                <div class="meter"><span style="width: 68%; background: linear-gradient(90deg, #d9a441, #c24f3d)"></span></div>
+                <p class="mini-note">短期贷款与回款窗口接近重叠。</p>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">教学评分</span>
+                <strong>84</strong>
+                <div class="meter"><span style="width: 84%; background: linear-gradient(90deg, #7ba66b, #2f5f4a)"></span></div>
+                <p class="mini-note">研发强度与经营稳定性得分较高。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <div>
+              <h3>市场与项目战区</h3>
+              <p class="panel-note">把“区域 x 项目类型”的竞标矩阵转成更直观的战区面板。</p>
+            </div>
+            <span class="score-badge">原 Excel 的市场竞标区</span>
+          </div>
+
+          <div class="cards-grid">
+            <article class="card wide">
+              <h4><span class="icon">市</span> 市场竞标热区</h4>
+              <div class="bid-grid">
+                <div class="bid-row">
+                  <div class="label">本地市场</div>
+                  <div class="bid-cell"><span>贸易项目</span><strong>18M</strong></div>
+                  <div class="bid-cell"><span>集成项目</span><strong>12M</strong></div>
+                  <div class="bid-cell"><span>服务项目</span><strong>9M</strong></div>
+                  <div class="bid-cell"><span>科创项目</span><strong>6M</strong></div>
+                </div>
+                <div class="bid-row">
+                  <div class="label">全国市场</div>
+                  <div class="bid-cell"><span>贸易项目</span><strong>22M</strong></div>
+                  <div class="bid-cell"><span>集成项目</span><strong>15M</strong></div>
+                  <div class="bid-cell"><span>服务项目</span><strong>13M</strong></div>
+                  <div class="bid-cell"><span>科创项目</span><strong>8M</strong></div>
+                </div>
+                <div class="bid-row">
+                  <div class="label">亚太市场</div>
+                  <div class="bid-cell"><span>贸易项目</span><strong>14M</strong></div>
+                  <div class="bid-cell"><span>集成项目</span><strong>20M</strong></div>
+                  <div class="bid-cell"><span>服务项目</span><strong>11M</strong></div>
+                  <div class="bid-cell"><span>科创项目</span><strong>10M</strong></div>
+                </div>
+                <div class="bid-row">
+                  <div class="label">全球市场</div>
+                  <div class="bid-cell"><span>贸易项目</span><strong>10M</strong></div>
+                  <div class="bid-cell"><span>集成项目</span><strong>18M</strong></div>
+                  <div class="bid-cell"><span>服务项目</span><strong>8M</strong></div>
+                  <div class="bid-cell"><span>科创项目</span><strong>16M</strong></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="card tall">
+              <h4><span class="icon">算</span> 决策摘要</h4>
+              <div class="summary-stack">
+                <div class="summary-row">
+                  <div class="label">订单总额</div>
+                  <div class="summary-cell"><span class="summary-value">222M</span></div>
+                </div>
+                <div class="summary-row">
+                  <div class="label">市场投入</div>
+                  <div class="summary-cell"><span class="summary-value">12M</span></div>
+                </div>
+                <div class="summary-row">
+                  <div class="label">市场回报比</div>
+                  <div class="summary-cell"><span class="summary-value">18.5</span></div>
+                </div>
+                <div class="summary-row">
+                  <div class="label">计划收入</div>
+                  <div class="summary-cell"><span class="summary-value">160M</span></div>
+                </div>
+              </div>
+              <p class="card-meta">这里可以成为玩家最早感知“本年经营方向”的大卡片，而不只是一个黄色汇总单元格。</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <div>
+              <h3>季度经营面板</h3>
+              <p class="panel-note">把每季度重复的 12 个动作，从 Excel 行表改造成季度回合卡。</p>
+            </div>
+            <span class="score-badge">重复阶段模板化</span>
+          </div>
+
+          <div class="quarter-board">
+            <article class="quarter-card">
+              <div class="quarter-title">
+                <strong>第一季度</strong>
+                <span class="stage-tag">已提交</span>
+              </div>
+              <div class="step-list">
+                <div class="step">
+                  <span class="step-index">1</span>
+                  <div><strong>短贷管理</strong><span class="mini-note">到期还贷 / 利息 / 新增贷款</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">2</span>
+                  <div><strong>材料支付</strong><span class="mini-note">承接上季订单材料费</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">3</span>
+                  <div><strong>项目推进</strong><span class="mini-note">在建项目向交付库推进</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">4</span>
+                  <div><strong>人力与研发</strong><span class="mini-note">招聘、培训、研发投入</span></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="quarter-card">
+              <div class="quarter-title">
+                <strong>第二季度</strong>
+                <span class="stage-tag">当前</span>
+              </div>
+              <div class="step-list">
+                <div class="step">
+                  <span class="step-index">1</span>
+                  <div><strong>设备调整</strong><span class="mini-note">变更、拆除、安装、转固</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">2</span>
+                  <div><strong>工资与投料</strong><span class="mini-note">设备工人投入与工资支出</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">3</span>
+                  <div><strong>应收推进</strong><span class="mini-note">账期移动，进入现金区则回款</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">4</span>
+                  <div><strong>项目验收</strong><span class="mini-note">交付销售额与成本确认</span></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="quarter-card">
+              <div class="quarter-title">
+                <strong>第三季度</strong>
+                <span class="stage-tag">未开始</span>
+              </div>
+              <div class="step-list">
+                <div class="step">
+                  <span class="step-index">1</span>
+                  <div><strong>动作模板</strong><span class="mini-note">季度结构与 Q1/Q2 一致</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">2</span>
+                  <div><strong>策略建议</strong><span class="mini-note">补强回款或继续扩张产能</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">3</span>
+                  <div><strong>风险提醒</strong><span class="mini-note">高杠杆将提高后续压力</span></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="quarter-card">
+              <div class="quarter-title">
+                <strong>第四季度</strong>
+                <span class="stage-tag">冲刺季</span>
+              </div>
+              <div class="step-list">
+                <div class="step">
+                  <span class="step-index">1</span>
+                  <div><strong>冲刺交付</strong><span class="mini-note">尽量把在建项目转入交付</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">2</span>
+                  <div><strong>回款整理</strong><span class="mini-note">为年末动作腾挪现金空间</span></div>
+                </div>
+                <div class="step">
+                  <span class="step-index">3</span>
+                  <div><strong>年末预热</strong><span class="mini-note">长期贷款、维护、数据中心计划</span></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <div>
+              <h3>关键动作重构</h3>
+              <p class="panel-note">把年初、年末和其他收支这些“非季度重复动作”单独提升出来。</p>
+            </div>
+            <span class="score-badge">桌游流程感</span>
+          </div>
+
+          <div class="decision-grid">
+            <article class="card">
+              <h4><span class="icon">初</span> 年初筹划台</h4>
+              <div class="command-row">
+                <div class="label">上年所得税</div>
+                <div class="command-cell"><span>支付</span><strong>1M</strong></div>
+                <div class="command-cell"><span>税率</span><strong>15%</strong></div>
+                <div class="command-cell"><span>来源</span><strong>上年财报</strong></div>
+                <div class="command-cell"><span>影响</span><strong>现金</strong></div>
+              </div>
+              <div class="command-row">
+                <div class="label">经营会议</div>
+                <div class="command-cell"><span>计划收入</span><strong>160M</strong></div>
+                <div class="command-cell"><span>战略重点</span><strong>科创</strong></div>
+                <div class="command-cell"><span>人才策略</span><strong>扩招</strong></div>
+                <div class="command-cell"><span>市场目标</span><strong>亚太</strong></div>
+              </div>
+            </article>
+
+            <article class="card">
+              <h4><span class="icon">末</span> 年末经营台</h4>
+              <div class="command-row">
+                <div class="label">长期贷款</div>
+                <div class="command-cell"><span>利率</span><strong>5%</strong></div>
+                <div class="command-cell"><span>新贷款</span><strong>12M</strong></div>
+                <div class="command-cell"><span>还款</span><strong>0M</strong></div>
+                <div class="command-cell"><span>状态</span><strong>可选</strong></div>
+              </div>
+              <div class="command-row">
+                <div class="label">数据中心</div>
+                <div class="command-cell"><span>A</span><strong>40M</strong></div>
+                <div class="command-cell"><span>B</span><strong>32M</strong></div>
+                <div class="command-cell"><span>C</span><strong>16M</strong></div>
+                <div class="command-cell"><span>租金</span><strong>4/3/2M</strong></div>
+              </div>
+              <div class="command-row">
+                <div class="label">设备折旧</div>
+                <div class="command-cell"><span>待折资产</span><strong>9M</strong></div>
+                <div class="command-cell"><span>折旧</span><strong>3M</strong></div>
+                <div class="command-cell"><span>残值</span><strong>3M</strong></div>
+                <div class="command-cell"><span>维护</span><strong>2M</strong></div>
+              </div>
+            </article>
+
+            <article class="card">
+              <h4><span class="icon">杂</span> 事件池</h4>
+              <div class="risk-list">
+                <div class="risk-item">
+                  <strong>折现费用</strong>
+                  <span class="mini-note">从应收账款抽取 8M，7M 进入现金，1M 进入财务费用。</span>
+                </div>
+                <div class="risk-item warn">
+                  <strong>裁判事件</strong>
+                  <span class="mini-note">奖励、罚款、争议更正，后续可以设计为事件卡或审批流。</span>
+                </div>
+                <div class="risk-item">
+                  <strong>新市场培育</strong>
+                  <span class="mini-note">全国、亚太、全球市场各投 1M 的年度扩张动作。</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <aside class="floating-panel" id="floating-panel">
+      <div class="panel-head">
+        <div>
+          <h4 id="panel-title">本阶段提示</h4>
+          <p class="panel-note" id="panel-copy">玩家端关注动作合法性、现金安全和提交节奏。</p>
+        </div>
+        <span class="stage-tag">Demo</span>
+      </div>
+      <div class="risk-list" id="panel-list">
+        <div class="risk-item">
+          <strong>当前推荐</strong>
+          <span class="mini-note">优先完成市场竞标与计划收入，提交前检查市场投入与订单总额是否匹配。</span>
+        </div>
+        <div class="risk-item warn">
+          <strong>注意风险</strong>
+          <span class="mini-note">如果把 Excel 结构原样搬上来，玩家会更像在填报表，不像在经营公司。</span>
+        </div>
+        <div class="risk-item">
+          <strong>下一步</strong>
+          <span class="mini-note">如果你喜欢这套感觉，我们再把玩家端、管理端分别细化成正式页面。</span>
+        </div>
+      </div>
+    </aside>
+
+    <p class="footer-note">这是纯静态演示页，重点展示“Excel 表格逻辑如何被转译成游戏界面”，暂未接入真实公式。</p>
+  </div>
+
+  <script>
+    const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
+    const stageButtons = Array.from(document.querySelectorAll("[data-stage]"));
+
+    const modeCopy = {
+      player: {
+        rail: "玩家视角下，界面强调“这一步能做什么、会影响什么、什么时候要提交”。",
+        panelTitle: "本阶段提示",
+        panelCopy: "玩家端关注动作合法性、现金安全和提交节奏。",
+        panelList: [
+          ["当前推荐", "优先完成市场竞标与计划收入，提交前检查市场投入与订单总额是否匹配。"],
+          ["注意风险", "如果把 Excel 结构原样搬上来，玩家会更像在填报表，不像在经营公司。"],
+          ["下一步", "如果你喜欢这套感觉，我们再把玩家端、管理端分别细化成正式页面。"]
+        ]
+      },
+      admin: {
+        rail: "管理端更像赛事指挥台，重点是阶段控制、队伍进度、异常监控和汇总观察。",
+        panelTitle: "管理端视角",
+        panelCopy: "管理员关注的是队伍状态、重算入口和全局公平性。",
+        panelList: [
+          ["队伍总览", "查看 10 组提交状态、锁定状态和异常提醒，不直接改经营数据。"],
+          ["流程控制", "开放阶段、截止阶段、审批更正、触发汇总同步与重算。"],
+          ["治理价值", "未来可以在这里加入排行榜开关、教学评分配置和审计日志。"]
+        ]
+      }
+    };
+
+    const stageCopy = {
+      "year-start": {
+        eyebrow: "当前阶段：年初筹划",
+        title: "从缴税、定计划到市场竞标，先把这一年要打哪场仗定下来。",
+        copy: "年初不是几行表格，而是经营方向的起点。这里适合做成独立的准备台，让玩家在市场目标、计划收入、税务处理之间建立因果感。"
+      },
+      q1: {
+        eyebrow: "当前阶段：第一季度执行",
+        title: "第一季像开局落子，要把贷款、材料、推进与人力动作接起来。",
+        copy: "季度动作如果做成步骤卡，玩家会更容易理解经营节奏，而不是在一张大表里自己找行号。"
+      },
+      q2: {
+        eyebrow: "当前阶段：第二季度执行",
+        title: "第二季开始体现真正的经营压力，现金、项目与交付会彼此牵扯。",
+        copy: "这个阶段适合突出“项目推进轨道”和“回款提醒”，让玩家意识到不是所有动作都只是录入数值。"
+      },
+      q3: {
+        eyebrow: "当前阶段：第三季度执行",
+        title: "第三季适合把风险提示抬高，让玩家感受到扩张与回款的拉扯。",
+        copy: "这里可以强化教学反馈，比如提示杠杆过高、产能结构失衡、研发投入过弱。"
+      },
+      q4: {
+        eyebrow: "当前阶段：第四季度执行",
+        title: "第四季是冲刺与保守的平衡点，决定年末是漂亮收官还是被现金拖住。",
+        copy: "如果后续全电子化，Q4 应该明显强化“交付冲刺”和“年末预热”两种节奏。"
+      },
+      "year-end": {
+        eyebrow: "当前阶段：年末处理",
+        title: "年末不是纯结算页，而是有真实经营动作的年终决策台。",
+        copy: "长期贷款、维护、数据中心和折旧都更适合单独成区，这样玩家才会感受到年末是一次战略收束。"
+      },
+      misc: {
+        eyebrow: "当前阶段：杂项事件",
+        title: "杂项事件是规则治理层的入口，未来可以承载裁判动作和事件卡系统。",
+        copy: "如果你以后想把桌游彻底电子化，这里会是规则扩展最强的地方，比如奖励、罚款、折现和特殊事件。"
+      }
+    };
+
+    function renderPanel(mode) {
+      const data = modeCopy[mode];
+      document.getElementById("rail-mode-copy").textContent = data.rail;
+      document.getElementById("panel-title").textContent = data.panelTitle;
+      document.getElementById("panel-copy").textContent = data.panelCopy;
+
+      const list = document.getElementById("panel-list");
+      list.innerHTML = "";
+
+      data.panelList.forEach(([title, text], index) => {
+        const item = document.createElement("div");
+        item.className = "risk-item" + (index === 1 ? " warn" : "");
+        item.innerHTML = "<strong>" + title + "</strong><span class='mini-note'>" + text + "</span>";
+        list.appendChild(item);
+      });
+    }
+
+    function renderStage(stage) {
+      const data = stageCopy[stage];
+      document.getElementById("hero-eyebrow").textContent = data.eyebrow;
+      document.getElementById("hero-title").textContent = data.title;
+      document.getElementById("hero-copy").textContent = data.copy;
+    }
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        modeButtons.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        renderPanel(button.dataset.mode);
+      });
+    });
+
+    stageButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        stageButtons.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        renderStage(button.dataset.stage);
+      });
+    });
+
+    renderPanel("player");
+    renderStage("year-start");
+  </script>
+</body>
+</html>
