@@ -1,0 +1,1659 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excel Combined Demo</title>
+  <style>
+    :root {
+      --app-bg: #f3f4f7;
+      --window-bg: #ffffff;
+      --sheet-bg: #fbfbfb;
+      --grid-soft: #d5d5d5;
+      --header: #f1f3f5;
+      --left-band: #d9f1f0;
+      --year-band: #f6dfcc;
+      --year-end-band: #dff0d2;
+      --misc-band: #f8ead1;
+      --input-bg: #cfe5be;
+      --result-bg: #fff400;
+      --accent: #2563eb;
+      --muted: #6b7280;
+      --toolbar: #eef2f6;
+      --sheet-tab: #e5e7eb;
+      --sheet-tab-active: #ffffff;
+      --shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 24%),
+        linear-gradient(180deg, #eef2f7 0%, #f8fafc 100%);
+      color: #111827;
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .shell {
+      width: min(1640px, calc(100vw - 40px));
+      margin: 0 auto;
+      background: var(--window-bg);
+      border: 1px solid #dbe1ea;
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .appbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 18px;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef3f9 100%);
+      border-bottom: 1px solid #dde5f0;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 18px;
+    }
+
+    .brand span,
+    .meta-strip span,
+    .formula-label,
+    .hint,
+    .sheet-tab.disabled {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .meta-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid #d8e1eb;
+      font-size: 13px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--toolbar);
+      border-bottom: 1px solid #dbe1ea;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid #d0d7e2;
+      background: #ffffff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .formula-bar {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .name-box,
+    .formula-box {
+      border: 1px solid #d0d7e2;
+      background: #ffffff;
+      border-radius: 10px;
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+
+    .formula-label {
+      margin-right: 8px;
+      font-weight: 700;
+    }
+
+    .workbook {
+      background: var(--sheet-bg);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 286px;
+      align-items: start;
+    }
+
+    .main-area {
+      min-width: 0;
+      border-right: 1px solid #dbe1ea;
+    }
+
+    .sheet-panel {
+      display: none;
+    }
+
+    .sheet-panel.active {
+      display: block;
+    }
+
+    .sheet-scroll {
+      overflow: auto;
+      max-height: calc(100vh - 230px);
+      border-bottom: 1px solid #dbe1ea;
+    }
+
+    table.sheet {
+      border-collapse: collapse;
+      min-width: 1500px;
+      background: #ffffff;
+    }
+
+    .sheet th,
+    .sheet td {
+      border: 1px solid var(--grid-soft);
+      vertical-align: middle;
+      padding: 0;
+    }
+
+    .corner,
+    .col-head,
+    .row-head {
+      background: var(--header);
+      color: #4b5563;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .corner,
+    .col-head {
+      height: 30px;
+      font-size: 13px;
+    }
+
+    .row-head {
+      width: 48px;
+      min-width: 48px;
+      font-size: 12px;
+    }
+
+    .cell {
+      min-height: 32px;
+      padding: 6px 8px;
+      font-size: 14px;
+      line-height: 1.35;
+      background: #ffffff;
+    }
+
+    .center {
+      text-align: center;
+    }
+
+    .small {
+      font-size: 12px;
+    }
+
+    .section-band {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      letter-spacing: 2px;
+      text-align: center;
+      font-weight: 700;
+      width: 36px;
+      min-width: 36px;
+    }
+
+    .band-year-start {
+      background: var(--year-band);
+    }
+
+    .band-quarter {
+      background: var(--left-band);
+    }
+
+    .band-year-end {
+      background: var(--year-end-band);
+    }
+
+    .band-misc {
+      background: var(--misc-band);
+    }
+
+    .group-title {
+      background: #fbfbfb;
+      font-weight: 700;
+    }
+
+    .note-cell {
+      background: #fbfbfb;
+      color: #111827;
+    }
+
+    .input-cell {
+      background: var(--input-bg);
+    }
+
+    .input-cell input,
+    .input-cell select {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: transparent;
+      padding: 8px 10px;
+      font: inherit;
+      outline: none;
+    }
+
+    .input-cell select {
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .result-cell {
+      background: var(--result-bg);
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .result-soft {
+      background: #d8ebc8;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .orange-cell {
+      background: #f7b733;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .muted-cell {
+      background: #f5f5f5;
+    }
+
+    .future-lock {
+      background: #eef2f6;
+    }
+
+    .future-lock input {
+      color: #98a2b3;
+      cursor: not-allowed;
+    }
+
+    .future-lock-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .danger {
+      color: #c62828;
+    }
+
+    .sheet-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 10px 10px 12px;
+      background: #eef2f6;
+      overflow-x: auto;
+    }
+
+    .sheet-tab {
+      border: 1px solid #cfd8e3;
+      background: var(--sheet-tab);
+      border-bottom-color: #cfd8e3;
+      border-radius: 10px 10px 0 0;
+      padding: 10px 14px;
+      white-space: nowrap;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .sheet-tab.active {
+      background: var(--sheet-tab-active);
+      border-bottom-color: #ffffff;
+      font-weight: 700;
+    }
+
+    .report-wrap {
+      padding: 20px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .report-card {
+      border: 1px solid #dbe1ea;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    .report-card h3 {
+      margin: 0;
+      padding: 14px 16px;
+      background: #f6f8fb;
+      border-bottom: 1px solid #dbe1ea;
+      font-size: 16px;
+    }
+
+    table.report-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .report-table th,
+    .report-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #edf2f7;
+      font-size: 14px;
+    }
+
+    .report-table th {
+      text-align: left;
+      background: #fcfcfd;
+      width: 68%;
+    }
+
+    .report-table td {
+      text-align: right;
+      font-weight: 700;
+    }
+
+    .footer-hint {
+      padding: 12px 16px 18px;
+      color: var(--muted);
+      font-size: 13px;
+      background: #eef2f6;
+    }
+
+    .sidebar {
+      padding: 14px;
+      background: linear-gradient(180deg, #fbfcff 0%, #f4f7fb 100%);
+      display: grid;
+      gap: 12px;
+    }
+
+    .side-card {
+      border: 1px solid #dbe1ea;
+      border-radius: 14px;
+      background: #ffffff;
+      padding: 14px;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+
+    .side-card h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .side-card p {
+      margin: 0;
+      color: #475467;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .side-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #e8f7ee;
+      color: #067647;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .side-grid {
+      display: grid;
+      gap: 8px;
+    }
+
+    .side-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #e4e7ec;
+      font-size: 13px;
+      color: #475467;
+    }
+
+    .side-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .side-row strong {
+      color: #101828;
+      font-size: 13px;
+    }
+
+    .side-input,
+    .side-select {
+      width: 100%;
+      border: 1px solid #d0d7e2;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .side-actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .side-actions .btn {
+      width: 100%;
+    }
+
+    .warn-box {
+      border: 1px solid #fed7aa;
+      background: #fff7ed;
+      color: #b54708;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 900px) {
+      .page {
+        padding: 10px;
+      }
+
+      .shell {
+        width: 100%;
+        border-radius: 14px;
+      }
+
+      .appbar,
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .main-area {
+        border-right: none;
+        border-bottom: 1px solid #dbe1ea;
+      }
+
+      .meta-strip {
+        justify-content: flex-start;
+      }
+
+      .report-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <div class="appbar">
+        <div class="brand">
+          <strong>沙盘经营模拟系统 · 玩家经营页 Demo</strong>
+          <span>方向：保留整张 Excel 页面的完整感，未来阶段全部显示，但未开放的填写格锁定不可编辑。</span>
+        </div>
+        <div class="meta-strip">
+          <div class="meta-pill">第 1 组</div>
+          <div class="meta-pill">当前工作表：0年经营</div>
+          <div class="meta-pill">阶段：Q1</div>
+          <div class="meta-pill">状态：已自动保存</div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-actions">
+          <button class="btn">自动保存</button>
+          <button class="btn">校验</button>
+          <button class="btn">锁定预览</button>
+          <button class="btn primary">提交 Q1</button>
+        </div>
+        <div class="formula-bar">
+          <div class="name-box">P5</div>
+          <div class="formula-box"><span class="formula-label">fx</span> 市场投入金额：当前阶段必须填写；未来阶段的输入格保留显示，但处于锁定状态。</div>
+        </div>
+        <div class="hint">绿色可填，灰蓝锁定，黄色为汇总，整页结构保持和 Excel 一样</div>
+      </div>
+
+      <div class="workbook">
+        <div class="workspace">
+          <div class="main-area">
+            <div class="sheet-panel active" data-sheet="operate">
+          <div class="sheet-scroll">
+            <table class="sheet" aria-label="0年经营表 demo">
+              <colgroup>
+                <col style="width:48px">
+                <col style="width:40px">
+                <col style="width:185px">
+                <col style="width:170px">
+                <col style="width:118px">
+                <col style="width:118px">
+                <col style="width:118px">
+                <col style="width:118px">
+                <col style="width:80px">
+                <col style="width:80px">
+                <col style="width:110px">
+                <col style="width:118px">
+                <col style="width:118px">
+                <col style="width:118px">
+                <col style="width:118px">
+                <col style="width:90px">
+                <col style="width:90px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="corner"></th>
+                  <th class="col-head">A</th>
+                  <th class="col-head">B</th>
+                  <th class="col-head">C</th>
+                  <th class="col-head">D</th>
+                  <th class="col-head">E</th>
+                  <th class="col-head">F</th>
+                  <th class="col-head">G</th>
+                  <th class="col-head">H</th>
+                  <th class="col-head">I</th>
+                  <th class="col-head">J</th>
+                  <th class="col-head">K</th>
+                  <th class="col-head">L</th>
+                  <th class="col-head">M</th>
+                  <th class="col-head">N</th>
+                  <th class="col-head">O</th>
+                  <th class="col-head">P</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th class="row-head">1</th>
+                  <td class="section-band band-year-start cell" rowspan="8">年初工作</td>
+                  <td class="group-title cell">1. 支付上年度所得税</td>
+                  <td class="note-cell cell center" colspan="6">一般企业 25%，高新企业 15%，从现金取出放到利润总中</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">综合费用</td>
+                  <td class="cell" colspan="6"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">2</th>
+                  <td class="group-title cell">2. 召开年度经营会议</td>
+                  <td class="note-cell cell center" colspan="5">调整公司战略，制定当年经营和工作计划</td>
+                  <td class="note-cell cell center">计划收入</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="cell" colspan="7"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">3</th>
+                  <td class="group-title cell center" rowspan="6">3. 市场竞标</td>
+                  <td class="note-cell cell center">区域</td>
+                  <td class="note-cell cell center">贸易项目<br>总价</td>
+                  <td class="note-cell cell center">集成项目<br>总价</td>
+                  <td class="note-cell cell center">服务项目<br>总价</td>
+                  <td class="note-cell cell center">科创项目<br>总价</td>
+                  <td class="result-cell cell center">区域市场<br>订单总价</td>
+                  <td class="result-cell cell center" rowspan="6">订单总额<br><br>0</td>
+                  <td class="input-cell cell center" rowspan="6">市场投入</td>
+                  <td class="cell" colspan="7" rowspan="6"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">4</th>
+                  <td class="note-cell cell center">本地</td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">5</th>
+                  <td class="note-cell cell center">全国</td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">6</th>
+                  <td class="note-cell cell center">亚太</td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">7</th>
+                  <td class="note-cell cell center">全球</td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="input-cell"><input value=""></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">8</th>
+                  <td class="note-cell cell center" colspan="6">这里保留和 Excel 类似的矩阵输入方式，方便用户迁移</td>
+                </tr>
+
+                <tr>
+                  <th class="row-head">9</th>
+                  <td class="section-band band-quarter cell" rowspan="31">每季度工作</td>
+                  <td class="group-title cell" rowspan="4">1. 短期贷款<br>更新账期<br><span class="small">年利率：10%</span></td>
+                  <td class="muted-cell cell center"></td>
+                  <td class="muted-cell cell center">第一季度</td>
+                  <td class="muted-cell cell center">第二季度</td>
+                  <td class="muted-cell cell center">第三季度</td>
+                  <td class="muted-cell cell center">第四季度</td>
+                  <td class="result-cell cell center">总计</td>
+                  <td class="orange-cell cell center" rowspan="4">增减<br><br>20</td>
+                  <td class="cell" colspan="7" rowspan="4"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">10</th>
+                  <td class="note-cell cell">到期还贷</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">11</th>
+                  <td class="note-cell cell">付利息</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">12</th>
+                  <td class="note-cell cell">新增贷款</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+
+                <tr>
+                  <th class="row-head">13</th>
+                  <td class="group-title cell" rowspan="6">2. 支付材料费用<br><span class="small">支付前一季度订购的项目材料费</span></td>
+                  <td class="muted-cell cell center"></td>
+                  <td class="muted-cell cell center">第一季度</td>
+                  <td class="muted-cell cell center">第二季度</td>
+                  <td class="muted-cell cell center">第三季度</td>
+                  <td class="muted-cell cell center">第四季度</td>
+                  <td class="result-cell cell center">总计</td>
+                  <td class="cell" colspan="8" rowspan="6"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">14</th>
+                  <td class="note-cell cell">贸易项目</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">15</th>
+                  <td class="note-cell cell">集成项目</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">16</th>
+                  <td class="note-cell cell">服务项目</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">17</th>
+                  <td class="note-cell cell">科创项目</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">18</th>
+                  <td class="note-cell cell">合计</td>
+                  <td class="result-cell cell">0</td><td class="result-cell cell">0</td><td class="result-cell cell">0</td><td class="result-cell cell">0</td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+
+                <tr>
+                  <th class="row-head">19</th>
+                  <td class="group-title cell">3. 项目进度更新</td>
+                  <td class="note-cell cell" colspan="7">每个在建交付项目向前移动一格，满格的移动到项目交付库</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+
+                <tr>
+                  <th class="row-head">20</th>
+                  <td class="group-title cell" rowspan="8">4. 设备调整<br><span class="small">变更 / 拆除 / 出售 / 安装 / 转固</span></td>
+                  <td class="muted-cell cell center"></td>
+                  <td class="muted-cell cell center">第一季度</td>
+                  <td class="muted-cell cell center">第二季度</td>
+                  <td class="muted-cell cell center">第三季度</td>
+                  <td class="muted-cell cell center">第四季度</td>
+                  <td class="result-cell cell center">总计</td>
+                  <td class="cell" colspan="8" rowspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">21</th>
+                  <td class="note-cell cell">变更项目</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">22</th>
+                  <td class="note-cell cell">设备拆除 <span class="small">1M/条</span></td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">23</th>
+                  <td class="note-cell cell">设备出售</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">24</th>
+                  <td class="note-cell cell">新设备安装</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">25</th>
+                  <td class="note-cell cell">建成设备转固</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">26</th>
+                  <td class="note-cell cell">设备残值</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">27</th>
+                  <td class="note-cell cell">待折资产</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">28</th>
+                  <td class="group-title cell" rowspan="3">5. 人力资源管理<br><span class="small">招聘 / 辞退 / 待岗 / 上岗 / 培训</span></td>
+                  <td class="note-cell cell danger">支付招聘、辞退、培训、待岗费用</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8" rowspan="3"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">29</th>
+                  <td class="note-cell cell">人力费用</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">30</th>
+                  <td class="note-cell cell center" colspan="6">这里后续可以替换成更细的人力状态录入</td>
+                </tr>
+
+                <tr>
+                  <th class="row-head">31</th>
+                  <td class="group-title cell">6. 设备空位投放材料，发放工人工资</td>
+                  <td class="note-cell cell">支付交付项目的设备使用人员工资</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">32</th>
+                  <td class="group-title cell">7. 新技术研发投入</td>
+                  <td class="note-cell cell">技术研发</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">33</th>
+                  <td class="group-title cell">8. 管理体系投入</td>
+                  <td class="note-cell cell">质量环境健康费用</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">34</th>
+                  <td class="group-title cell">9. 下新供应链订单</td>
+                  <td class="note-cell cell" colspan="7">以空桶代替，放到供应链订单上</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">35</th>
+                  <td class="group-title cell" rowspan="2">10. 更新应收账款</td>
+                  <td class="note-cell cell">如应收账款进入现金区收记录</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8" rowspan="2"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">36</th>
+                  <td class="note-cell cell">应收回收</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">37</th>
+                  <td class="group-title cell" rowspan="2">11. 项目验收交付</td>
+                  <td class="note-cell cell">交货订单销售额</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8" rowspan="2"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">38</th>
+                  <td class="note-cell cell">交货订单成本</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">39</th>
+                  <td class="group-title cell">12. 支付管理人员费用</td>
+                  <td class="note-cell cell center">每季 1M</td>
+                  <td class="input-cell"><input value="1"></td><td class="input-cell future-lock"><input value="1" disabled></td><td class="input-cell future-lock"><input value="1" disabled></td><td class="input-cell future-lock"><input value="1" disabled></td><td class="result-cell cell">4</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+
+                <tr>
+                  <th class="row-head">40</th>
+                  <td class="section-band band-year-end cell" rowspan="12">年末工作</td>
+                  <td class="group-title cell" rowspan="3">1. 办理长期贷款<br>账期更新</td>
+                  <td class="note-cell cell">付利息</td>
+                  <td class="input-cell future-lock" colspan="4"><input value="" disabled></td>
+                  <td class="result-soft cell">总计</td>
+                  <td class="orange-cell cell" rowspan="3">增减<br><br>0</td>
+                  <td class="cell" colspan="8" rowspan="3"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">41</th>
+                  <td class="note-cell cell">到期还款</td>
+                  <td class="input-cell future-lock" colspan="4"><input value="" disabled></td>
+                  <td class="result-soft cell"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">42</th>
+                  <td class="note-cell cell">办理新贷款</td>
+                  <td class="input-cell future-lock" colspan="4"><input value="" disabled></td>
+                  <td class="result-soft cell"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">43</th>
+                  <td class="group-title cell">2. 支付设备设备年度维护费</td>
+                  <td class="note-cell cell center">1M/条</td>
+                  <td class="input-cell future-lock" colspan="4"><input value="" disabled></td>
+                  <td class="result-soft cell"></td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">44</th>
+                  <td class="group-title cell" rowspan="2">3. 数据中心资产</td>
+                  <td class="note-cell cell center">购买</td>
+                  <td class="note-cell cell center" colspan="4">数据中心 A / B / C 价值（40M, 32M, 16M）</td>
+                  <td class="result-soft cell"></td>
+                  <td class="cell" colspan="8" rowspan="2"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">45</th>
+                  <td class="note-cell cell center">出售</td>
+                  <td class="input-cell future-lock" colspan="4"><input value="" disabled></td>
+                  <td class="result-soft cell"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">46</th>
+                  <td class="group-title cell">4. 数据中心租金</td>
+                  <td class="note-cell cell center">付租金</td>
+                  <td class="note-cell cell center" colspan="4">数据中心 A / B / C 租金（4M, 3M, 2M）</td>
+                  <td class="result-soft cell"></td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">47</th>
+                  <td class="group-title cell">5. 设备残值</td>
+                  <td class="note-cell cell" colspan="5"></td>
+                  <td class="orange-cell cell">3</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">48</th>
+                  <td class="group-title cell" rowspan="3">6. 设备折旧</td>
+                  <td class="note-cell cell">折旧前待折资产总价值</td>
+                  <td class="note-cell cell" colspan="4"></td>
+                  <td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8" rowspan="3"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">49</th>
+                  <td class="note-cell cell danger">折旧费（按待折资产的 1/3 取整，从待折资产中取出放入折旧费中）</td>
+                  <td class="note-cell cell" colspan="4"></td>
+                  <td class="result-cell cell">0</td>
+                </tr>
+                <tr>
+                  <th class="row-head">50</th>
+                  <td class="note-cell cell">未完工设备价值</td>
+                  <td class="note-cell cell" colspan="4"></td>
+                  <td class="result-soft cell"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">51</th>
+                  <td class="group-title cell">7. 新市场培育</td>
+                  <td class="note-cell cell">每年可向全国、亚太、全球各投 1M</td>
+                  <td class="input-cell future-lock" colspan="4"><input value="" disabled></td>
+                  <td class="result-soft cell"></td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">52</th>
+                  <td class="section-band band-misc cell" rowspan="7">其他收支</td>
+                  <td class="group-title cell">1. 折现费用</td>
+                  <td class="note-cell cell small">从应收账款取出 8M, 7M 进入现金, 1M 进入折现费用</td>
+                  <td class="input-cell"><input value=""></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="input-cell future-lock"><input value="" disabled></td><td class="result-cell cell">0</td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">53</th>
+                  <td class="group-title cell">2. 额外支出及罚款</td>
+                  <td class="note-cell cell" colspan="6"></td>
+                  <td class="result-soft cell"></td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">54</th>
+                  <td class="group-title cell">3. 额外收入及奖励</td>
+                  <td class="note-cell cell" colspan="6"></td>
+                  <td class="result-soft cell"></td>
+                  <td class="cell" colspan="8"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">55</th>
+                  <td class="group-title cell">现金</td>
+                  <td class="result-cell cell center">45</td>
+                  <td class="note-cell cell center">现金收入</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">现金支出</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">市场回报比</td>
+                  <td class="result-cell cell">#DIV/0!</td>
+                  <td class="note-cell cell center">研发投入强度</td>
+                  <td class="result-cell cell">#DIV/0!</td>
+                  <td class="note-cell cell center">劳动生产率</td>
+                  <td class="result-cell cell">0.00</td>
+                  <td class="cell" colspan="4"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">56</th>
+                  <td class="group-title cell">财务收入/支出</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">不动产增减值</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">待折资产增减</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">净产收益率</td>
+                  <td class="result-cell cell">0.00%</td>
+                  <td class="note-cell cell center">总产收益</td>
+                  <td class="result-cell cell">0.00%</td>
+                  <td class="cell" colspan="5"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">57</th>
+                  <td class="group-title cell">额外收入/支出</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">残值增减</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">应收增减</td>
+                  <td class="result-cell cell">0</td>
+                  <td class="note-cell cell center">净利润率</td>
+                  <td class="result-cell cell">#DIV/0!</td>
+                  <td class="note-cell cell center">毛利润率</td>
+                  <td class="result-cell cell">#DIV/0!</td>
+                  <td class="cell" colspan="5"></td>
+                </tr>
+                <tr>
+                  <th class="row-head">58</th>
+                  <td class="note-cell cell center" colspan="15">这里故意保留大量表格结构和颜色语义，目标是让熟悉 Excel 的用户几乎不用重新学习。</td>
+                </tr>
+              </tbody>
+            </table>
+              </div>
+            </div>
+
+            <div class="sheet-panel" data-sheet="report">
+              <div class="sheet-scroll">
+                <table class="sheet" aria-label="0年财报表 demo">
+                  <colgroup>
+                    <col style="width:48px">
+                    <col style="width:84px">
+                    <col style="width:180px">
+                    <col style="width:92px">
+                    <col style="width:72px">
+                    <col style="width:72px">
+                    <col style="width:180px">
+                    <col style="width:92px">
+                    <col style="width:110px">
+                    <col style="width:72px">
+                    <col style="width:180px">
+                    <col style="width:92px">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th class="corner"></th>
+                      <th class="col-head">A</th>
+                      <th class="col-head">B</th>
+                      <th class="col-head">C</th>
+                      <th class="col-head">D</th>
+                      <th class="col-head">E</th>
+                      <th class="col-head">F</th>
+                      <th class="col-head">G</th>
+                      <th class="col-head">H</th>
+                      <th class="col-head">I</th>
+                      <th class="col-head">J</th>
+                      <th class="col-head">K</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <th class="row-head">1</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="10">0年财报页也改成整张 Excel 风格，和经营页保持同一种浏览与填写习惯。</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">2</th>
+                      <td class="cell"></td>
+                      <td class="group-title cell center" colspan="2">损益表</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="group-title cell center" colspan="3">资产负债表</td>
+                      <td class="cell"></td>
+                      <td class="group-title cell center" colspan="2">负债 + 权益</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">3</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="4"></td>
+                      <td class="note-cell cell center">资产</td>
+                      <td class="cell" colspan="3"></td>
+                      <td class="note-cell cell center" colspan="2">负债 + 权益</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">4</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">销售收入</td>
+                      <td class="result-cell cell">32</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">非流动资产</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">负债</td>
+                      <td class="cell"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">5</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">直接成本</td>
+                      <td class="result-cell cell">15</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">在建设备</td>
+                      <td class="result-cell cell">0</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">短期负债</td>
+                      <td class="result-cell cell">20</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">6</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">毛利</td>
+                      <td class="result-cell cell">17</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">厂房</td>
+                      <td class="result-cell cell">40</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">长期负债</td>
+                      <td class="result-cell cell">0</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">7</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">综合费用</td>
+                      <td class="result-cell cell">13</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">设备残值</td>
+                      <td class="result-cell cell">3</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">总负债</td>
+                      <td class="result-cell cell">20</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">8</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">折旧</td>
+                      <td class="result-cell cell">1</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">待折资产</td>
+                      <td class="result-cell cell">0</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">股东资本</td>
+                      <td class="result-cell cell">50</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">9</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">营业利润</td>
+                      <td class="result-cell cell">3</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">总非流动资产</td>
+                      <td class="result-cell cell">43</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">利润留存</td>
+                      <td class="result-cell cell">17</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">10</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">财务收入/支出</td>
+                      <td class="result-cell cell">2</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">流动资产</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">年度净利润</td>
+                      <td class="result-cell cell">2</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">11</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">额外收入/支出</td>
+                      <td class="result-cell cell">2</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">现金</td>
+                      <td class="result-cell cell">36</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">总股东权益</td>
+                      <td class="result-cell cell">69</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">12</th>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">应收款</td>
+                      <td class="result-cell cell">0</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">总负债 + 权益</td>
+                      <td class="result-cell cell">89</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">13</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">税前利润</td>
+                      <td class="result-cell cell">3</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">在制品</td>
+                      <td class="input-cell"><input value="6"></td>
+                      <td class="note-cell cell center">手工输入</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">14</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">所得税</td>
+                      <td class="result-cell cell">1</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">成品</td>
+                      <td class="input-cell"><input value="4"></td>
+                      <td class="note-cell cell center">手工输入</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">15</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">年度净利润</td>
+                      <td class="result-cell cell">2</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">原料</td>
+                      <td class="input-cell"><input value="1"></td>
+                      <td class="note-cell cell center">手工输入</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">16</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="4"></td>
+                      <td class="note-cell cell">所得税后现金</td>
+                      <td class="result-cell cell">35</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">17</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="4"></td>
+                      <td class="note-cell cell">总流动资产</td>
+                      <td class="result-cell cell">46</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">18</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="4"></td>
+                      <td class="note-cell cell">总资产</td>
+                      <td class="result-cell cell">89</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">19</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="10">财报页保持完整铺开，绿色格继续表示手工项，其他由公式结果自动带出。</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">20</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="10"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">21</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">所得税税率</td>
+                      <td class="input-cell">
+                        <select>
+                          <option selected>0.25</option>
+                          <option>0.15</option>
+                          <option>0</option>
+                        </select>
+                      </td>
+                      <td class="note-cell cell center" colspan="2">下拉选择</td>
+                      <td class="cell" colspan="6"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">22</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">财报提交校验</td>
+                      <td class="result-cell cell" colspan="2">总资产 = 89</td>
+                      <td class="result-cell cell" colspan="2">总负债 + 权益 = 89</td>
+                      <td class="note-cell cell center" colspan="5">平衡，可提交</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">23</th>
+                      <td class="cell"></td>
+                      <td class="cell" colspan="10"></td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">24</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">一般企业</td>
+                      <td class="note-cell cell center">0.25</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">首版边界</td>
+                      <td class="note-cell cell center" colspan="5">绿色单元格定义为财报手工项</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">25</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">高新企业</td>
+                      <td class="note-cell cell center">0.15</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">手工项</td>
+                      <td class="note-cell cell center" colspan="5">在制品 / 成品 / 原料 / 所得税税率</td>
+                    </tr>
+                    <tr>
+                      <th class="row-head">26</th>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">全额弥补亏损</td>
+                      <td class="note-cell cell center">0</td>
+                      <td class="cell"></td>
+                      <td class="cell"></td>
+                      <td class="note-cell cell">当前状态</td>
+                      <td class="note-cell cell center" colspan="5">示意页，未接真实计算引擎</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <aside class="sidebar">
+            <section class="side-card">
+              <h3>当前状态</h3>
+              <div class="side-badge">已自动保存</div>
+              <div class="side-grid" style="margin-top: 10px;">
+                <div class="side-row"><span>当前年份</span><strong>0年</strong></div>
+                <div class="side-row"><span>当前阶段</span><strong>Q1 可提交</strong></div>
+                <div class="side-row"><span>下一步</span><strong>完成现金核对</strong></div>
+              </div>
+            </section>
+
+            <section class="side-card">
+              <h3>阶段说明</h3>
+              <p>主表继续保持完整的 Excel 视图。未来阶段全部留在原位置，只是当前不开放输入。</p>
+              <div class="warn-box" style="margin-top: 10px;">
+                当前只开放年初区与 Q1 区。Q2、Q3、Q4、年末区可以看见，但输入格锁定。
+              </div>
+            </section>
+
+            <section class="side-card">
+              <h3>现金核对</h3>
+              <input class="side-input" type="text" value="45" aria-label="沙盘现金">
+              <div class="side-grid">
+                <div class="side-row"><span>系统现金</span><strong>45</strong></div>
+                <div class="side-row"><span>核对结果</span><strong>一致</strong></div>
+              </div>
+            </section>
+
+            <section class="side-card">
+              <h3>提交动作</h3>
+              <div class="side-actions">
+                <button class="btn primary" type="button">提交 Q1</button>
+                <button class="btn" type="button">查看必填提示</button>
+              </div>
+            </section>
+
+            <section class="side-card">
+              <h3>后续提醒</h3>
+              <p>阶段提交后提醒玩家检查贷款相关事项。工具栏只提供辅助信息，不拆碎主表。</p>
+            </section>
+          </aside>
+        </div>
+
+        <div class="sheet-tabs">
+          <button class="sheet-tab disabled" type="button">初始年财报</button>
+          <button class="sheet-tab active" type="button" data-sheet-target="operate">0年经营</button>
+          <button class="sheet-tab" type="button" data-sheet-target="report">0年财报</button>
+          <button class="sheet-tab disabled" type="button">1年经营</button>
+          <button class="sheet-tab disabled" type="button">1年财报</button>
+          <button class="sheet-tab disabled" type="button">2年经营</button>
+          <button class="sheet-tab disabled" type="button">2年财报</button>
+          <button class="sheet-tab disabled" type="button">3年经营</button>
+          <button class="sheet-tab disabled" type="button">3年财报</button>
+          <button class="sheet-tab disabled" type="button">+</button>
+        </div>
+      </div>
+
+      <div class="footer-hint">
+        这是一个混合版 Demo：主表保持第一张图那种完整 Excel 页面，右侧只补一个轻量工作栏。主要验证的是这种组合是否比纯大侧栏更顺手。
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var style = document.createElement("style");
+    style.textContent = [
+      ".sheet-tabs.top-tabs { padding: 12px 12px 0; background: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%); border-bottom: 1px solid #dbe1ea; }",
+      ".sheet-tabs.top-tabs .sheet-tab { border-radius: 12px 12px 0 0; }",
+      ".market-head { background: #f7f0d5; font-weight: 700; }",
+      ".market-value { background: #fff400; font-weight: 700; text-align: center; }",
+      ".market-input-shell { background: #cfe5be; }",
+      ".market-input-shell input { width: 100%; height: 100%; border: none; background: transparent; padding: 8px 10px; font: inherit; outline: none; text-align: center; }",
+      ".cash-check-note { background: #fff2cc; font-weight: 700; }",
+      ".filler-cell { background: #ffffff; min-height: 32px; height: 32px; }"
+    ].join("\n");
+    document.head.appendChild(style);
+
+    document.title = "玩家经营页结构讨论 Demo";
+
+    var brandStrong = document.querySelector(".brand strong");
+    if (brandStrong) {
+      brandStrong.textContent = "沙盘经营模拟系统 · 玩家经营页结构讨论 Demo";
+    }
+
+    var brandSpan = document.querySelector(".brand span");
+    if (brandSpan) {
+      brandSpan.textContent = "方向：经营页继续高保真贴近 Excel，季末现金核对回到表内，年份财报按钮移到页面上方。";
+    }
+
+    var formulaBox = document.querySelector(".formula-box");
+    if (formulaBox) {
+      formulaBox.innerHTML = '<span class="formula-label">fx</span> 季末现金核对已回到主表展示；市场投入改成独立标题格 + 绿色输入区；右侧不再单独放现金核对卡片。';
+    }
+
+    var hint = document.querySelector(".hint");
+    if (hint) {
+      hint.textContent = "绿色可填，黄色为公式结果，灰蓝为未来阶段锁定，现金由玩家在线下对照主表自行核对。";
+    }
+
+    var buttons = document.querySelectorAll(".toolbar-actions .btn");
+    if (buttons[1]) {
+      buttons[1].textContent = "查看必填";
+    }
+    if (buttons[2]) {
+      buttons[2].textContent = "锁定预览";
+    }
+
+    var footer = document.querySelector(".footer-hint");
+    if (footer) {
+      footer.textContent = "这版 Demo 只验证玩家经营页结构：财报按钮上移、季末现金核对回到主表、市场投入改成独立单元格，主表底部继续延展为 Excel 网格。";
+    }
+
+    var workbook = document.querySelector(".workbook");
+    var workspace = workbook ? workbook.querySelector(".workspace") : null;
+    var sheetTabs = workbook ? workbook.querySelector(".sheet-tabs") : null;
+    if (workbook && workspace && sheetTabs) {
+      sheetTabs.classList.add("top-tabs");
+      workbook.insertBefore(sheetTabs, workspace);
+      Array.from(sheetTabs.querySelectorAll(".sheet-tab")).forEach(function (tab) {
+        if (tab.textContent.trim() === "+") {
+          tab.remove();
+        }
+      });
+    }
+
+    Array.from(document.querySelectorAll(".side-card")).forEach(function (card) {
+      var title = card.querySelector("h3");
+      if (!title) {
+        return;
+      }
+      var text = title.textContent.trim();
+      if (text === "现金核对") {
+        card.remove();
+        return;
+      }
+      if (text === "后续提醒") {
+        var reminder = card.querySelector("p");
+        if (reminder) {
+          reminder.textContent = "每次季度提交后提醒玩家线下处理贷款更新。本版不做系统强校验，现金以主表中的季末现金行供玩家自行核对。";
+        }
+      }
+      if (text === "阶段说明") {
+        var desc = card.querySelector("p");
+        if (desc) {
+          desc.textContent = "整张经营表完整展开，未来阶段继续保留在原位置。当前只开放本阶段填写，财报按钮固定放在页面上方。";
+        }
+      }
+    });
+
+    Array.from(document.querySelectorAll(".side-row")).forEach(function (row) {
+      var label = row.querySelector("span");
+      var value = row.querySelector("strong");
+      if (!label || !value) {
+        return;
+      }
+      if (label.textContent.trim() === "下一步") {
+        value.textContent = "对照主表核对季末现金";
+      }
+    });
+
+    var operatePanel = document.querySelector('.sheet-panel[data-sheet="operate"]');
+    var operateTable = operatePanel ? operatePanel.querySelector("table.sheet") : null;
+    var operateBody = operateTable ? operateTable.querySelector("tbody") : null;
+    if (operateBody) {
+      var quarterBand = operateBody.querySelector("td.section-band.band-quarter");
+      if (quarterBand) {
+        quarterBand.rowSpan = 32;
+      }
+
+      var rows = Array.from(operateBody.querySelectorAll(":scope > tr"));
+      var marketHeadRow = rows.find(function (row) {
+        var head = row.querySelector(".row-head");
+        return head && head.textContent.trim() === "3";
+      });
+      var marketValueRow = rows.find(function (row) {
+        var head = row.querySelector(".row-head");
+        return head && head.textContent.trim() === "4";
+      });
+
+      if (marketHeadRow && marketValueRow) {
+        var marketCells = marketHeadRow.querySelectorAll("td");
+        var orderHead = marketCells[7];
+        var marketHead = marketCells[8];
+
+        if (orderHead) {
+          orderHead.className = "note-cell cell center market-head";
+          orderHead.rowSpan = 1;
+          orderHead.textContent = "订单总额";
+        }
+
+        if (marketHead) {
+          marketHead.className = "note-cell cell center market-head";
+          marketHead.rowSpan = 1;
+          marketHead.textContent = "市场投入";
+        }
+
+        var valueCell = document.createElement("td");
+        valueCell.className = "result-cell cell center market-value";
+        valueCell.rowSpan = 5;
+        valueCell.textContent = "0";
+
+        var inputCell = document.createElement("td");
+        inputCell.className = "input-cell cell center market-input-shell";
+        inputCell.rowSpan = 5;
+        inputCell.innerHTML = '<input value="">';
+
+        marketValueRow.appendChild(valueCell);
+        marketValueRow.appendChild(inputCell);
+      }
+
+      var managementRow = rows.find(function (row) {
+        var titleCell = row.querySelector(".group-title");
+        return titleCell && titleCell.textContent.indexOf("12. 支付管理人员费用") !== -1;
+      });
+
+      if (managementRow) {
+        var cashRow = document.createElement("tr");
+        cashRow.innerHTML = [
+          '<th class="row-head"></th>',
+          '<td class="group-title cell">13. 核对季末现金</td>',
+          '<td class="note-cell cell center">系统季末现金</td>',
+          '<td class="orange-cell cell">45</td>',
+          '<td class="future-lock cell center">--</td>',
+          '<td class="future-lock cell center">--</td>',
+          '<td class="future-lock cell center">--</td>',
+          '<td class="result-cell cell">45</td>',
+          '<td class="note-cell cell center cash-check-note" colspan="8">玩家对照桌面沙盘现金自行核对，系统不再单独提供现金校验步骤</td>'
+        ].join("");
+        managementRow.insertAdjacentElement("afterend", cashRow);
+      }
+
+      while (operateBody.querySelectorAll(":scope > tr").length < 82) {
+        var fillerRow = document.createElement("tr");
+        var rowHead = document.createElement("th");
+        rowHead.className = "row-head";
+        fillerRow.appendChild(rowHead);
+        for (var i = 0; i < 16; i += 1) {
+          var fillerCell = document.createElement("td");
+          fillerCell.className = "cell filler-cell";
+          fillerRow.appendChild(fillerCell);
+        }
+        operateBody.appendChild(fillerRow);
+      }
+
+      Array.from(operateBody.querySelectorAll(":scope > tr > .row-head")).forEach(function (head, index) {
+        head.textContent = String(index + 1);
+      });
+    }
+
+    var tabs = document.querySelectorAll("[data-sheet-target]");
+    var panels = document.querySelectorAll(".sheet-panel");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        var target = tab.dataset.sheetTarget;
+        tabs.forEach(function (item) {
+          item.classList.remove("active");
+        });
+        panels.forEach(function (panel) {
+          panel.classList.remove("active");
+        });
+        tab.classList.add("active");
+        var targetPanel = document.querySelector('.sheet-panel[data-sheet="' + target + '"]');
+        if (targetPanel) {
+          targetPanel.classList.add("active");
+        }
+      });
+    });
+  })();
+</script>
+</body>
+</html>
+
+

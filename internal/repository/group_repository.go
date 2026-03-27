@@ -46,3 +46,16 @@ func (r *GroupRepository) MarkBankrupt(ctx context.Context, groupID int64, yearN
 			"updater":          operatorName,
 		}).Error
 }
+
+func (r *GroupRepository) RecoverFromBankrupt(ctx context.Context, groupID int64, yearNo int, operatorName string) (bool, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&entity.Group{}).
+		Where("id = ? AND business_status = ? AND bankrupt_year_no = ?", groupID, enum.BusinessStatusBankrupt, yearNo).
+		Updates(map[string]any{
+			"business_status":  enum.BusinessStatusNormal,
+			"bankrupt_year_no": nil,
+			"bankrupt_reason":  nil,
+			"updater":          operatorName,
+		})
+	return tx.RowsAffected > 0, tx.Error
+}

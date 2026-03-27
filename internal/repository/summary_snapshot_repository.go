@@ -107,3 +107,15 @@ func (r *SummarySnapshotRepository) ListEffectiveRankingByYear(ctx context.Conte
 	}
 	return items, nil
 }
+
+func (r *SummarySnapshotRepository) WithdrawEffective(ctx context.Context, groupID int64, yearNo int, operatorName string, operateTime time.Time) (bool, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&entity.GroupSummarySnapshot{}).
+		Where("group_id = ? AND year_no = ? AND summary_effective = ?", groupID, yearNo, true).
+		Updates(map[string]any{
+			"summary_effective": false,
+			"updater":           operatorName,
+			"update_time":       operateTime,
+		})
+	return tx.RowsAffected > 0, tx.Error
+}

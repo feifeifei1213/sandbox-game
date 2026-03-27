@@ -39,7 +39,11 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	initialBaseRepo := repository.NewInitialBaselineRepository(db)
 	reportRepo := repository.NewReportRepository(db)
 	summaryRepo := repository.NewSummarySnapshotRepository(db)
+	accountRepo := repository.NewAccountRepository(db)
+	adminActionLogRepo := repository.NewAdminActionLogRepository(db)
 
+	gameConfigQueryService := service.NewGameConfigQueryService(gameConfigRepo, groupRepo, groupYearRepo)
+	gameConfigHandler := handler.NewGameConfigHandler(gameConfigQueryService)
 	playerOperatingQueryService := service.NewPlayerOperatingQueryService(
 		gameConfigRepo,
 		groupRepo,
@@ -91,12 +95,40 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		summaryRepo,
 	)
 	adminSummaryHandler := handler.NewAdminSummaryHandler(adminSummaryQueryService)
+	adminGroupDataQueryService := service.NewAdminGroupDataQueryService(
+		gameConfigRepo,
+		groupRepo,
+		groupYearRepo,
+		operatingRepo,
+		initialBaseRepo,
+		reportRepo,
+		playerOperatingAssembler,
+		playerReportAssembler,
+	)
+	adminGroupDataHandler := handler.NewAdminGroupDataHandler(adminGroupDataQueryService)
+	adminControlQueryService := service.NewAdminControlQueryService(
+		gameConfigRepo,
+		groupRepo,
+		groupYearRepo,
+		initialBaseRepo,
+		accountRepo,
+		adminActionLogRepo,
+	)
+	adminControlCommandService := service.NewAdminControlCommandService(db)
+	adminControlHandler := handler.NewAdminControlHandler(
+		adminControlQueryService,
+		adminControlCommandService,
+	)
 
 	engine.GET("/healthz", healthHandler.GetHealth)
 
 	apiV1 := engine.Group("/api/v1/sandbox-game")
 	apiV1.Use(middleware.AuthBypass())
 	{
+		gameConfig := apiV1.Group("/game-config")
+		gameConfig.GET("/get-current", gameConfigHandler.GetCurrent)
+		gameConfig.GET("/get-year-tabs", gameConfigHandler.GetYearTabs)
+
 		playerOperating := apiV1.Group("/player-operating")
 		playerOperating.GET("/get-year-view", playerOperatingHandler.GetYearView)
 		playerOperating.PUT("/save-draft", playerOperatingHandler.SaveDraft)
@@ -110,6 +142,18 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminSummary := apiV1.Group("/admin-summary")
 		adminSummary.GET("/get-year-summary", adminSummaryHandler.GetYearSummary)
 		adminSummary.GET("/get-final-ranking", adminSummaryHandler.GetFinalRanking)
+
+		adminGroupData := apiV1.Group("/admin-group-data")
+		adminGroupData.GET("/get-operating-view", adminGroupDataHandler.GetOperatingView)
+		adminGroupData.GET("/get-report-view", adminGroupDataHandler.GetReportView)
+
+		adminControl := apiV1.Group("/admin-control")
+		adminControl.GET("/get-config", adminControlHandler.GetConfig)
+		adminControl.PUT("/update-final-year", adminControlHandler.UpdateFinalYear)
+		adminControl.POST("/open-next-year", adminControlHandler.OpenNextYear)
+		adminControl.GET("/get-initial-baseline", adminControlHandler.GetInitialBaseline)
+		adminControl.POST("/submit-initial-baseline", adminControlHandler.SubmitInitialBaseline)
+		adminControl.POST("/unlock-year", adminControlHandler.UnlockYear)
 	}
 
 	return engine

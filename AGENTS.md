@@ -69,8 +69,8 @@
   - `demo 网页/excel-demo.html`
   - `demo 网页/excel-sidebar-demo.html`
   - `demo 网页/excel-combined-demo.html`
-  - `player-demo.html`
-  - `admin-demo.html`
+  - `demo 网页/player-demo.html`
+  - `demo 网页/admin-demo.html`
 
 ## 2) 当前项目的稳定业务结论（已确认）
 
@@ -127,10 +127,10 @@
 
 ### 原型
 
-- 早期概念页：`demo.html`
-- Excel 风格经营页：`excel-demo.html`
-- 右侧窄栏探索版：`excel-sidebar-demo.html`
-- 当前推荐混合版：`excel-combined-demo.html`
+- 早期概念页：`demo 网页/demo.html`
+- Excel 风格经营页：`demo 网页/excel-demo.html`
+- 右侧窄栏探索版：`demo 网页/excel-sidebar-demo.html`
+- 当前推荐混合版：`demo 网页/excel-combined-demo.html`
 
 ## 5) 当前阶段的产出要求
 
@@ -232,4 +232,5 @@
 - 规则描述优先写“业务语义 + 触发条件 + 结果”。
 - 不允许只写模糊口号，不写边界条件。
 - 若存在不确定项，必须显式标记“待确认”，不能伪装成已确定规则。
+
 

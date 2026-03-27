@@ -174,3 +174,16 @@ func (r *ReportRepository) CreateSubmission(ctx context.Context, cmd CreateRepor
 
 	return r.db.WithContext(ctx).Create(&item).Error
 }
+
+func (r *ReportRepository) InvalidateSubmission(ctx context.Context, groupID int64, yearNo int, operatorName string, operateTime time.Time) (bool, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&entity.GroupReport{}).
+		Where("group_id = ? AND year_no = ? AND (submitted_at IS NOT NULL OR balance_check_passed = ?)", groupID, yearNo, true).
+		Updates(map[string]any{
+			"submitted_at":         nil,
+			"balance_check_passed": false,
+			"updater":              operatorName,
+			"update_time":          operateTime,
+		})
+	return tx.RowsAffected > 0, tx.Error
+}

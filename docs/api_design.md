@@ -241,6 +241,7 @@
 
 - 返回前端顶部年份标签状态
 - 区分：可进入 / 锁定 / 已完成 / 已破产只读
+- 前端应以本接口结果动态渲染年份按钮数量与可进入状态，不得把年份数量写死在页面中
 
 ---
 
@@ -508,6 +509,9 @@ Go DTO 建议：
 |---|---|---|
 | `finalYear` | `int` | 更新后的最终年份 |
 | `currentOpenYear` | `int` | 当前开放年份 |
+| `initializedFromYear` | `int \| null` | 若本次上调扩年，自动补齐的起始年份 |
+| `initializedToYear` | `int \| null` | 若本次上调扩年，自动补齐的结束年份 |
+| `initializedYearCount` | `int` | 本次自动补齐的年份层数量，未扩年时为 `0` |
 | `updatedAt` | `string` | 更新时间，RFC3339 |
 | `updatedBy` | `string` | 操作管理员名称 |
 
@@ -515,6 +519,9 @@ Go DTO 建议：
 
 - 仅管理员可执行。
 - `finalYear` 不得小于 `currentOpenYear`。
+- 若 `finalYear` 上调到当前已准备年份上限之外，服务端必须自动补齐全部小组缺失的未来年份状态记录。
+- 自动补齐的未来年份默认应为：`FORMAL + LOCKED + Q1_OPEN + REPORT_LOCKED + summaryEffective=false + latest submit version=0`。
+- 若 `finalYear` 下调且仍不小于 `currentOpenYear`，允许更新，但不物理删除已存在的未来年份数据。
 - 更新成功后必须写入管理员动作日志。
 
 #### 6.5.3 开放下一年
@@ -543,6 +550,7 @@ Go DTO 建议：
 - 不能超过 `finalYear`
 - 仅当“当前开放年份下，全部未破产组已完成本年财报”时才允许开放
 - 已破产组在新年份仍保持不可编辑
+- 本接口默认依赖 `update-final-year` 已经补齐目标年份的状态空间；若目标年份状态记录缺失，应视为服务端初始化缺陷，而不是前端调用方式错误
 
 响应字段建议：
 
@@ -942,5 +950,8 @@ type AdminActionSummaryResp struct {
 - `ReportManualPayload` 的最终字段命名说明
 - 详细接口示例 JSON 样例库
 - `.http` 用例文件
+
+
+
 
 

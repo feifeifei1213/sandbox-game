@@ -1,0 +1,72 @@
+:root {
+  color-scheme: light;
+  --page-bg: #eef3f9;
+  --page-bg-soft: #f8fafc;
+  --shell-bg: #ffffff;
+  --sheet-bg: #fbfbfc;
+  --line: #d3d9e2;
+  --line-strong: #bec7d4;
+  --text: #17202f;
+  --muted: #697386;
+  --accent: #1f5fd3;
+  --accent-soft: #e7efff;
+  --success: #2f855a;
+  --warning: #b7791f;
+  --danger: #c53030;
+  --input-bg: #cfe5be;
+  --calc-bg: #fff59d;
+  --readonly-bg: #edf1f6;
+  --year-start-bg: #f6decb;
+  --quarter-bg: #d8efee;
+  --year-end-bg: #dff0d2;
+  --derived-bg: #eef5ff;
+  --shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  color: var(--text);
+  background:
+    radial-gradient(circle at top right, rgba(31, 95, 211, 0.08), transparent 24%),
+    linear-gradient(180deg, var(--page-bg) 0%, var(--page-bg-soft) 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  color: inherit;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

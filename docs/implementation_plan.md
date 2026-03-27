@@ -1,6 +1,6 @@
-﻿# 沙盘经营系统需求驱动实施计划（首版）
+# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-03-26  
+> 更新日期：2026-03-27  
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -21,9 +21,9 @@
 ## 开发执行层任务总览
 
 - 总任务数：`30`
-- 已完成：`13`
+- 已完成：`18`
 - 部分完成：`4`
-- 未开始：`11`
+- 未开始：`6`
 - 阻塞：`2`
 - 当前状态：`🟡 进行中`
 
@@ -255,12 +255,12 @@
 
 | Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
 |---|---|---|---|---|---|---|---|
-| M2-01 | 实现游戏配置接口与最终年份管理 | P0 | ⏳ | M1-03、M1-05、`docs/api_design.md` 6.1/6.5 | `game-config`、`admin-control` 配置接口 | 管理员可读取与修改最终年份，系统能返回当前开放年份状态 | 无 |
-| M2-02 | 实现初始基线读取与提交接口 | P0 | ⏳ | M1-03、M1-05、M1-06 | `initial-baseline` 接口 | 管理员可录入共享基线模板，提交后按组扇出并锁定不可修改 | 无 |
-| M2-03 | 实现管理员开放下一年接口 | P0 | ⏳ | M1-05、M2-01、M2-02 | `open-next-year` 接口与状态推进逻辑 | 所有组在管理员动作后统一开放下一年 | 无 |
+| M2-01 | 实现游戏配置接口与最终年份管理 | P0 | ✅ | M1-03、M1-05、`docs/api_design.md` 6.1/6.5 | `game-config`、`admin-control` 配置接口 | 管理员可读取与修改最终年份，系统能返回当前开放年份状态；当最终年份上调时，系统可自动补齐未来年份状态空间 | 无 |
+| M2-02 | 实现初始基线读取与提交接口 | P0 | ✅ | M1-03、M1-05、M1-06 | `initial-baseline` 接口 | 管理员可录入共享基线模板，提交后按组扇出并锁定不可修改 | 无 |
+| M2-03 | 实现管理员开放下一年接口 | P0 | ✅ | M1-05、M2-01、M2-02 | `open-next-year` 接口与状态推进逻辑 | 所有组在管理员动作后统一开放下一年 | 无 |
 | M2-04 | 实现管理员汇总与最终排名接口 | P0 | ✅ | M1-12、M1-04 | `admin-summary` 年度汇总/最终排名接口 | 前端可按正式年份顺序展示年度汇总区，并在满足条件后展示最终排名区 | 无 |
-| M2-05 | 实现管理员组数据查看接口 | P1 | ⏳ | M1-07、M1-10 | `admin-group-data` 查询接口 | 管理员可按组、按年查看经营页与财报页 | 无 |
-| M2-06 | 实现异常解锁接口与审计日志 | P0 | ⏳ | M1-05、M1-09、M1-12、M2-03 | `unlock-year` 接口、`sg_admin_unlock_log`、`sg_admin_action_log` | 满足“仅下一年未开放前可解锁、解锁需写原因、财报失效、汇总撤回” | 无 |
+| M2-05 | 实现管理员组数据查看接口 | P1 | ✅ | M1-07、M1-10 | `admin-group-data` 查询接口 | 管理员可按组、按年查看经营页与财报页 | 无 |
+| M2-06 | 实现异常解锁接口与审计日志 | P0 | ✅ | M1-05、M1-09、M1-12、M2-03 | `unlock-year` 接口、`sg_admin_unlock_log`、`sg_admin_action_log` | 满足“仅下一年未开放前可解锁、解锁需写原因、财报失效、汇总撤回” | 无 |
 | M2-07 | 搭建玩家端经营页 Excel 风格静态壳子 | P0 | 🟡 | 现有 demo、`docs/requirements_spec.md` | 玩家经营页前端骨架、年份标签、阶段表格框架 | 页面结构与 Excel 视觉方向一致，未开放阶段可见但锁定 | 无 |
 | M2-08 | 接入经营页查询、草稿、阶段提交链路 | P0 | ⏳ | M1-07、M1-08、M1-09、M2-07 | 经营页联调页面 | 玩家可完成阶段填写、草稿保存、阶段提交和期末现金回显 | 无 |
 | M2-09 | 搭建玩家端财报页 Excel 风格静态壳子 | P0 | 🟡 | 现有 demo、`docs/requirements_spec.md` | 玩家财报页前端骨架 | 页面结构与 Excel 财报页一致，绿色手工项与税率下拉明确 | 无 |
@@ -272,7 +272,7 @@
 
 | Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
 |---|---|---|---|---|---|---|---|
-| M3-01 | 为状态机、经营校验、季末现金计算、财报平衡补单元测试 | P0 | 🟡 | M1-05、M1-06、M1-09、M1-12 | 规则层单元测试 | 覆盖正常流、锁定流、阶段缺填、平衡不通过、破产判定等场景 | 当前环境缺少外网依赖下载，暂无法完成 `go test ./...` 全量验证 |
+| M3-01 | 为状态机、经营校验、季末现金计算、财报平衡补单元测试 | P0 | 🟡 | M1-05、M1-06、M1-09、M1-12 | 规则层单元测试 | 覆盖正常流、锁定流、阶段缺填、平衡不通过、破产判定等场景 | 当前已可执行 `go test ./...`；仍需继续补异常解锁与管理员接口边界覆盖 |
 | M3-02 | 为核心接口补集成测试 | P0 | ⏳ | M1、M2 全部主链任务 | API 集成测试 | 覆盖经营提交、财报提交、年度推进、异常解锁、汇总查询 | 无 |
 | M3-03 | 编写首版联调脚本与人工验收用例 | P0 | ⏳ | M2-08、M2-10、M2-11、M2-12 | 联调清单、验收步骤、演示账号说明 | 可按脚本完整走通 `0年 -> 1年 -> 财报 -> 汇总 -> 开放下一年` | 无 |
 | M3-04 | 建立 Excel 对账样例集 | P1 | ⏳ | M1-06、M1-09、M1-12 | 一组或多组样例输入与预期输出 | 能用固定样例核对系统计算口径与 Excel 是否一致 | 无 |
@@ -294,18 +294,17 @@
 
 ### 9.7 当前可立即开工的最小任务包
 
-如果要面向“这周周末可调试初版”，在当前仓库已有进度基础上，下一批最值得继续推进的是下面这 10 个任务：
+如果要面向“这周周末可调试初版”，在当前仓库已有进度基础上，下一批最值得继续推进的是下面这 9 个任务：
 
-1. `M2-01` 实现游戏配置接口与最终年份管理
-2. `M2-02` 实现初始基线读取与提交接口
-3. `M2-03` 实现管理员开放下一年接口
-4. `M2-05` 实现管理员组数据查看接口
-5. `M2-06` 实现异常解锁接口与审计日志
-6. `M2-07` 将玩家经营页 Demo 收口为正式前端骨架
-7. `M2-08` 接入经营页查询、草稿、阶段提交链路
-8. `M2-09` 将玩家财报页 Demo 收口为正式前端骨架
-9. `M2-10` 接入财报查询、草稿、提交链路
-10. `M2-11` 将管理员 Demo 收口为正式页面框架并接入汇总接口
+1. `M2-07` 将玩家经营页 Demo 收口为正式前端骨架
+2. `M2-08` 接入经营页查询、草稿、阶段提交链路
+3. `M2-09` 将玩家财报页 Demo 收口为正式前端骨架
+4. `M2-10` 接入财报查询、草稿、提交链路
+5. `M2-11` 将管理员 Demo 收口为正式页面框架并接入已完成的汇总/年度控制接口
+6. `M2-12` 搭建组数据查看与异常解锁前端
+7. `M3-01` 为状态机、经营校验、季末现金计算、财报平衡补单元测试
+8. `M3-02` 为核心接口补集成测试
+9. `M3-03` 编写首版联调脚本与人工验收用例
 
 ## 10) 变更记录
 
@@ -323,32 +322,65 @@
 | 2026-03-26 | 同步更新 `docs/database_design.md`：明确 `final_year >= current_open_year`、`sg_initial_baseline` 采用“页面共享模板 + 后端按组扇出落库”的实现口径，并补充异常解锁回收破产标记的落库要求。 |
 | 2026-03-26 | 完成正式文档与 `AGENTS.md` 的术语收口：统一使用“初始基线”命名，并修正少量替换后不顺的表述，确保后续编码阶段命名一致。 |
 | 2026-03-26 | 复核聊天共识后修正需求口径：经营页改为展示“季末现金核对”供玩家线下自核，系统不再要求额外录入现场现金，也不以现金一致性阻断提交；同步补入上午确认的管理端汇总页单页双区、共享初始基线页等要求。 |
-| 2026-03-26 | 复核当前仓库代码后重写开发状态：确认 `M1-01 ~ M1-12` 与 `M2-04` 已落代码；将此前误记为已完成的 `M2-01/M2-02` 回退为未开始；将 `player-demo.html`、`admin-demo.html` 计入静态壳子部分完成。 |
+| 2026-03-26 | 复核当前仓库代码后重写开发状态：确认 `M1-01 ~ M1-12` 与 `M2-04` 已落代码；将此前误记为已完成的 `M2-01/M2-02` 回退为未开始；将 `demo 网页/player-demo.html`、`demo 网页/admin-demo.html` 计入静态壳子部分完成。 |
 | 2026-03-26 | 同步收口 6 份核心/关键文档旧口径：将 `1组（3.5）.xlsx` 统一切换为 `1组 最终版.xlsx`；移除“现金核对阻断提交”的旧规则，统一为“季末现金展示供玩家线下自核”；并把管理员汇总页同页双区、共享初始基线模板等共识同步回 `AGENTS.md`、需求文档、接口文档、状态机文档与技术选型文档。 |
 | 2026-03-26 | 新增 `docs/frontend_page_structure.md`：按上午讨论共识沉淀首版正式前端页面结构清单，明确玩家端/管理端正式页面、必备区块、页面关系与明确不做项；并在 `docs/frontend_guide.md` 中将页面范围基线指向该清单。 |
-| 2026-03-26 | 新增面向汇报的前端静态展示原型：`player-demo.html` 展示玩家端“Excel 整页 + 轻量工作栏”，`admin-demo.html` 展示管理端“汇总 / 年度控制 / 初始基线 / 组数据”信息架构。 |
+| 2026-03-26 | 新增面向汇报的前端静态展示原型：`demo 网页/player-demo.html` 展示玩家端“Excel 整页 + 轻量工作栏”，`demo 网页/admin-demo.html` 展示管理端“汇总 / 年度控制 / 初始基线 / 组数据”信息架构。 |
 | 2026-03-26 | 初始化 `E:\project\sand box game` 本地 Git 仓库并提交当前项目基线；补充 `.gitignore`，将文档、原型、Go 后端骨架与迁移脚本纳入首个可追溯版本。 |
+| 2026-03-26 | 实现 `M2-01` 核心后端链路：补齐 `game-config/get-current`、`admin-control/get-config`、`admin-control/update-final-year`，新增管理员动作日志仓储与最终年份更新审计，并补充对应服务层测试。 |
+| 2026-03-26 | 实现 `M2-02` 后端链路：补齐 `admin-control/get-initial-baseline`、`admin-control/submit-initial-baseline`，完成共享初始基线模板读取、按组扇出提交锁定、提交状态回写与管理员动作日志留痕。 |
+| 2026-03-26 | 实现 `M2-03` 后端链路：补齐 `admin-control/open-next-year`，完成“仅开放下一自然年、全部未破产组完成当前年财报后才可开放、破产组后续年份保持锁定、当前开放年份更新与管理员动作日志留痕”的首版闭环，并通过 `go test ./...` 验证。 |
+| 2026-03-26 | 实现 `M2-05` 管理员组数据查询链路：补齐 `admin-group-data/get-operating-view`、`admin-group-data/get-report-view`，实现管理员按组按年查看经营/财报只读视图，并复用现有玩家端计算与页面数据模型，同时通过 `go test ./...` 验证。 |
+| 2026-03-26 | 补齐 `M2-01` 剩余链路：新增 `game-config/get-year-tabs`，按当前登录身份返回年份标签状态，冻结玩家端年份标签的“可进入 / 锁定 / 已完成 / 已破产只读”口径，并通过 `go test ./...` 验证。 |
+| 2026-03-27 | 实现 `M2-06` 异常解锁后端闭环：补齐 `admin-control/unlock-year`、`sg_admin_unlock_log` 落库、财报提交失效、汇总撤回、破产恢复与管理员动作审计，并通过 `go test ./...` 验证。 |
+| 2026-03-27 | 根据“管理员可动态设定游戏进行多少年”的新收口要求，补充正式需求、接口与前端结构文档：明确前端采用动态年份视图而非逐年生成独立页面，并确认 `update-final-year` 还需补齐“扩年初始化”能力；同步将 `M2-01` 从已完成调整为部分完成。 |
+| 2026-03-27 | 完成 `M2-01` 扩年初始化闭环：`admin-control/update-final-year` 在上调最终年份时会自动补齐全部小组缺失的未来年份状态记录，响应中补充扩年范围信息，并通过 `go test ./...` 验证。 |
+| 2026-03-27 | 启动正式前端工程：新增 `frontend/` Vue 3 + TypeScript + Vite + Pinia 项目骨架，完成玩家经营页首版页面、年份标签、右侧工作栏和经营页查询 / 草稿保存 / 阶段提交接口接入，并通过 `npm run build` 验证。 |
 
 ## 11) 当前开发进度回写
 
-### 11.1 本轮完成情况（2026-03-26）
+### 11.1 本轮完成情况（2026-03-27）
 
 - `M1-01 ~ M1-12`：✅ 已完成
   - 落点：`cmd/server/main.go`、`internal/app/router.go`、`internal/http/handler/player_operating_handler.go`、`internal/http/handler/player_report_handler.go`、`internal/service/player_operating_*`、`internal/service/player_report_*`、`internal/rules/*`、`internal/state/*`、`migrations/mysql/*`
   - 偏差说明：当前仓库实际进度已经超过“最小骨架”阶段，玩家端经营/财报主链、规则层、状态机、迁移脚本和种子数据均已落地；此前计划中的开发状态回写偏保守。
-  - 下一步：优先承接管理员配置、开放下一年、初始基线接口，以及前端联调。
+  - 下一步：优先承接管理员异常解锁，以及前端联调。
 - `M2-04`：✅ 已完成
   - 落点：`internal/http/handler/admin_summary_handler.go`、`internal/service/admin_summary_query_service.go`、`internal/repository/summary_snapshot_repository.go`
   - 偏差说明：当前已完成“按年取正式汇总 + 最终排名”后端查询链路，但管理员前端仍未正式接入，页面层“单页双区”还停留在 Demo/需求确认阶段。
   - 下一步：在 `M2-11` 中把同页汇总区与最终排名区接到正式页面。
-- `M2-07 / M2-09 / M2-11`：🟡 部分完成
-  - 落点：`player-demo.html`、`admin-demo.html`
-  - 偏差说明：当前仅完成面向汇报的静态展示原型，尚未进入正式前端工程，也未接真实接口。
-  - 下一步：若页面方向继续保持 Excel 高保真路线，可直接把 Demo 拆解为正式前端骨架。
+- `M2-01`：✅ 已完成
+  - 落点：`internal/http/handler/game_config_handler.go`、`internal/service/game_config_query_service.go`、`internal/service/game_config_query_service_test.go`、`internal/http/handler/admin_control_handler.go`、`internal/service/admin_control_*`、`internal/repository/game_config_repository.go`、`internal/repository/group_year_state_repository.go`、`internal/repository/group_year_state_repository_test.go`、`internal/repository/admin_action_log_repository.go`、`internal/app/router.go`
+  - 偏差说明：当前已补齐 `game-config/get-current`、`game-config/get-year-tabs`、`admin-control/get-config`、`admin-control/update-final-year`，并在管理员上调 `finalYear` 时自动为全部小组补齐缺失的未来年份状态记录；前端后续只需按接口返回的年份标签动态刷新页签上限，不再依赖数据库预置未来年份数据。
+  - 下一步：在 `M2-11` 正式管理员页面中接入“最终年份修改后刷新年份标签上限”的交互联动。
+- `M2-02`：✅ 已完成
+  - 落点：`internal/http/handler/admin_control_handler.go`、`internal/http/dto/admin_control_dto.go`、`internal/service/admin_control_query_service.go`、`internal/service/admin_control_command_service.go`、`internal/repository/initial_baseline_repository.go`、`internal/repository/game_config_repository.go`、`internal/app/router.go`
+  - 偏差说明：本轮已补齐 `admin-control/get-initial-baseline` 与 `admin-control/submit-initial-baseline`，实现“共享模板读取、提交后按组扇出、提交即锁定、重复提交拦截、管理员动作日志留痕”的首版闭环；当前实现直接复用已存在的 `sg_initial_baseline` 按组存储结构，不额外引入新表。
+  - 下一步：作为年度控制前置能力继续复用，并在管理员页面接入初始基线查看/提交链路。
+- `M2-03`：✅ 已完成
+  - 落点：`internal/http/dto/admin_control_dto.go`、`internal/http/handler/admin_control_handler.go`、`internal/service/admin_control_command_service.go`、`internal/repository/game_config_repository.go`、`internal/app/router.go`、`internal/service/admin_control_command_service_test.go`
+  - 偏差说明：本轮已补齐 `admin-control/open-next-year`，实现“目标年份必须为当前开放年份 + 1、不得超过最终年份、仅在全部未破产组完成当前年财报后才允许开放、破产组后续年份保持锁定、管理员动作日志留痕”的首版闭环；开放条件摘要继续复用查询层统一口径。
+  - 下一步：继续在管理员页面接入“开放下一年”动作，并和年度控制区联调。
+- `M2-05`：✅ 已完成
+  - 落点：`internal/http/dto/admin_group_data_dto.go`、`internal/http/handler/admin_group_data_handler.go`、`internal/service/admin_group_data_query_service.go`、`internal/service/admin_group_data_query_service_test.go`、`internal/app/router.go`
+  - 偏差说明：本轮先按任务完成标准落地 `admin-group-data/get-operating-view` 与 `admin-group-data/get-report-view` 两个核心只读接口，管理员现在可按组按年查看经营页与财报页；`page-stage-submissions` 与 `page-report-submissions` 尚未实现，保留在后续页面实际需要时补齐。
+  - 下一步：在 `M2-12` 中把“查看组数据 + 异常解锁”串成完整管理操作流。
+- `M2-06`：✅ 已完成
+  - 落点：`internal/http/dto/admin_control_dto.go`、`internal/http/handler/admin_control_handler.go`、`internal/service/admin_control_command_service.go`、`internal/repository/admin_unlock_log_repository.go`、`internal/repository/group_repository.go`、`internal/repository/report_repository.go`、`internal/repository/summary_snapshot_repository.go`、`internal/app/router.go`、`internal/service/admin_control_command_service_test.go`
+  - 偏差说明：本轮已补齐 `admin-control/unlock-year` 首版闭环，服务端会校验“下一年是否已开放、原因是否为空、当前年份是否仍处于可编辑态”；解锁时会回收财报提交状态、撤回汇总快照，并在命中破产年份时恢复该组 `NORMAL` 状态，同时写入 `sg_admin_unlock_log` 与 `sg_admin_action_log`。当前仍不支持“回滚到某个历史季度快照”的精细回退，只支持最小结果回收后由玩家重新提交。
+  - 下一步：在 `M2-12` 中把解锁弹窗、组数据页和操作反馈联调到正式前端。
+- `M2-07`：🟡 部分完成
+  - 落点：`frontend/package.json`、`frontend/src/router/index.ts`、`frontend/src/stores/player-operating.ts`、`frontend/src/views/sandbox-game/player/operating/PlayerOperatingPage.vue`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/OperatingSidebar.vue`
+  - 偏差说明：当前已创建正式 Vue 3 + TypeScript + Vite + Pinia 前端工程，并落下首个玩家经营页，接入 `get-year-tabs`、`get-year-view`、`save-draft`、`submit-stage` 四条真实接口链路；页面已具备年份切换、5 分钟自动保存、右侧工作栏和阶段提交入口，但与最终 Excel 的逐格高保真仍需继续细化。
+  - 下一步：继续细化主表逐格布局，并承接 `M2-08` 的联调收口。
+- `M2-09 / M2-11`：🟡 部分完成
+  - 落点：`demo 网页/player-demo.html`、`demo 网页/admin-demo.html`、`docs/frontend_page_structure.md`
+  - 偏差说明：财报页和管理员页当前仍以 Demo 与结构清单为主，尚未像玩家经营页一样正式接入到 `frontend/` 工程。
+  - 下一步：优先把玩家财报页接入正式前端工程，再推进管理员端页面骨架。
 - `M3-01`：🟡 部分完成
   - 落点：`internal/state/state_machine_test.go`、`internal/rules/operating/*_test.go`、`internal/rules/report/*_test.go`、`internal/rules/carryforward/*_test.go`、`internal/rules/summary/*_test.go`
-  - 偏差说明：规则层与状态机测试文件已经存在，但当前环境无法从外网下载缺失依赖，`go test ./...` 不能完成全量验证，因此暂不记为完全完成。
-  - 下一步：在具备依赖下载条件的环境中补齐全量测试和接口级测试验证。
+  - 偏差说明：规则层与状态机测试文件已经存在，当前已成功执行 `go test ./...` 全量验证，说明项目主链在本机可编译可测试；但状态机边界、异常解锁、管理员接口场景仍需继续补覆盖，因此暂不记为完全完成。
+  - 下一步：继续补管理员控制链、异常解锁和接口级场景测试覆盖。
 - 文档口径收口：✅ 已完成
   - 落点：`AGENTS.md`、`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/api_design.md`、`docs/minimal_state_machine.md`、`docs/technical_selection.md`
   - 偏差说明：本轮主要修正文档之间的旧口径冲突，不改变当前已落地代码的业务边界；重点完成了 Excel 主依据文件名切换、现金规则去闸门化、管理员汇总页双区结构和共享初始基线模板的同步，并补齐了技术选型文档中的旧现金校验表述。
@@ -363,8 +395,11 @@
   - 下一步：后续开发继续在该仓库内按任务粒度提交，避免再混入旧目录 `E:\project\game` 的历史内容。
 - 状态纠偏：✅ 已完成
   - 落点：本文档 `9.4` 与 `11.1`
-  - 偏差说明：经复核，先前将 `M2-01/M2-02` 记为已完成并不准确；当前仓库尚未看到对应管理员配置/初始基线接口的正式 handler/service 暴露，因此已回退为未开始。
+  - 偏差说明：经复核，先前将 `M2-01/M2-02` 的状态记录得不够准确；当前已按仓库实际代码修正为 `M2-01` 已完成、`M2-02` 已完成，因此后续状态回写要继续以当前仓库为准。
   - 下一步：后续新增管理员控制接口时，按实际代码落点继续回写，不再用“曾讨论过/曾做过别处代码”代替当前仓库状态。
+
+
+
 
 
 
