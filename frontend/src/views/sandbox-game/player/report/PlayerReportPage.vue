@@ -4,8 +4,8 @@
       <header class="page-header">
         <div>
           <p class="eyebrow">Sandbox Game / Player</p>
-          <h1>玩家经营页</h1>
-          <p class="subtext">正式前端工程版本，当前已接入真实年份标签与经营页查询 / 保存 / 提交接口。</p>
+          <h1>玩家财报页</h1>
+          <p class="subtext">正式前端工程版本，当前已接入真实财报查询 / 保存 / 提交接口。</p>
         </div>
         <div class="header-pills">
           <span class="pill">组别：{{ activeView?.groupId ?? '--' }}</span>
@@ -18,7 +18,7 @@
       <section class="toolbar-card">
         <div class="toolbar-top">
           <YearTabs :tabs="activeYearTabs" :active-year="activeSelectedYear" @select="handleYearSelect" />
-          <PageModeSwitch active-mode="operating" :report-enabled="activeReportEnabled" @report="goReport" />
+          <PageModeSwitch active-mode="report" :report-enabled="true" @operating="goOperating" />
         </div>
       </section>
 
@@ -38,38 +38,42 @@
               <strong>{{ activeView?.yearStatus || '--' }}</strong>
             </div>
             <div class="status-item">
-              <span>经营阶段</span>
-              <strong>{{ activeView?.currentStageCode || '--' }}</strong>
-            </div>
-            <div class="status-item">
               <span>财报状态</span>
               <strong>{{ activeView?.reportStatus || '--' }}</strong>
             </div>
+            <div class="status-item">
+              <span>经营状态</span>
+              <strong>{{ activeView?.businessStatus || '--' }}</strong>
+            </div>
           </section>
 
-          <section v-if="!previewMode && (loading || yearViewLoading)" class="loading-card">正在加载经营页数据...</section>
+          <section v-if="!previewMode && (loading || yearViewLoading)" class="loading-card">正在加载财报页数据...</section>
 
-          <OperatingSheet
+          <ReportSheet
             v-else-if="activeView"
-            :model-value="activeDraftPayload"
-            :editable-scopes="activeView.editableScopes"
-            :quarter-cash-checks="activeView.quarterCashChecks"
-            :current-stage-code="activeView.currentStageCode"
-            :derived-values="activeView.derivedValues"
-            :period-end-cash="activeView.periodEndCash"
+            :model-value="activeDraftManualPayload"
+            :computed-payload="activeComputedPayload"
+            :can-edit="activeView.canEdit"
+            :tax-rate-options="activeView.manualFieldOptions.incomeTaxRateOptions"
             @update:model-value="updatePayload"
           />
 
-          <section v-else class="loading-card">当前没有可展示的经营页数据。</section>
+          <section v-else class="loading-card">当前没有可展示的财报页数据。</section>
         </main>
 
-        <OperatingSidebar
+        <ReportSidebar
           class="side-panel"
           :view="activeView"
-          :year-label="`${activeSelectedYear} 年经营`"
+          :year-label="`${activeSelectedYear} 年财报`"
+          :computed-payload="activeComputedPayload"
+          :balance-gap="activeBalanceGap"
+          :balance-passed="activeBalancePassed"
+          :tax-rate-options="activeView?.manualFieldOptions.incomeTaxRateOptions ?? []"
+          :missing-fields="activeMissingFields"
           :dirty="activeDirty"
           :saving="activeSaving"
           :submitting="activeSubmitting"
+          :submit-ready="activeSubmitReady"
           @save="handleSave"
           @submit="handleSubmit"
         />
@@ -84,30 +88,34 @@ import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 
 import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
-import OperatingSheet from '@/components/sandbox-game/player/OperatingSheet.vue'
-import OperatingSidebar from '@/components/sandbox-game/player/OperatingSidebar.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
-import type { PageMessage } from '@/stores/player-operating'
-import { usePlayerOperatingStore } from '@/stores/player-operating'
+import ReportSheet from '@/components/sandbox-game/player/ReportSheet.vue'
+import ReportSidebar from '@/components/sandbox-game/player/ReportSidebar.vue'
+import { usePlayerReportStore } from '@/stores/player-report'
+import type { PageMessage } from '@/stores/player-report'
 import {
-  cloneOperatingPayload,
-  createEmptyOperatingPayload,
+  buildReportComputedPreview,
+  cloneReportManualPayload,
+  createEmptyReportComputedPayload,
+  reportBalanceGap,
   type CurrentGameConfigResult,
-  type OperatingPayload,
-  type PlayerOperatingView,
+  type PlayerReportView,
+  type ReportComputedPayload,
+  type ReportManualPayload,
   type YearTabItem,
 } from '@/types/sandbox-game'
 
 const AUTO_SAVE_INTERVAL = 5 * 60 * 1000
+const balanceTolerance = 0.000001
 
 const route = useRoute()
 const router = useRouter()
-const store = usePlayerOperatingStore()
+const store = usePlayerReportStore()
 const {
   currentConfig,
   yearTabs,
   currentView,
-  draftPayload,
+  draftManualPayload,
   selectedYear,
   loading,
   yearViewLoading,
@@ -115,10 +123,19 @@ const {
   submitting,
   dirty,
   pageMessage,
-  reportEnabled,
+  previewComputedPayload: storePreviewComputedPayload,
+  balanceGap,
+  balancePassed,
+  missingFields,
+  submitReady,
 } = storeToRefs(store)
 
-const previewDraftPayload = ref<OperatingPayload>(buildPreviewOperatingPayload(0))
+const previewDraftManualPayload = ref<ReportManualPayload>({
+  workInProgress: 6,
+  finishedGoods: 4,
+  rawMaterials: 2,
+  incomeTaxRate: 0.25,
+})
 const previewDirty = ref(false)
 const previewSaving = ref(false)
 const previewSubmitting = ref(false)
@@ -155,29 +172,114 @@ const previewYearTabs = computed<YearTabItem[]>(() => {
   }
   return tabs
 })
-const previewView = computed<PlayerOperatingView>(() => buildPreviewView(previewYear.value, previewLastDraftSavedAt.value))
+const previewBaseComputedPayload = computed<ReportComputedPayload>(() => {
+  const yearFactor = previewYear.value
+  return {
+    ...createEmptyReportComputedPayload(),
+    reportSalesRevenue: 86 + yearFactor * 4,
+    reportDirectCost: 42 + yearFactor * 2,
+    reportGrossProfit: 44 + yearFactor * 2,
+    reportComprehensiveCost: 18 + yearFactor,
+    reportDepreciation: 6,
+    reportOperatingProfit: 20 + yearFactor,
+    reportFinanceIncomeExpense: 3,
+    reportExtraIncomeExpense: 1,
+    reportPreTaxProfit: 18 + yearFactor,
+    reportIncomeTax: 0,
+    reportNetProfit: 0,
+    reportWorkInProgress: 0,
+    reportFinishedGoods: 0,
+    reportRawMaterials: 0,
+    reportWorkInConstruction: 5,
+    reportFactoryAsset: 40,
+    reportLineResidual: 9,
+    reportDepreciableAsset: 12,
+    reportTotalNonCurrentAssets: 66,
+    reportCash: 28 + yearFactor * 3,
+    reportReceivable: 14,
+    reportPostTaxCash: 0,
+    reportTotalCurrentAssets: 0,
+    reportTotalAssets: 0,
+    reportShortTermLiability: 22,
+    reportLongTermLiability: 10,
+    reportTotalLiability: 32,
+    reportShareCapital: 50,
+    reportRetainedEarnings: 12 + yearFactor,
+    reportTotalEquity: 0,
+    reportTotalLiabilityEquity: 0,
+  }
+})
+const previewComputedPayloadLocal = computed(() =>
+  buildReportComputedPreview(previewBaseComputedPayload.value, previewDraftManualPayload.value),
+)
+const previewBalanceGap = computed(() => reportBalanceGap(previewComputedPayloadLocal.value))
+const previewBalancePassed = computed(() => Math.abs(previewBalanceGap.value) <= balanceTolerance)
+const previewMissingFields = computed(() => {
+  const missing: string[] = []
+  if (previewDraftManualPayload.value.workInProgress === null) {
+    missing.push('在制品')
+  }
+  if (previewDraftManualPayload.value.finishedGoods === null) {
+    missing.push('成品')
+  }
+  if (previewDraftManualPayload.value.rawMaterials === null) {
+    missing.push('材料')
+  }
+  if (previewDraftManualPayload.value.incomeTaxRate === null) {
+    missing.push('所得税税率')
+  }
+  return missing
+})
+const previewSubmitReady = computed(() => previewMissingFields.value.length === 0 && previewBalancePassed.value)
+const previewView = computed<PlayerReportView>(() => ({
+  groupId: 1,
+  yearNo: previewYear.value,
+  yearStatus: 'REPORTING',
+  reportStatus: 'REPORT_PENDING',
+  businessStatus: 'NORMAL',
+  canView: true,
+  canEdit: true,
+  canSubmit: true,
+  reportComputedPayload: previewBaseComputedPayload.value,
+  reportManualPayload: cloneReportManualPayload(previewDraftManualPayload.value),
+  manualFieldOptions: {
+    incomeTaxRateOptions: [0.25, 0.15, 0],
+  },
+  lastDraftSavedAt: previewLastDraftSavedAt.value,
+}))
 
 const activeConfig = computed(() => (previewMode.value ? previewConfig.value : currentConfig.value))
 const activeYearTabs = computed(() => (previewMode.value ? previewYearTabs.value : yearTabs.value))
 const activeView = computed(() => (previewMode.value ? previewView.value : currentView.value))
 const activeSelectedYear = computed(() => (previewMode.value ? previewYear.value : selectedYear.value))
-const activeDraftPayload = computed(() => (previewMode.value ? previewDraftPayload.value : draftPayload.value))
+const activeDraftManualPayload = computed(() => (previewMode.value ? previewDraftManualPayload.value : draftManualPayload.value))
+const activeComputedPayload = computed(() => (previewMode.value ? previewComputedPayloadLocal.value : storePreviewComputedPayload.value))
+const activeBalanceGap = computed(() => (previewMode.value ? previewBalanceGap.value : balanceGap.value))
+const activeBalancePassed = computed(() => (previewMode.value ? previewBalancePassed.value : balancePassed.value))
+const activeMissingFields = computed(() => (previewMode.value ? previewMissingFields.value : missingFields.value))
+const activeSubmitReady = computed(() => (previewMode.value ? previewSubmitReady.value : submitReady.value))
 const activePageMessage = computed(() => (previewMode.value ? previewPageMessage.value : pageMessage.value))
 const activeDirty = computed(() => (previewMode.value ? previewDirty.value : dirty.value))
 const activeSaving = computed(() => (previewMode.value ? previewSaving.value : saving.value))
 const activeSubmitting = computed(() => (previewMode.value ? previewSubmitting.value : submitting.value))
-const activeReportEnabled = computed(() => (previewMode.value ? true : reportEnabled.value))
 
 onMounted(async () => {
   if (previewMode.value) {
-    resetPreviewState(previewYear.value)
+    previewPageMessage.value = {
+      type: 'info',
+      text: '当前为开发预览模式，页面样式可查看，但不会读取或提交真实业务数据。',
+    }
     return
   }
 
-  await store.bootstrap(readRouteYear())
-  initialized = true
-  if (selectedYear.value !== readRouteYear()) {
-    syncRouteYear(selectedYear.value)
+  try {
+    await store.bootstrap(readRouteYear())
+    initialized = true
+    if (selectedYear.value !== readRouteYear()) {
+      syncRouteYear(selectedYear.value)
+    }
+  } catch {
+    // 页面消息由 store 统一处理。
   }
 
   autoSaveTimer = window.setInterval(async () => {
@@ -196,23 +298,21 @@ watch(
   () => [route.query.yearNo, route.query.preview],
   async () => {
     if (previewMode.value) {
-      resetPreviewState(previewYear.value)
+      previewPageMessage.value = {
+        type: 'info',
+        text: '当前为开发预览模式，页面样式可查看，但不会读取或提交真实业务数据。',
+      }
       return
     }
 
     const targetYear = readRouteYear()
-    if (!initialized) {
-      await store.bootstrap(targetYear)
-      initialized = true
-      return
-    }
-    if (targetYear === undefined || targetYear === selectedYear.value) {
+    if (!initialized || targetYear === undefined || targetYear === selectedYear.value) {
       return
     }
     try {
       await store.loadYearView(targetYear)
     } catch {
-      // 错误消息由 store 统一处理。
+      syncRouteYear(selectedYear.value)
     }
   },
 )
@@ -246,9 +346,9 @@ function handleYearSelect(yearNo: number) {
   syncRouteYear(yearNo)
 }
 
-function updatePayload(nextPayload: OperatingPayload) {
+function updatePayload(nextPayload: ReportManualPayload) {
   if (previewMode.value) {
-    previewDraftPayload.value = cloneOperatingPayload(nextPayload)
+    previewDraftManualPayload.value = cloneReportManualPayload(nextPayload)
     previewDirty.value = true
     return
   }
@@ -280,180 +380,14 @@ async function handleSubmit() {
     previewSubmitting.value = false
     return
   }
-  await store.submitCurrentStage()
+  await store.submitCurrentReport()
 }
 
-function goReport() {
-  if (!activeReportEnabled.value) {
-    return
-  }
+function goOperating() {
   router.push({
-    path: '/sandbox-game/player/report',
+    path: '/sandbox-game/player/operating',
     query: previewMode.value ? { yearNo: String(activeSelectedYear.value), preview: '1' } : { yearNo: String(activeSelectedYear.value) },
   })
-}
-
-function resetPreviewState(yearNo: number) {
-  previewDraftPayload.value = buildPreviewOperatingPayload(yearNo)
-  previewDirty.value = false
-  previewSaving.value = false
-  previewSubmitting.value = false
-  previewPageMessage.value = {
-    type: 'info',
-    text: '当前为开发预览模式，页面样式可查看，但不会读取或提交真实业务数据。',
-  }
-}
-
-function buildPreviewView(yearNo: number, lastDraftSavedAt: string | null): PlayerOperatingView {
-  return {
-    groupId: 1,
-    yearNo,
-    yearStatus: 'OPERATING',
-    stageStatus: 'YEAR_END_OPEN',
-    reportStatus: 'REPORT_LOCKED',
-    businessStatus: 'NORMAL',
-    currentStageCode: 'YEAR_END',
-    canView: true,
-    canEdit: true,
-    canSubmit: true,
-    operatingPayload: cloneOperatingPayload(previewDraftPayload.value),
-    editableScopes: ['YEAR_START', 'Q1', 'Q2', 'Q3', 'Q4', 'YEAR_END'],
-    readonlyScopes: [],
-    stageSubmitHistory: [
-      { stageCode: 'Q1', submitVersion: 1, periodEndCash: 38 + yearNo, submitTime: new Date(2026, 2, 21, 9, 30).toISOString() },
-      { stageCode: 'Q2', submitVersion: 1, periodEndCash: 43 + yearNo, submitTime: new Date(2026, 2, 21, 10, 30).toISOString() },
-      { stageCode: 'Q3', submitVersion: 1, periodEndCash: 41 + yearNo, submitTime: new Date(2026, 2, 21, 11, 30).toISOString() },
-    ],
-    lastDraftSavedAt,
-    quarterCashChecks: {
-      Q1: 38 + yearNo,
-      Q2: 43 + yearNo,
-      Q3: 41 + yearNo,
-      Q4: 47 + yearNo,
-    },
-    derivedValues: buildPreviewDerivedValues(yearNo),
-    periodEndCash: 47 + yearNo,
-  }
-}
-
-function buildPreviewOperatingPayload(yearNo: number): OperatingPayload {
-  const payload = createEmptyOperatingPayload()
-  payload.beginning.taxAndPlanning = {
-    taxPayment: 5 + yearNo,
-    planRevenue: 108 + yearNo * 8,
-    comprehensiveCostPlan: 32 + yearNo * 2,
-  }
-  payload.beginning.marketBid = [
-    { basicProductTotal: 18, standardProductTotal: 6, precisionProductTotal: 0, intelligentProductTotal: 0, marketInvestment: 2, orderAmount: 24 },
-    { basicProductTotal: 12, standardProductTotal: 8, precisionProductTotal: 4, intelligentProductTotal: 0, marketInvestment: 3, orderAmount: 24 },
-    { basicProductTotal: 0, standardProductTotal: 10, precisionProductTotal: 8, intelligentProductTotal: 4, marketInvestment: 4, orderAmount: 22 },
-    { basicProductTotal: 0, standardProductTotal: 0, precisionProductTotal: 12, intelligentProductTotal: 14, marketInvestment: 5, orderAmount: 26 },
-  ]
-  payload.quarter.shortTermLoan = {
-    q1: { dueRepayment: 2, interest: 1, newLoan: 5 },
-    q2: { dueRepayment: 2, interest: 1, newLoan: 2 },
-    q3: { dueRepayment: 2, interest: 1, newLoan: 3 },
-    q4: { dueRepayment: 2, interest: 1, newLoan: 2 },
-  }
-  payload.quarter.materialPayment = {
-    q1: { basicProduct: 5, standardProduct: 3, precisionProduct: 1, intelligentProduct: 0 },
-    q2: { basicProduct: 4, standardProduct: 4, precisionProduct: 2, intelligentProduct: 1 },
-    q3: { basicProduct: 3, standardProduct: 4, precisionProduct: 3, intelligentProduct: 1 },
-    q4: { basicProduct: 2, standardProduct: 3, precisionProduct: 3, intelligentProduct: 2 },
-  }
-  payload.quarter.productionLineAdjustment = {
-    q1: { changeProduct: 1, dismantleCost: 0, lineSale: 0, newLineInstall: 2, constructionToFixed: 1, newDepreciableAsset: 2 },
-    q2: { changeProduct: 1, dismantleCost: 1, lineSale: 0, newLineInstall: 1, constructionToFixed: 1, newDepreciableAsset: 1 },
-    q3: { changeProduct: 2, dismantleCost: 0, lineSale: 1, newLineInstall: 1, constructionToFixed: 1, newDepreciableAsset: 2 },
-    q4: { changeProduct: 1, dismantleCost: 1, lineSale: 0, newLineInstall: 1, constructionToFixed: 0, newDepreciableAsset: 1 },
-  }
-  payload.quarter.humanResource = {
-    q1: { staffCost: 2 },
-    q2: { staffCost: 2 },
-    q3: { staffCost: 3 },
-    q4: { staffCost: 2 },
-  }
-  payload.quarter.salaryAndProduction = {
-    q1: { salaryCost: 4 },
-    q2: { salaryCost: 4 },
-    q3: { salaryCost: 5 },
-    q4: { salaryCost: 5 },
-  }
-  payload.quarter.researchAndManagement = {
-    q1: { technologyResearch: 2, managementSystem: 1 },
-    q2: { technologyResearch: 2, managementSystem: 1 },
-    q3: { technologyResearch: 3, managementSystem: 1 },
-    q4: { technologyResearch: 2, managementSystem: 1 },
-  }
-  payload.quarter.receivableUpdate = {
-    q1: { receivableCollection: 6 },
-    q2: { receivableCollection: 7 },
-    q3: { receivableCollection: 5 },
-    q4: { receivableCollection: 6 },
-  }
-  payload.quarter.deliverySettlement = {
-    q1: { salesRevenue: 24, directCost: 14, managementStaffCost: 1 },
-    q2: { salesRevenue: 27, directCost: 16, managementStaffCost: 1 },
-    q3: { salesRevenue: 30, directCost: 17, managementStaffCost: 1 },
-    q4: { salesRevenue: 35 + yearNo * 2, directCost: 20 + yearNo, managementStaffCost: 1 },
-  }
-  payload.yearEnd.longTermLoan = {
-    interest: 2,
-    repayment: 3,
-    newLoan: 6,
-  }
-  payload.yearEnd.assetAdjustment = {
-    lineMaintenance: 2,
-    purchase: 16,
-    sale: 4,
-    rent: 3,
-    workInConstruction: 5,
-    marketCultivation: 2,
-  }
-  payload.extra.incomeAndPenalty = {
-    q1: { discountExpense: 0, extraExpensePenalty: 0, extraIncomeReward: 1 },
-    q2: { discountExpense: 0, extraExpensePenalty: 1, extraIncomeReward: 0 },
-    q3: { discountExpense: 1, extraExpensePenalty: 0, extraIncomeReward: 1 },
-    q4: { discountExpense: 0, extraExpensePenalty: 0, extraIncomeReward: 1 },
-  }
-  payload.derived.values = buildPreviewDerivedValues(yearNo)
-  return payload
-}
-
-function buildPreviewDerivedValues(yearNo: number) {
-  return {
-    orderTotal: 96 + yearNo * 8,
-    comprehensiveCostTotal: 34 + yearNo * 2,
-    shortTermRepayment: 8,
-    shortTermInterest: 4,
-    newShortTermLoan: 12,
-    materialPayment: 38,
-    changeProductCost: 5,
-    lineDismantleCost: 2,
-    lineSaleValue: 5,
-    newLineInstall: 5,
-    humanResourceCost: 9,
-    salaryAndProductionCost: 18,
-    researchCost: 9,
-    managementSystemCost: 4,
-    managementSalary: 4,
-    receivableRecovered: 24,
-    salesRevenue: 116 + yearNo * 8,
-    directCost: 67 + yearNo * 3,
-    discountExpense: 1,
-    extraExpensePenalty: 1,
-    extraIncomeReward: 3,
-    lineResidual: 16,
-    depreciableAssetTotal: 21,
-    depreciation: 7,
-    financeIncomeExpense: 5,
-    extraIncomeExpense: 2,
-    factoryAssetChange: 12,
-    factorySale: 4,
-    receivableChange: 10,
-    lineResidualChange: 3,
-    depreciableAssetChange: 4,
-  }
 }
 </script>
 

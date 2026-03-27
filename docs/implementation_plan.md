@@ -261,10 +261,10 @@
 | M2-04 | 实现管理员汇总与最终排名接口 | P0 | ✅ | M1-12、M1-04 | `admin-summary` 年度汇总/最终排名接口 | 前端可按正式年份顺序展示年度汇总区，并在满足条件后展示最终排名区 | 无 |
 | M2-05 | 实现管理员组数据查看接口 | P1 | ✅ | M1-07、M1-10 | `admin-group-data` 查询接口 | 管理员可按组、按年查看经营页与财报页 | 无 |
 | M2-06 | 实现异常解锁接口与审计日志 | P0 | ✅ | M1-05、M1-09、M1-12、M2-03 | `unlock-year` 接口、`sg_admin_unlock_log`、`sg_admin_action_log` | 满足“仅下一年未开放前可解锁、解锁需写原因、财报失效、汇总撤回” | 无 |
-| M2-07 | 搭建玩家端经营页 Excel 风格静态壳子 | P0 | 🟡 | 现有 demo、`docs/requirements_spec.md` | 玩家经营页前端骨架、年份标签、阶段表格框架 | 页面结构与 Excel 视觉方向一致，未开放阶段可见但锁定 | 无 |
-| M2-08 | 接入经营页查询、草稿、阶段提交链路 | P0 | ⏳ | M1-07、M1-08、M1-09、M2-07 | 经营页联调页面 | 玩家可完成阶段填写、草稿保存、阶段提交和期末现金回显 | 无 |
-| M2-09 | 搭建玩家端财报页 Excel 风格静态壳子 | P0 | 🟡 | 现有 demo、`docs/requirements_spec.md` | 玩家财报页前端骨架 | 页面结构与 Excel 财报页一致，绿色手工项与税率下拉明确 | 无 |
-| M2-10 | 接入财报查询、草稿、提交链路 | P0 | ⏳ | M1-10、M1-11、M1-12、M2-09 | 财报页联调页面 | 玩家可完成财报填写、平衡校验与年度完成提交 | 无 |
+| M2-07 | 搭建玩家端经营页 Excel 风格静态壳子 | P0 | ✅ | 现有 demo、`docs/requirements_spec.md` | 玩家经营页前端骨架、年份标签、阶段表格框架 | 当前正式前端页面已作为经营页视觉基线收口；整页 Excel 风格、年份标签、经营/财报切换、右侧轻量工作栏与“未来阶段可见但锁定”口径已落地 | 无 |
+| M2-08 | 接入经营页查询、草稿、阶段提交链路 | P0 | 🟡 | M1-07、M1-08、M1-09、M2-07 | 经营页联调页面 | 真实接口已接通，已验证读取、草稿保存、错误提交拦截与状态不误推进；尚缺“成功提交推进到下一阶段”的人工验收闭环 | 无 |
+| M2-09 | 搭建玩家端财报页 Excel 风格静态壳子 | P0 | 🟡 | 现有 demo、`docs/requirements_spec.md` | 玩家财报页前端骨架 | 财报页已接入正式前端工程并具备 Excel 风格主表、绿色手工项与税率下拉；仍待继续按最终视觉口径验收 | 无 |
+| M2-10 | 接入财报查询、草稿、提交链路 | P0 | 🟡 | M1-10、M1-11、M1-12、M2-09 | 财报页联调页面 | 财报查询、草稿、提交与平衡校验链路已接入正式前端工程；尚未完成整页人工联调与年度完成提交流程验收 | 无 |
 | M2-11 | 搭建管理员页面基础框架 | P1 | 🟡 | M2-04、现有 demo | 管理员导航、汇总页、年度控制页、初始基线页 | 管理员 Demo 已能展示“汇总 / 年度控制 / 初始基线 / 组数据”信息架构，后续再接正式接口 | 无 |
 | M2-12 | 搭建组数据查看与异常解锁前端 | P1 | ⏳ | M2-05、M2-06、M2-11 | 组数据查看页、解锁弹窗、日志提示 | 管理员可在页面执行异常解锁并看到原因记录 | 无 |
 
@@ -336,6 +336,7 @@
 | 2026-03-27 | 根据“管理员可动态设定游戏进行多少年”的新收口要求，补充正式需求、接口与前端结构文档：明确前端采用动态年份视图而非逐年生成独立页面，并确认 `update-final-year` 还需补齐“扩年初始化”能力；同步将 `M2-01` 从已完成调整为部分完成。 |
 | 2026-03-27 | 完成 `M2-01` 扩年初始化闭环：`admin-control/update-final-year` 在上调最终年份时会自动补齐全部小组缺失的未来年份状态记录，响应中补充扩年范围信息，并通过 `go test ./...` 验证。 |
 | 2026-03-27 | 启动正式前端工程：新增 `frontend/` Vue 3 + TypeScript + Vite + Pinia 项目骨架，完成玩家经营页首版页面、年份标签、右侧工作栏和经营页查询 / 草稿保存 / 阶段提交接口接入，并通过 `npm run build` 验证。 |
+| 2026-03-27 | 完成经营页首轮功能验收：在线验证 `get-current`、`get-year-tabs`、`get-year-view` 读取正常，确认 `Q1_OPEN` 时仅开放 `YEAR_START + Q1`；真实验证 `save-draft` 可写且会刷新 `lastDraftSavedAt`，并验证未满足条件时 `submit-stage` 返回 `422` 且不会误推进阶段；同时再次通过 `go test ./...` 与 `npm run build`。 |
 
 ## 11) 当前开发进度回写
 
@@ -369,14 +370,26 @@
   - 落点：`internal/http/dto/admin_control_dto.go`、`internal/http/handler/admin_control_handler.go`、`internal/service/admin_control_command_service.go`、`internal/repository/admin_unlock_log_repository.go`、`internal/repository/group_repository.go`、`internal/repository/report_repository.go`、`internal/repository/summary_snapshot_repository.go`、`internal/app/router.go`、`internal/service/admin_control_command_service_test.go`
   - 偏差说明：本轮已补齐 `admin-control/unlock-year` 首版闭环，服务端会校验“下一年是否已开放、原因是否为空、当前年份是否仍处于可编辑态”；解锁时会回收财报提交状态、撤回汇总快照，并在命中破产年份时恢复该组 `NORMAL` 状态，同时写入 `sg_admin_unlock_log` 与 `sg_admin_action_log`。当前仍不支持“回滚到某个历史季度快照”的精细回退，只支持最小结果回收后由玩家重新提交。
   - 下一步：在 `M2-12` 中把解锁弹窗、组数据页和操作反馈联调到正式前端。
-- `M2-07`：🟡 部分完成
+- `M2-07`：✅ 已完成
   - 落点：`frontend/package.json`、`frontend/src/router/index.ts`、`frontend/src/stores/player-operating.ts`、`frontend/src/views/sandbox-game/player/operating/PlayerOperatingPage.vue`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/OperatingSidebar.vue`
-  - 偏差说明：当前已创建正式 Vue 3 + TypeScript + Vite + Pinia 前端工程，并落下首个玩家经营页，接入 `get-year-tabs`、`get-year-view`、`save-draft`、`submit-stage` 四条真实接口链路；页面已具备年份切换、5 分钟自动保存、右侧工作栏和阶段提交入口，但与最终 Excel 的逐格高保真仍需继续细化。
-  - 下一步：继续细化主表逐格布局，并承接 `M2-08` 的联调收口。
-- `M2-09 / M2-11`：🟡 部分完成
-  - 落点：`demo 网页/player-demo.html`、`demo 网页/admin-demo.html`、`docs/frontend_page_structure.md`
-  - 偏差说明：财报页和管理员页当前仍以 Demo 与结构清单为主，尚未像玩家经营页一样正式接入到 `frontend/` 工程。
-  - 下一步：优先把玩家财报页接入正式前端工程，再推进管理员端页面骨架。
+  - 偏差说明：当前正式前端中的经营页已经作为视觉基线收口，页面整体样式与结构已被确认为后续迭代基准；接下来不再以“重做页面外观”为重点，而是转向功能联调和成功提交验收。
+  - 下一步：在 `M2-08` 中补齐“成功提交推进阶段”的人工验收闭环。
+- `M2-08`：🟡 部分完成
+  - 落点：`frontend/src/api/sandbox-game/player-operating.ts`、`frontend/src/stores/player-operating.ts`、`frontend/src/views/sandbox-game/player/operating/PlayerOperatingPage.vue`、`internal/http/handler/player_operating_handler.go`、`internal/service/player_operating_*`
+  - 偏差说明：当前已完成真实读取、草稿保存、阶段提交接口接入，并在线验证“`Q1_OPEN` 时仅开放 `YEAR_START + Q1`”“保存草稿会刷新 `lastDraftSavedAt`”“未满足条件的提交会返回 `422` 且不误推进状态”；仍未在在线环境完成一次“满足条件后成功从 `Q1 -> Q2` 推进”的人工验收，因此暂不记为完全完成。
+  - 下一步：准备一套隔离数据或测试脚本，补做成功提交流程验收。
+- `M2-09`：🟡 部分完成
+  - 落点：`frontend/src/api/sandbox-game/player-report.ts`、`frontend/src/stores/player-report.ts`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSidebar.vue`
+  - 偏差说明：财报页已不再只是 Demo，而是已接入正式前端工程，具备年份切换、经营/财报切换、Excel 风格主表、绿色手工项和税率下拉；但视觉与交互尚未像经营页那样完成一轮明确的人工验收。
+  - 下一步：继续按正式业务口径验财报页页面与交互。
+- `M2-10`：🟡 部分完成
+  - 落点：`frontend/src/api/sandbox-game/player-report.ts`、`frontend/src/stores/player-report.ts`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`internal/http/handler/player_report_handler.go`、`internal/service/player_report_*`
+  - 偏差说明：财报查询、草稿、提交和平衡校验链路已接到正式前端工程，并已通过 `npm run build`；但尚未做完整人工联调与年度完成提交流程验收，因此暂不记为完全完成。
+  - 下一步：沿“查询 -> 草稿 -> 平衡校验 -> 提交 -> 年度完成”顺序做正式验收。
+- `M2-11`：🟡 部分完成
+  - 落点：`demo 网页/admin-demo.html`、`docs/frontend_page_structure.md`
+  - 偏差说明：管理员端已完成 Demo 与页面结构清单，但尚未进入正式 `frontend/` 工程，因此当前只记为页面架构层的部分完成。
+  - 下一步：先落管理端路由与汇总页骨架，再接年度控制页与初始基线页。
 - `M3-01`：🟡 部分完成
   - 落点：`internal/state/state_machine_test.go`、`internal/rules/operating/*_test.go`、`internal/rules/report/*_test.go`、`internal/rules/carryforward/*_test.go`、`internal/rules/summary/*_test.go`
   - 偏差说明：规则层与状态机测试文件已经存在，当前已成功执行 `go test ./...` 全量验证，说明项目主链在本机可编译可测试；但状态机边界、异常解锁、管理员接口场景仍需继续补覆盖，因此暂不记为完全完成。

@@ -1,16 +1,34 @@
 <template>
   <div class="page-mode-switch">
-    <button type="button" class="mode-btn active">经营页</button>
-    <button type="button" class="mode-btn" :disabled="!reportEnabled" @click="$emit('report')">财报页</button>
+    <button
+      type="button"
+      class="mode-btn"
+      :class="{ active: activeMode === 'operating' }"
+      :disabled="activeMode === 'operating'"
+      @click="$emit('operating')"
+    >
+      经营页
+    </button>
+    <button
+      type="button"
+      class="mode-btn"
+      :class="{ active: activeMode === 'report' }"
+      :disabled="activeMode === 'report' || !reportEnabled"
+      @click="$emit('report')"
+    >
+      财报页
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 defineProps<{
+  activeMode: 'operating' | 'report'
   reportEnabled: boolean
 }>()
 
 defineEmits<{
+  (event: 'operating'): void
   (event: 'report'): void
 }>()
 </script>

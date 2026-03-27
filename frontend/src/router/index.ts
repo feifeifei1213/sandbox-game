@@ -15,7 +15,7 @@ const router = createRouter({
     {
       path: '/sandbox-game/player/report',
       name: 'sandbox-player-report',
-      component: () => import('@/views/sandbox-game/player/report/PlayerReportPlaceholder.vue'),
+      component: () => import('@/views/sandbox-game/player/report/PlayerReportPage.vue'),
     },
   ],
 })
