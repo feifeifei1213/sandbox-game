@@ -1,0 +1,376 @@
+﻿@host = http://127.0.0.1:8080
+@baseUrl = {{host}}/api/v1/sandbox-game
+
+@groupRole = GROUP
+@groupUserId = 101
+@groupUsername = group01
+@groupId = 1
+
+@adminRole = ADMIN
+@adminUserId = 1
+@adminUsername = admin
+
+### 健康检查
+GET {{host}}/healthz
+
+### 玩家：获取当前配置
+GET {{baseUrl}}/game-config/get-current
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+### 玩家：获取年份标签
+GET {{baseUrl}}/game-config/get-year-tabs
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+### 玩家：读取 0 年经营页
+GET {{baseUrl}}/player-operating/get-year-view?yearNo=0
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+### 管理员：读取年度控制配置
+GET {{baseUrl}}/admin-control/get-config
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：读取统一初始基线
+GET {{baseUrl}}/admin-control/get-initial-baseline
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：读取小组列表
+GET {{baseUrl}}/admin-group-data/list-groups
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：查看第 1 组 0 年经营页
+GET {{baseUrl}}/admin-group-data/get-operating-view?groupId=1&yearNo=0
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：查看第 1 组 0 年财报页
+GET {{baseUrl}}/admin-group-data/get-report-view?groupId=1&yearNo=0
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：查看 1 年年度汇总
+### 若 1 年尚未形成正式汇总，预期可能返回 422
+GET {{baseUrl}}/admin-summary/get-year-summary?yearNo=1
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：查看最终排名
+### 若最终年份尚未整体完成，预期可能返回 422
+GET {{baseUrl}}/admin-summary/get-final-ranking
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 下面开始是“写链路示例段”
+### 只建议在演练库执行，不建议直接在正式比赛库执行
+
+### 管理员：首次建库时提交统一初始基线
+### 仅在初始基线尚未提交时执行
+POST {{baseUrl}}/admin-control/submit-initial-baseline
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "baselinePayload": {
+    "baselineSalesRevenue": 32,
+    "baselineDirectCost": 15,
+    "baselineComprehensiveCost": 13,
+    "baselineDepreciation": 1,
+    "baselineFinanceIncomeExpense": 2,
+    "baselineExtraIncomeExpense": 2,
+    "baselineIncomeTax": 1,
+    "baselineFactoryAsset": 40,
+    "baselineLineResidual": 3,
+    "baselineDepreciableAsset": 0,
+    "baselineCash": 36,
+    "baselineReceivable": 0,
+    "baselineWorkInProgress": 6,
+    "baselineFinishedGoods": 4,
+    "baselineRawMaterials": 1,
+    "baselineShortTermLoan": 20,
+    "baselineLongTermLoan": 0,
+    "baselineShareCapital": 50,
+    "baselineRetainedEarnings": 17
+  }
+}
+
+### 玩家：保存 0 年 Q1 草稿
+### 前提：当前组 0 年处于 Q1_OPEN
+PUT {{baseUrl}}/player-operating/save-draft
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+{
+  "yearNo": 0,
+  "stageStatus": "Q1_OPEN",
+  "operatingPayload": {
+    "beginning": {
+      "taxAndPlanning": {
+        "taxRate": 0,
+        "marketBidCost": 0
+      },
+      "marketBid": [
+        {
+          "market": "demo",
+          "marketInvestment": 0,
+          "orderAmount": 0
+        }
+      ]
+    },
+    "quarter": {
+      "shortTermLoan": {
+        "q1": {
+          "shortTermRepayment": 0,
+          "shortTermInterest": 0,
+          "newShortTermLoan": 0
+        }
+      },
+      "materialPayment": {
+        "q1": {
+          "materialPayment": 0
+        }
+      },
+      "productionLineAdjustment": {
+        "q1": {
+          "changeProductCost": 0,
+          "lineDismantleCost": 0,
+          "lineSaleValue": 0,
+          "newLineInstall": 0,
+          "constructionToFixed": 0,
+          "depreciableAssetIncrease": 0
+        }
+      },
+      "humanResource": {
+        "q1": {
+          "humanResourceCost": 0
+        }
+      },
+      "salaryAndProduction": {
+        "q1": {
+          "salaryAndProductionCost": 0
+        }
+      },
+      "researchAndManagement": {
+        "q1": {
+          "researchCost": 0,
+          "managementSystemCost": 0
+        }
+      },
+      "receivableUpdate": {
+        "q1": {
+          "receivableRecovered": 0
+        }
+      },
+      "deliverySettlement": {
+        "q1": {
+          "salesRevenue": 0,
+          "directCost": 0,
+          "managementSalary": 0,
+          "deliveryQuantity": 0,
+          "receivableBalance": 0
+        }
+      }
+    },
+    "yearEnd": {
+      "longTermLoan": {},
+      "assetAdjustment": {}
+    },
+    "extra": {
+      "incomeAndPenalty": {
+        "q1": {
+          "discountExpense": 0,
+          "extraExpensePenalty": 0,
+          "extraIncomeReward": 0
+        }
+      }
+    },
+    "derived": {
+      "values": {}
+    }
+  }
+}
+
+### 玩家：提交 0 年 Q1
+### 前提：当前组 0 年处于 Q1_OPEN
+POST {{baseUrl}}/player-operating/submit-stage
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+{
+  "yearNo": 0,
+  "stageCode": "Q1",
+  "operatingPayload": {
+    "beginning": {
+      "taxAndPlanning": {
+        "taxRate": 0,
+        "marketBidCost": 0
+      },
+      "marketBid": [
+        {
+          "market": "demo",
+          "marketInvestment": 0,
+          "orderAmount": 0
+        }
+      ]
+    },
+    "quarter": {
+      "shortTermLoan": {
+        "q1": {
+          "shortTermRepayment": 0,
+          "shortTermInterest": 0,
+          "newShortTermLoan": 0
+        }
+      },
+      "materialPayment": {
+        "q1": {
+          "materialPayment": 0
+        }
+      },
+      "productionLineAdjustment": {
+        "q1": {
+          "changeProductCost": 0,
+          "lineDismantleCost": 0,
+          "lineSaleValue": 0,
+          "newLineInstall": 0,
+          "constructionToFixed": 0,
+          "depreciableAssetIncrease": 0
+        }
+      },
+      "humanResource": {
+        "q1": {
+          "humanResourceCost": 0
+        }
+      },
+      "salaryAndProduction": {
+        "q1": {
+          "salaryAndProductionCost": 0
+        }
+      },
+      "researchAndManagement": {
+        "q1": {
+          "researchCost": 0,
+          "managementSystemCost": 0
+        }
+      },
+      "receivableUpdate": {
+        "q1": {
+          "receivableRecovered": 0
+        }
+      },
+      "deliverySettlement": {
+        "q1": {
+          "salesRevenue": 0,
+          "directCost": 0,
+          "managementSalary": 0,
+          "deliveryQuantity": 0,
+          "receivableBalance": 0
+        }
+      }
+    },
+    "yearEnd": {
+      "longTermLoan": {},
+      "assetAdjustment": {}
+    },
+    "extra": {
+      "incomeAndPenalty": {
+        "q1": {
+          "discountExpense": 0,
+          "extraExpensePenalty": 0,
+          "extraIncomeReward": 0
+        }
+      }
+    },
+    "derived": {
+      "values": {}
+    }
+  }
+}
+
+### 玩家：保存 0 年财报草稿
+### 前提：当前组 0 年已进入 REPORT_OPEN
+PUT {{baseUrl}}/player-report/save-draft
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+{
+  "yearNo": 0,
+  "reportManualPayload": {
+    "workInProgress": 6,
+    "finishedGoods": 4,
+    "rawMaterials": 1,
+    "incomeTaxRate": 0
+  }
+}
+
+### 玩家：提交 0 年财报
+### 前提：当前组 0 年已进入 REPORT_OPEN，且平衡校验通过
+POST {{baseUrl}}/player-report/submit
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+{
+  "yearNo": 0,
+  "reportManualPayload": {
+    "workInProgress": 6,
+    "finishedGoods": 4,
+    "rawMaterials": 1,
+    "incomeTaxRate": 0
+  }
+}
+
+### 管理员：开放 1 年
+### 前提：全部未破产组已完成当前开放年份财报
+POST {{baseUrl}}/admin-control/open-next-year
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "targetYearNo": 1
+}
+
+### 管理员：异常解锁
+### 前提：目标年份已完成且下一年尚未开放
+POST {{baseUrl}}/admin-control/unlock-year
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "groupId": 1,
+  "yearNo": 0,
+  "reason": "联调演练：回收 0 年结果后重新提交流程"
+}

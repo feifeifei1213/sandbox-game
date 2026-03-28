@@ -171,6 +171,12 @@
 - `tests/http/sandbox-game/AdminGroupData.http`
 - `tests/http/sandbox-game/AuditLog.http`
 
+首版当前已落的联调用例入口：
+
+- `tests/http/sandbox-game/SandboxGame-Smoke.http`
+- 该文件优先承担“本机联调冒烟 + 演示前自检”职责
+- 后续若接口继续增加，再按领域拆分成独立 `.http` 文件
+
 ### 5.1 示例
 
 ```http
@@ -234,6 +240,8 @@ DESC sg_group_summary_snapshot;
 9. 被解锁组重新提交经营或财报
 10. 汇总重新生效
 
+具体页面路径、旁路身份、执行顺序与联调注意事项，统一以 [`docs/integration_acceptance_runbook.md`](./integration_acceptance_runbook.md) 为准。
+
 ---
 
 ## 8. 质量门禁建议
@@ -246,3 +254,4 @@ DESC sg_group_summary_snapshot;
 4. 受影响接口 `.http` 用例冒烟通过
 5. 高风险规则具备自动化测试或人工回归记录
 6. 文档同步更新
+
