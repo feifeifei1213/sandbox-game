@@ -1,6 +1,32 @@
-import type { CommonResult } from '@/types/http'
+﻿import type { CommonResult } from '@/types/http'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+
+export function buildBypassHeaders(options: {
+  roleType?: string
+  userId?: string
+  username?: string
+  groupId?: string
+} = {}): HeadersInit {
+  if (!import.meta.env.DEV) {
+    return {}
+  }
+
+  const headers: Record<string, string> = {}
+  if (options.roleType) {
+    headers['X-Role-Type'] = options.roleType
+  }
+  if (options.userId) {
+    headers['X-User-Id'] = options.userId
+  }
+  if (options.username) {
+    headers['X-Username'] = options.username
+  }
+  if (options.groupId) {
+    headers['X-Group-Id'] = options.groupId
+  }
+  return headers
+}
 
 function buildDefaultHeaders(): HeadersInit {
   const headers: Record<string, string> = {
@@ -8,10 +34,15 @@ function buildDefaultHeaders(): HeadersInit {
   }
 
   if (import.meta.env.DEV) {
-    headers['X-Role-Type'] = import.meta.env.VITE_BYPASS_ROLE_TYPE ?? 'GROUP'
-    headers['X-User-Id'] = import.meta.env.VITE_BYPASS_USER_ID ?? '101'
-    headers['X-Username'] = import.meta.env.VITE_BYPASS_USERNAME ?? 'group01'
-    headers['X-Group-Id'] = import.meta.env.VITE_BYPASS_GROUP_ID ?? '1'
+    Object.assign(
+      headers,
+      buildBypassHeaders({
+        roleType: import.meta.env.VITE_BYPASS_ROLE_TYPE ?? 'GROUP',
+        userId: import.meta.env.VITE_BYPASS_USER_ID ?? '101',
+        username: import.meta.env.VITE_BYPASS_USERNAME ?? 'group01',
+        groupId: import.meta.env.VITE_BYPASS_GROUP_ID ?? '1',
+      }),
+    )
   }
 
   return headers

@@ -1,0 +1,59 @@
+﻿<template>
+  <nav class="admin-nav">
+    <RouterLink
+      v-for="item in items"
+      :key="item.to"
+      :to="item.to"
+      class="nav-item"
+      :class="{ active: route.path === item.to }"
+    >
+      <strong>{{ item.label }}</strong>
+      <span>{{ item.description }}</span>
+    </RouterLink>
+  </nav>
+</template>
+
+<script setup lang="ts">
+import { RouterLink, useRoute } from 'vue-router'
+
+const route = useRoute()
+
+const items = [
+  { to: '/sandbox-game/admin/summary', label: '汇总', description: '年度汇总区 + 最终排名区' },
+  { to: '/sandbox-game/admin/control', label: '年度控制', description: '最终年份、开放下一年、阻断摘要' },
+  { to: '/sandbox-game/admin/baseline', label: '初始基线', description: '共享模板录入与提交锁定' },
+  { to: '/sandbox-game/admin/group-data', label: '组数据', description: '组与年份查看入口，解锁流在下一步接入' },
+]
+</script>
+
+<style scoped>
+.admin-nav {
+  display: grid;
+  gap: 10px;
+}
+
+.nav-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.nav-item strong {
+  font-size: 15px;
+}
+
+.nav-item span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.nav-item.active {
+  border-color: #b8cbf5;
+  background: #eef4ff;
+  box-shadow: inset 0 0 0 1px rgba(31, 95, 211, 0.06);
+}
+</style>
