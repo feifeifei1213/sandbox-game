@@ -5,7 +5,7 @@
         <div>
           <p class="eyebrow">Sandbox Game / Player</p>
           <h1>玩家财报页</h1>
-          <p class="subtext">正式前端工程版本，当前已接入真实财报查询 / 保存 / 提交接口。</p>
+          <p class="subtext">本年经营结束后开放，黄色区域自动计算，绿色区域由玩家填写或确认。</p>
         </div>
         <div class="header-pills">
           <span class="pill">组别：{{ activeView?.groupId ?? '--' }}</span>
@@ -44,6 +44,10 @@
             <div class="status-item">
               <span>经营状态</span>
               <strong>{{ activeView?.businessStatus || '--' }}</strong>
+            </div>
+            <div class="status-item" :class="activeBalancePassed ? 'status-pass' : 'status-fail'">
+              <span>平衡校验</span>
+              <strong>{{ activeBalancePassed ? '通过' : '未通过' }}</strong>
             </div>
           </section>
 
@@ -97,7 +101,6 @@ import {
   buildReportComputedPreview,
   cloneReportManualPayload,
   createEmptyReportComputedPayload,
-  reportBalanceGap,
   type CurrentGameConfigResult,
   type PlayerReportView,
   type ReportComputedPayload,
@@ -212,7 +215,9 @@ const previewBaseComputedPayload = computed<ReportComputedPayload>(() => {
 const previewComputedPayloadLocal = computed(() =>
   buildReportComputedPreview(previewBaseComputedPayload.value, previewDraftManualPayload.value),
 )
-const previewBalanceGap = computed(() => reportBalanceGap(previewComputedPayloadLocal.value))
+const previewBalanceGap = computed(
+  () => previewComputedPayloadLocal.value.reportTotalAssets - previewComputedPayloadLocal.value.reportTotalLiabilityEquity,
+)
 const previewBalancePassed = computed(() => Math.abs(previewBalanceGap.value) <= balanceTolerance)
 const previewMissingFields = computed(() => {
   const missing: string[] = []
@@ -235,7 +240,7 @@ const previewView = computed<PlayerReportView>(() => ({
   groupId: 1,
   yearNo: previewYear.value,
   yearStatus: 'REPORTING',
-  reportStatus: 'REPORT_PENDING',
+  reportStatus: 'REPORT_OPEN',
   businessStatus: 'NORMAL',
   canView: true,
   canEdit: true,
@@ -511,7 +516,7 @@ function goOperating() {
 
 .status-banner {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -532,6 +537,16 @@ function goOperating() {
 
 .status-item strong {
   font-size: 18px;
+}
+
+.status-pass {
+  background: #eefaf2;
+  border-color: #b7dec6;
+}
+
+.status-fail {
+  background: #fff6f6;
+  border-color: #efc6c6;
 }
 
 .loading-card {

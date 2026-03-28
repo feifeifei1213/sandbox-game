@@ -338,6 +338,7 @@
 | 2026-03-27 | 启动正式前端工程：新增 `frontend/` Vue 3 + TypeScript + Vite + Pinia 项目骨架，完成玩家经营页首版页面、年份标签、右侧工作栏和经营页查询 / 草稿保存 / 阶段提交接口接入，并通过 `npm run build` 验证。 |
 | 2026-03-27 | 完成经营页首轮功能验收：在线验证 `get-current`、`get-year-tabs`、`get-year-view` 读取正常，确认 `Q1_OPEN` 时仅开放 `YEAR_START + Q1`；真实验证 `save-draft` 可写且会刷新 `lastDraftSavedAt`，并验证未满足条件时 `submit-stage` 返回 `422` 且不会误推进阶段；同时再次通过 `go test ./...` 与 `npm run build`。 |
 | 2026-03-28 | 完成 `M2-08` 成功提交闭环：新增 `internal/service/player_operating_command_service_test.go`，用事务级集成测试在不污染真实小组数据前提下验证 `Q1 -> Q2` 推进、阶段提交流水写入、经营页回读后仅开放 `Q2` 编辑，并再次通过 `go test ./...`。 |
+| 2026-03-28 | 推进 `M2-09` 财报页视觉收口：重做 `PlayerReportPage.vue`、`ReportSheet.vue`、`ReportSidebar.vue` 的正式页面壳子，使其更贴近 Excel 主表布局，并再次通过 `npm run build`。 |
 
 ## 11) 当前开发进度回写
 
@@ -381,8 +382,8 @@
   - 下一步：转入 `M2-09` / `M2-10`，继续财报页正式联调与提交验收。
 - `M2-09`：🟡 部分完成
   - 落点：`frontend/src/api/sandbox-game/player-report.ts`、`frontend/src/stores/player-report.ts`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSidebar.vue`
-  - 偏差说明：财报页已不再只是 Demo，而是已接入正式前端工程，具备年份切换、经营/财报切换、Excel 风格主表、绿色手工项和税率下拉；但视觉与交互尚未像经营页那样完成一轮明确的人工验收。
-  - 下一步：继续按正式业务口径验财报页页面与交互。
+  - 偏差说明：财报页已继续向高保真 Excel 收口，页头文案、状态区、主表列头 / 标题行 / 平衡校验区、右侧工作栏均已按正式页面方向调整，并再次通过 `npm run build`；当前仍保留“部分完成”，主要是还缺一轮用户视角的页面人工验收。
+  - 下一步：先按最终视觉口径做一轮页面确认；若无异议，直接转入 `M2-10` 的整页联调与年度提交流程验收。
 - `M2-10`：🟡 部分完成
   - 落点：`frontend/src/api/sandbox-game/player-report.ts`、`frontend/src/stores/player-report.ts`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`internal/http/handler/player_report_handler.go`、`internal/service/player_report_*`
   - 偏差说明：财报查询、草稿、提交和平衡校验链路已接到正式前端工程，并已通过 `npm run build`；但尚未做完整人工联调与年度完成提交流程验收，因此暂不记为完全完成。
