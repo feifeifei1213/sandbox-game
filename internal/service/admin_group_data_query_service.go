@@ -35,6 +35,17 @@ type AdminGroupDataQueryService struct {
 	carryForward        *carryforwardrules.Builder
 }
 
+type AdminGroupOption struct {
+	GroupID        int64  `json:"groupId"`
+	GroupNo        int    `json:"groupNo"`
+	GroupName      string `json:"groupName"`
+	BusinessStatus string `json:"businessStatus"`
+}
+
+type ListAdminGroupsResult struct {
+	List []AdminGroupOption `json:"list"`
+}
+
 func NewAdminGroupDataQueryService(
 	gameConfigRepo *repository.GameConfigRepository,
 	groupRepo *repository.GroupRepository,
@@ -58,6 +69,25 @@ func NewAdminGroupDataQueryService(
 		reportCalculator:    reportrules.NewCalculator(),
 		carryForward:        carryforwardrules.NewBuilder(),
 	}
+}
+
+func (s *AdminGroupDataQueryService) ListGroups(ctx context.Context) (*ListAdminGroupsResult, error) {
+	groups, err := s.groupRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load groups: %w", err)
+	}
+
+	result := make([]AdminGroupOption, 0, len(groups))
+	for _, item := range groups {
+		result = append(result, AdminGroupOption{
+			GroupID:        item.ID,
+			GroupNo:        item.GroupNo,
+			GroupName:      item.GroupName,
+			BusinessStatus: item.BusinessStatus,
+		})
+	}
+
+	return &ListAdminGroupsResult{List: result}, nil
 }
 
 func (s *AdminGroupDataQueryService) GetOperatingView(ctx context.Context, groupID int64, yearNo int) (*assembler.PlayerOperatingView, error) {

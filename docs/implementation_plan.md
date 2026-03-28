@@ -266,7 +266,7 @@
 | M2-09 | 搭建玩家端财报页 Excel 风格静态壳子 | P0 | 🟡 | 现有 demo、`docs/requirements_spec.md` | 玩家财报页前端骨架 | 财报页已接入正式前端工程并具备 Excel 风格主表、绿色手工项与税率下拉；仍待继续按最终视觉口径验收 | 无 |
 | M2-10 | 接入财报查询、草稿、提交链路 | P0 | ✅ | M1-10、M1-11、M1-12、M2-09 | 财报页联调页面 | 财报查询、草稿、提交与平衡校验链路已接入正式前端工程，并通过事务级集成测试验证草稿持久化、正式年份提交、汇总快照写入与提交后只读 | 无 |
 | M2-11 | 搭建管理员页面基础框架 | P1 | ✅ | M2-04、现有 demo | 管理员导航、汇总页、年度控制页、初始基线页 | 管理员正式前端页面已落入 `frontend/` 工程，完成左侧菜单、汇总页、年度控制页、初始基线页与真实接口接入，并通过 `npm run build` | 无 |
-| M2-12 | 搭建组数据查看与异常解锁前端 | P1 | ⏳ | M2-05、M2-06、M2-11 | 组数据查看页、解锁弹窗、日志提示 | 管理员可在页面执行异常解锁并看到原因记录 | 无 |
+| M2-12 | 搭建组数据查看与异常解锁前端 | P1 | ✅ | M2-05、M2-06、M2-11 | 组数据查看页、解锁弹窗、日志提示 | 管理员正式前端已支持按组按年查看经营/财报只读视图、切换页面类型、发起异常解锁并展示最近一次原因记录，同时通过 `go test ./...` 与 `npm run build` | 无 |
 
 ### 9.5 M3：测试、收口与最终命名适配
 
@@ -341,6 +341,7 @@
 | 2026-03-28 | 推进 `M2-09` 财报页视觉收口：重做 `PlayerReportPage.vue`、`ReportSheet.vue`、`ReportSidebar.vue` 的正式页面壳子，使其更贴近 Excel 主表布局，并再次通过 `npm run build`。 |
 | 2026-03-28 | 完成 `M2-10` 财报主链闭环：新增 `internal/service/player_report_command_service_test.go`，用事务级集成测试验证财报草稿保存、正式年份提交、汇总快照写入、提交后只读，并再次通过 `go test ./...`。 |
 | 2026-03-28 | 完成 `M2-11` 管理员正式前端框架：新增管理员端路由、左侧菜单、汇总页、年度控制页、初始基线页与组数据路由壳子，接入管理员汇总 / 年度控制 / 初始基线真实接口，并通过 `frontend/npm run build`。 |
+| 2026-03-28 | 完成 `M2-12` 组数据查看与异常解锁前端：新增 `admin-group-data/list-groups` 后端接口，管理员正式前端已支持按组按年查看经营/财报只读视图、切换页面类型、发起异常解锁并展示最近一次原因记录，同时再次通过 `go test ./...` 与 `frontend/npm run build`。 |
 
 ## 11) 当前开发进度回写
 
@@ -392,8 +393,12 @@
   - 下一步：转入 `M2-11` / `M2-12`，开始管理员端正式前端页面与解锁操作流接入。
 - `M2-11`：✅ 已完成
   - 落点：`frontend/src/router/index.ts`、`frontend/src/views/sandbox-game/admin/AdminLayout.vue`、`frontend/src/views/sandbox-game/admin/summary/AdminSummaryPage.vue`、`frontend/src/views/sandbox-game/admin/control/AdminControlPage.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/components/sandbox-game/admin/AdminNav.vue`、`frontend/src/api/sandbox-game/admin-*.ts`、`frontend/src/stores/admin-*.ts`、`frontend/src/types/sandbox-game-admin.ts`
-  - 偏差说明：本轮已将管理员 Demo 收口为正式 `frontend/` 工程页面，完成左侧菜单、汇总页、年度控制页、初始基线页与组数据路由壳子，并接入管理员汇总 / 年度控制 / 初始基线真实接口，同时通过 `npm run build`；组数据真实查询与异常解锁弹窗仍留在 `M2-12` 继续完成。
-  - 下一步：进入 `M2-12`，接组数据只读预览、财报/经营切换与异常解锁弹窗。
+  - 偏差说明：本轮已将管理员 Demo 收口为正式 `frontend/` 工程页面，完成左侧菜单、汇总页、年度控制页、初始基线页与组数据路由壳子，并接入管理员汇总 / 年度控制 / 初始基线真实接口，同时通过 `npm run build`。
+  - 下一步：转入 `M2-12` / `M3-03`，继续组数据操作流与管理员页面人工验收。
+- `M2-12`：✅ 已完成
+  - 落点：`frontend/src/api/sandbox-game/admin-group-data.ts`、`frontend/src/api/sandbox-game/admin-control.ts`、`frontend/src/stores/admin-group-data.ts`、`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`internal/http/handler/admin_group_data_handler.go`、`internal/service/admin_group_data_query_service.go`、`internal/app/router.go`
+  - 偏差说明：本轮补齐了组数据页真实查询与异常解锁主链，新增管理员小组列表接口，前端已支持按组按年查看经营/财报只读视图、切换页面类型、发起异常解锁并展示最近一次原因记录，同时通过 `go test ./...` 与 `npm run build`；当前仍未单独提供“历史解锁日志列表查询”，若后续现场需要，可在管理端继续追加日志查询区。
+  - 下一步：转入 `M3-03`，补管理员端联调脚本与人工验收用例。
 - `M3-01`：🟡 部分完成
   - 落点：`internal/state/state_machine_test.go`、`internal/rules/operating/*_test.go`、`internal/rules/report/*_test.go`、`internal/rules/carryforward/*_test.go`、`internal/rules/summary/*_test.go`
   - 偏差说明：规则层与状态机测试文件已经存在，当前已成功执行 `go test ./...` 全量验证，说明项目主链在本机可编译可测试；但状态机边界、异常解锁、管理员接口场景仍需继续补覆盖，因此暂不记为完全完成。
@@ -414,6 +419,7 @@
   - 落点：本文档 `9.4` 与 `11.1`
   - 偏差说明：经复核，先前将 `M2-01/M2-02` 的状态记录得不够准确；当前已按仓库实际代码修正为 `M2-01` 已完成、`M2-02` 已完成，因此后续状态回写要继续以当前仓库为准。
   - 下一步：后续新增管理员控制接口时，按实际代码落点继续回写，不再用“曾讨论过/曾做过别处代码”代替当前仓库状态。
+
 
 
 

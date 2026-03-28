@@ -144,6 +144,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminSummary.GET("/get-final-ranking", adminSummaryHandler.GetFinalRanking)
 
 		adminGroupData := apiV1.Group("/admin-group-data")
+		adminGroupData.GET("/list-groups", adminGroupDataHandler.ListGroups)
 		adminGroupData.GET("/get-operating-view", adminGroupDataHandler.GetOperatingView)
 		adminGroupData.GET("/get-report-view", adminGroupDataHandler.GetReportView)
 

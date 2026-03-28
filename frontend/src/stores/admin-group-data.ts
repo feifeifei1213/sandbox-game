@@ -1,0 +1,192 @@
+﻿import { computed, ref } from 'vue'
+import { defineStore } from 'pinia'
+
+import { unlockAdminYear } from '@/api/sandbox-game/admin-control'
+import {
+  getAdminGroupOperatingView,
+  getAdminGroupReportView,
+  listAdminGroups,
+} from '@/api/sandbox-game/admin-group-data'
+import type { PageMessage } from '@/stores/admin-shell'
+import type { PlayerOperatingView, PlayerReportView } from '@/types/sandbox-game'
+import type {
+  AdminGroupDataPageType,
+  AdminGroupOption,
+  UnlockYearResult,
+} from '@/types/sandbox-game-admin'
+
+export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', () => {
+  const groups = ref<AdminGroupOption[]>([])
+  const selectedGroupId = ref<number | null>(null)
+  const selectedYear = ref(0)
+  const selectedPageType = ref<AdminGroupDataPageType>('operating')
+  const operatingView = ref<PlayerOperatingView | null>(null)
+  const reportView = ref<PlayerReportView | null>(null)
+  const loading = ref(false)
+  const unlocking = ref(false)
+  const pageMessage = ref<PageMessage | null>(null)
+  const unlockDialogVisible = ref(false)
+  const unlockReason = ref('')
+  const latestUnlockResult = ref<UnlockYearResult | null>(null)
+  const latestUnlockReason = ref('')
+
+  const selectedGroup = computed(() => groups.value.find((item) => item.groupId === selectedGroupId.value) ?? null)
+  const activeView = computed(() => (selectedPageType.value === 'operating' ? operatingView.value : reportView.value))
+
+  async function bootstrap(finalYear: number, currentOpenYear: number) {
+    loading.value = true
+    pageMessage.value = null
+    try {
+      const result = await listAdminGroups()
+      groups.value = result.list
+      normalizeSelection(finalYear, currentOpenYear)
+      if (selectedGroupId.value !== null) {
+        await loadCurrentView({ silent: true })
+      } else {
+        operatingView.value = null
+        reportView.value = null
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '读取组数据入口失败')
+      throw error
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function normalizeSelection(finalYear: number, currentOpenYear: number) {
+    const maxYear = Math.max(finalYear, 0)
+    const hasCurrentGroup = groups.value.some((item) => item.groupId === selectedGroupId.value)
+    if (!hasCurrentGroup) {
+      selectedGroupId.value = groups.value[0]?.groupId ?? null
+    }
+    if (selectedYear.value > maxYear) {
+      selectedYear.value = Math.min(Math.max(currentOpenYear, 0), maxYear)
+    }
+    if (selectedYear.value < 0) {
+      selectedYear.value = 0
+    }
+  }
+
+  async function loadCurrentView(options?: { silent?: boolean }) {
+    if (selectedGroupId.value === null) {
+      operatingView.value = null
+      reportView.value = null
+      return
+    }
+
+    loading.value = true
+    if (!options?.silent) {
+      pageMessage.value = null
+    }
+    try {
+      if (selectedPageType.value === 'operating') {
+        operatingView.value = await getAdminGroupOperatingView(selectedGroupId.value, selectedYear.value)
+        reportView.value = null
+      } else {
+        reportView.value = await getAdminGroupReportView(selectedGroupId.value, selectedYear.value)
+        operatingView.value = null
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '读取组数据详情失败')
+      throw error
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function setSelectedGroupId(groupId: number) {
+    selectedGroupId.value = groupId
+  }
+
+  function setSelectedYear(yearNo: number) {
+    selectedYear.value = yearNo
+  }
+
+  function setSelectedPageType(pageType: AdminGroupDataPageType) {
+    selectedPageType.value = pageType
+  }
+
+  function openUnlockDialog() {
+    unlockReason.value = ''
+    unlockDialogVisible.value = true
+  }
+
+  function closeUnlockDialog() {
+    unlockDialogVisible.value = false
+  }
+
+  function setUnlockReason(reason: string) {
+    unlockReason.value = reason
+  }
+
+  async function submitUnlock() {
+    if (selectedGroupId.value === null) {
+      throw new Error('请先选择目标小组')
+    }
+    if (!unlockReason.value.trim()) {
+      throw new Error('解锁原因不能为空')
+    }
+
+    unlocking.value = true
+    try {
+      const result = await unlockAdminYear({
+        groupId: selectedGroupId.value,
+        yearNo: selectedYear.value,
+        reason: unlockReason.value.trim(),
+      })
+      latestUnlockResult.value = result
+      latestUnlockReason.value = unlockReason.value.trim()
+      unlockDialogVisible.value = false
+      pageMessage.value = {
+        type: 'success',
+        text: `异常解锁已提交，目标为第 ${selectedGroup.value?.groupNo ?? '--'} 组 ${selectedYear.value} 年。`,
+      }
+      await loadCurrentView({ silent: true })
+      return result
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '提交异常解锁失败')
+      throw error
+    } finally {
+      unlocking.value = false
+    }
+  }
+
+  return {
+    groups,
+    selectedGroupId,
+    selectedYear,
+    selectedPageType,
+    operatingView,
+    reportView,
+    loading,
+    unlocking,
+    pageMessage,
+    unlockDialogVisible,
+    unlockReason,
+    latestUnlockResult,
+    latestUnlockReason,
+    selectedGroup,
+    activeView,
+    bootstrap,
+    normalizeSelection,
+    loadCurrentView,
+    setSelectedGroupId,
+    setSelectedYear,
+    setSelectedPageType,
+    openUnlockDialog,
+    closeUnlockDialog,
+    setUnlockReason,
+    submitUnlock,
+  }
+})
+
+function toErrorMessage(error: unknown, fallback: string): PageMessage {
+  if (error instanceof Error && error.message) {
+    return { type: 'error', text: error.message }
+  }
+  return { type: 'error', text: fallback }
+}
+
+
+

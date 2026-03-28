@@ -1,4 +1,6 @@
-﻿export interface AdminActionSummary {
+﻿export type AdminGroupDataPageType = 'operating' | 'report'
+
+export interface AdminActionSummary {
   actionCode: string
   operatorName: string
   operateTime: string
@@ -38,6 +40,23 @@ export interface OpenNextYearResult {
   canOpenNextYear: boolean
   openNextYearBlockedReason: string
   latestAdminAction: AdminActionSummary | null
+}
+
+export interface UnlockYearRequest {
+  groupId: number
+  yearNo: number
+  reason: string
+}
+
+export interface UnlockYearResult {
+  groupId: number
+  yearNo: number
+  yearStatus: string
+  stageStatus: string
+  reportStatus: string
+  summaryEffective: boolean
+  businessStatus: string
+  unlockLogId: number
 }
 
 export interface BaselinePayload {
@@ -112,6 +131,17 @@ export interface AdminFinalRankingItem {
 export interface AdminFinalRankingResult {
   finalYear: number
   list: AdminFinalRankingItem[]
+}
+
+export interface AdminGroupOption {
+  groupId: number
+  groupNo: number
+  groupName: string
+  businessStatus: string
+}
+
+export interface ListAdminGroupsResult {
+  list: AdminGroupOption[]
 }
 
 export function createEmptyBaselinePayload(): BaselinePayload {

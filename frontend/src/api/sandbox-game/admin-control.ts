@@ -5,6 +5,8 @@ import type {
   OpenNextYearResult,
   SubmitInitialBaselineRequest,
   SubmitInitialBaselineResult,
+  UnlockYearRequest,
+  UnlockYearResult,
   UpdateFinalYearResult,
 } from '@/types/sandbox-game-admin'
 
@@ -44,6 +46,14 @@ export function getAdminInitialBaseline() {
 
 export function submitAdminInitialBaseline(payload: SubmitInitialBaselineRequest) {
   return request<SubmitInitialBaselineResult>('/api/v1/sandbox-game/admin-control/submit-initial-baseline', {
+    method: 'POST',
+    headers: adminHeaders,
+    body: JSON.stringify(payload),
+  })
+}
+
+export function unlockAdminYear(payload: UnlockYearRequest) {
+  return request<UnlockYearResult>('/api/v1/sandbox-game/admin-control/unlock-year', {
     method: 'POST',
     headers: adminHeaders,
     body: JSON.stringify(payload),

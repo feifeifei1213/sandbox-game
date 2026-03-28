@@ -21,6 +21,35 @@ func NewAdminGroupDataHandler(queryService *service.AdminGroupDataQueryService) 
 	return &AdminGroupDataHandler{queryService: queryService}
 }
 
+func (h *AdminGroupDataHandler) ListGroups(c *gin.Context) {
+	if !ensureAdminIdentity(c, "当前身份无权查看小组列表") {
+		return
+	}
+
+	result, err := h.queryService.ListGroups(c.Request.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusNotFound,
+				enum.NotFoundCode,
+				"未找到小组列表数据",
+				err,
+			))
+		default:
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusInternalServerError,
+				enum.InternalServerErrorCode,
+				"获取小组列表失败",
+				err,
+			))
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *AdminGroupDataHandler) GetOperatingView(c *gin.Context) {
 	var req dto.AdminGroupDataGetOperatingViewRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
