@@ -72,7 +72,7 @@
               </template>
               <td class="status-cell">
                 <span class="status-tag" :class="row.businessStatus === 'BANKRUPT' ? 'danger' : 'ok'">
-                  {{ row.businessStatus === 'BANKRUPT' ? '已破产' : '正常' }}
+                  {{ formatBusinessStatus(row.businessStatus) }}
                 </span>
               </td>
             </tr>
@@ -110,7 +110,7 @@
               <td class="number-cell">{{ formatMetric(item.profit) }}</td>
               <td class="status-cell">
                 <span class="status-tag" :class="item.businessStatus === 'BANKRUPT' ? 'danger' : 'ok'">
-                  {{ item.businessStatus === 'BANKRUPT' ? '已破产' : '正常' }}
+                  {{ formatBusinessStatus(item.businessStatus) }}
                 </span>
               </td>
             </tr>
@@ -131,6 +131,7 @@ import { storeToRefs } from 'pinia'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useAdminSummaryStore } from '@/stores/admin-summary'
 import type { AdminYearSummaryItem, AdminYearSummaryResult } from '@/types/sandbox-game-admin'
+import { formatBusinessStatus } from '@/utils/sandbox-game-display'
 
 interface SummaryRow {
   groupId: number

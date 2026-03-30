@@ -30,7 +30,7 @@
           <select :value="selectedGroupId ?? ''" :disabled="loading || groups.length === 0" @change="handleGroupChange">
             <option value="" disabled>请选择小组</option>
             <option v-for="item in groups" :key="item.groupId" :value="item.groupId">
-              第{{ item.groupNo }}组 · {{ item.businessStatus === 'BANKRUPT' ? '已破产' : '正常' }}
+              第{{ item.groupNo }}组 · {{ formatBusinessStatus(item.businessStatus) }}
             </option>
           </select>
         </label>
@@ -131,19 +131,19 @@
             </div>
             <div class="status-item" v-if="selectedPageType === 'operating' && operatingView">
               <span>阶段状态</span>
-              <strong>{{ operatingView.stageStatus }}</strong>
+              <strong>{{ formatStageStatus(operatingView.stageStatus) }}</strong>
             </div>
             <div class="status-item" v-if="selectedPageType === 'operating' && operatingView">
               <span>当前阶段</span>
-              <strong>{{ operatingView.currentStageCode }}</strong>
+              <strong>{{ formatStageCode(operatingView.currentStageCode) }}</strong>
             </div>
             <div class="status-item" v-if="selectedPageType === 'operating' && operatingView">
               <span>财报状态</span>
-              <strong>{{ operatingView.reportStatus }}</strong>
+              <strong>{{ formatReportStatus(operatingView.reportStatus) }}</strong>
             </div>
             <div class="status-item" v-if="selectedPageType === 'report' && reportView">
               <span>财报状态</span>
-              <strong>{{ reportView.reportStatus }}</strong>
+              <strong>{{ formatReportStatus(reportView.reportStatus) }}</strong>
             </div>
             <div class="status-item" v-if="selectedPageType === 'report' && reportView">
               <span>平衡差额</span>
@@ -181,15 +181,15 @@
             </div>
             <div class="meta-item">
               <span>年份状态</span>
-              <strong>{{ latestUnlockResult.yearStatus }}</strong>
+              <strong>{{ formatYearStatus(latestUnlockResult.yearStatus) }}</strong>
             </div>
             <div class="meta-item">
               <span>阶段状态</span>
-              <strong>{{ latestUnlockResult.stageStatus }}</strong>
+              <strong>{{ formatStageStatus(latestUnlockResult.stageStatus) }}</strong>
             </div>
             <div class="meta-item">
               <span>财报状态</span>
-              <strong>{{ latestUnlockResult.reportStatus }}</strong>
+              <strong>{{ formatReportStatus(latestUnlockResult.reportStatus) }}</strong>
             </div>
             <div class="meta-item wide-item">
               <span>解锁原因</span>
@@ -240,6 +240,13 @@ import { useAdminGroupDataStore } from '@/stores/admin-group-data'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { reportBalanceGap, type OperatingPayload, type ReportManualPayload } from '@/types/sandbox-game'
 import type { AdminGroupDataPageType } from '@/types/sandbox-game-admin'
+import {
+  formatBusinessStatus,
+  formatReportStatus,
+  formatStageCode,
+  formatStageStatus,
+  formatYearStatus,
+} from '@/utils/sandbox-game-display'
 
 const shellStore = useAdminShellStore()
 const groupDataStore = useAdminGroupDataStore()
@@ -271,18 +278,12 @@ const yearOptions = computed(() => {
 
 const activeBusinessStatusText = computed(() => {
   const status = selectedPageType.value === 'operating' ? operatingView.value?.businessStatus : reportView.value?.businessStatus
-  if (status === 'BANKRUPT') {
-    return '已破产'
-  }
-  if (status === 'NORMAL') {
-    return '正常'
-  }
-  return status || '--'
+  return formatBusinessStatus(status)
 })
 
 const activeYearStatusText = computed(() => {
   const status = selectedPageType.value === 'operating' ? operatingView.value?.yearStatus : reportView.value?.yearStatus
-  return status || '--'
+  return formatYearStatus(status)
 })
 
 onMounted(async () => {
