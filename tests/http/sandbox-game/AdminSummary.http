@@ -1,0 +1,20 @@
+﻿@host = http://127.0.0.1:8080
+@baseUrl = {{host}}/api/v1/sandbox-game
+
+@adminRole = ADMIN
+@adminUserId = 1
+@adminUsername = admin
+
+### 管理员：查看指定正式年份汇总
+### 若该年份尚未形成有效快照，接口会返回空列表或业务错误，取决于当前库状态
+GET {{baseUrl}}/admin-summary/get-year-summary?yearNo=1
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：查看最终排名
+### 若最终年份尚未满足开放条件，预期返回 422
+GET {{baseUrl}}/admin-summary/get-final-ranking
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}

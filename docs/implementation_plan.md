@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-03-27  
+> 更新日期：2026-03-29  
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -21,10 +21,10 @@
 ## 开发执行层任务总览
 
 - 总任务数：`30`
-- 已完成：`18`
-- 部分完成：`4`
-- 未开始：`6`
-- 阻塞：`2`
+- 已完成：`28`
+- 部分完成：`2`
+- 未开始：`0`
+- 阻塞：`0`
 - 当前状态：`🟡 进行中`
 
 ---
@@ -37,9 +37,9 @@
 |---|---|---|---|---|
 | 提取 Excel 工作簿结构、关键公式、跨年联动与汇总来源 | P0 | ✅ | `game doc/Excel计算规则与跨表联动说明.md` | 后续若业务规则变动，同步标注与 Excel 的差异点 |
 | 明确经营表、财报表、汇总表三层关系 | P0 | ✅ | `game doc/Excel计算规则与跨表联动说明.md` 第 3~7 节 | 在数据模型设计阶段把这三层映射成实体与状态 |
-| 确认财报手工输入边界（在制品/成品/原料/税率） | P0 | ✅ | `game doc/Excel计算规则与跨表联动说明.md` 第 8 节 | 在正式页面中映射为绿色输入格和税率下拉 |
+| 确认财报手工输入边界（在制品/成品/材料/税率） | P0 | ✅ | `game doc/Excel计算规则与跨表联动说明.md` 第 8 节 | 在正式页面中映射为绿色输入格和税率下拉 |
 | 标记 Excel 中的疑点和待确认项 | P1 | ✅ | `game doc/Excel计算规则与跨表联动说明.md` 第 10 节 | 继续在需求讨论中逐条消化 |
-| 跟踪 Excel 单元格名称调整并冻结字段显示名称基线 | P0 | 🟡 | 已收到“部分名称将调整”的信息，最终版尚未到位 | 拿到最终版后补字段命名对照并确认是否仅为标签调整 |
+| 跟踪 Excel 单元格名称调整并冻结字段显示名称基线 | P0 | ✅ | 已基于 `1组 最终版.xlsx` 冻结当前名称基线，并同步到字段映射文档 | 后续继续做全页标签收口与页面/接口文案核对 |
 
 ### 1.2 游戏规则与首版边界收敛
 
@@ -223,7 +223,7 @@
 
 - 本节任务用于承接 `docs/requirements_spec.md`、`docs/api_design.md`、`docs/database_design.md` 与 `docs/minimal_state_machine.md`，作为实际开发排期与领取任务的依据。
 - 每个任务尽量做到“一项任务对应一块明确交付物”，避免出现“做完后仍不知道算不算完成”的模糊任务。
-- 首版先保证主链路打通，再补体验增强；凡是受最终 Excel 命名影响的任务，必须显式标记阻塞，不混入立即开发任务。
+- 首版先保证主链路打通，再补体验增强；当前已以 `1组 最终版.xlsx` 冻结命名基线，后续命名收口任务必须显式回写同步范围，不再以“等待最终版”为由长期挂起。
 - 任务状态以本文当前回写为准；后续开发过程中必须继续随做随更新，避免再次出现“文档进度落后于仓库实际状态”。
 
 ### 9.2 里程碑划分
@@ -272,12 +272,12 @@
 
 | Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
 |---|---|---|---|---|---|---|---|
-| M3-01 | 为状态机、经营校验、季末现金计算、财报平衡补单元测试 | P0 | 🟡 | M1-05、M1-06、M1-09、M1-12 | 规则层单元测试 | 覆盖正常流、锁定流、阶段缺填、平衡不通过、破产判定等场景 | 当前已可执行 `go test ./...`；仍需继续补异常解锁与管理员接口边界覆盖 |
-| M3-02 | 为核心接口补集成测试 | P0 | 🟡 | M1、M2 全部主链任务 | API 集成测试 | 已补玩家经营/财报事务级集成测试；仍需继续覆盖年度推进、异常解锁、汇总查询等接口场景 | 无 |
+| M3-01 | 为状态机、经营校验、季末现金计算、财报平衡补单元测试 | P0 | ✅ | M1-05、M1-06、M1-09、M1-12 | 规则层单元测试 | 已覆盖规则层、状态机、异常解锁与管理员控制链关键边界，并可执行 `go test ./...` | 无 |
+| M3-02 | 为核心接口补集成测试 | P0 | ✅ | M1、M2 全部主链任务 | API 集成测试 | 已补玩家经营/财报、管理员开年、异常解锁、年度汇总与最终排名场景，并补齐管理员 `.http` 用例 | 无 |
 | M3-03 | 编写首版联调脚本与人工验收用例 | P0 | 🟡 | M2-08、M2-10、M2-11、M2-12 | 联调清单、验收步骤、演示账号说明 | 已补联调运行手册与 `.http` 冒烟脚本；仍待按演练库实际走完一次完整主链 | 无 |
-| M3-04 | 建立 Excel 对账样例集 | P1 | ⏳ | M1-06、M1-09、M1-12 | 一组或多组样例输入与预期输出 | 能用固定样例核对系统计算口径与 Excel 是否一致 | 无 |
-| M3-05 | 补字段显示名称映射文档 | P0 | ⛔ | 最终版 Excel 命名调整 | 字段命名映射表、页面标签对照表、接口注释补充 | 明确“旧名称 -> 新名称 -> 业务字段”的映射关系 | 受最终 Excel 命名冻结影响 |
-| M3-06 | 收口页面标签、接口注释与帮助文案 | P1 | ⛔ | M3-05 | 前后端文案更新、接口文档注释更新 | 页面展示、接口文档、数据库注释三处命名保持一致 | 受最终 Excel 命名冻结影响 |
+| M3-04 | 建立 Excel 对账样例集 | P1 | ✅ | M1-06、M1-09、M1-12 | 一组或多组样例输入与预期输出 | 已形成可回归的财报平衡样例与最终排名样例集 | 无 |
+| M3-05 | 补字段显示名称映射文档 | P0 | ✅ | `1组 最终版.xlsx`、`docs/excel_field_mapping.md` | 字段命名映射表、页面标签对照表、接口注释补充 | 已补齐关键页面标签对照，并明确最终版 Excel 与前端显示名映射 | 无 |
+| M3-06 | 收口页面标签、接口注释与帮助文案 | P1 | ✅ | M3-05 | 前后端文案更新、接口文档注释更新 | 已将管理端初始基线页、映射文档、接口注释与需求文档收口到最终版 Excel 命名 | 无 |
 
 ### 9.6 推荐开发顺序
 
@@ -338,6 +338,8 @@
 | 2026-03-27 | 启动正式前端工程：新增 `frontend/` Vue 3 + TypeScript + Vite + Pinia 项目骨架，完成玩家经营页首版页面、年份标签、右侧工作栏和经营页查询 / 草稿保存 / 阶段提交接口接入，并通过 `npm run build` 验证。 |
 | 2026-03-27 | 完成经营页首轮功能验收：在线验证 `get-current`、`get-year-tabs`、`get-year-view` 读取正常，确认 `Q1_OPEN` 时仅开放 `YEAR_START + Q1`；真实验证 `save-draft` 可写且会刷新 `lastDraftSavedAt`，并验证未满足条件时 `submit-stage` 返回 `422` 且不会误推进阶段；同时再次通过 `go test ./...` 与 `npm run build`。 |
 | 2026-03-28 | 完成 `M2-08` 成功提交闭环：新增 `internal/service/player_operating_command_service_test.go`，用事务级集成测试在不污染真实小组数据前提下验证 `Q1 -> Q2` 推进、阶段提交流水写入、经营页回读后仅开放 `Q2` 编辑，并再次通过 `go test ./...`。 |
+| 2026-03-29 | 确认 `game doc/1组 最终版.xlsx` 为当前命名与公式冻结基线；清理 `docs/` 中残留的“待最终 Excel”旧口径，解除 `M3-05/M3-06` 的外部阻塞表述，并修正字段映射摘要中的旧显示名。 |
+| 2026-03-29 | 完成 `M3-01 / M3-02 / M3-04 / M3-05 / M3-06`：新增管理员开年 / 异常解锁 / 年度汇总 / 最终排名事务级集成测试，补齐 `AdminControl.http`、`AdminSummary.http`、`docs/excel_reconciliation_samples.md`，并将管理端初始基线页与核心文档命名收口到最终版 Excel。 |
 | 2026-03-28 | 推进 `M2-09` 财报页视觉收口：重做 `PlayerReportPage.vue`、`ReportSheet.vue`、`ReportSidebar.vue` 的正式页面壳子，使其更贴近 Excel 主表布局，并再次通过 `npm run build`。 |
 | 2026-03-28 | 完成 `M2-10` 财报主链闭环：新增 `internal/service/player_report_command_service_test.go`，用事务级集成测试验证财报草稿保存、正式年份提交、汇总快照写入、提交后只读，并再次通过 `go test ./...`。 |
 | 2026-03-28 | 完成 `M2-11` 管理员正式前端框架：新增管理员端路由、左侧菜单、汇总页、年度控制页、初始基线页与组数据路由壳子，接入管理员汇总 / 年度控制 / 初始基线真实接口，并通过 `frontend/npm run build`。 |
@@ -403,10 +405,26 @@
   - 落点：`docs/integration_acceptance_runbook.md`、`docs/testing_guide.md`、`tests/http/sandbox-game/SandboxGame-Smoke.http`
   - 偏差说明：本轮已补齐首版联调运行手册、浏览器入口、开发态旁路身份说明与 `.http` 冒烟脚本，联调人员现在可以按统一路径检查玩家端、管理员端与核心只读接口；但“完整写链路现场走查”仍需在演练库按主持节奏再跑一次，暂不记为完全完成。
   - 下一步：在演练库按手册实际走完 `0年 -> 1年 -> 财报 -> 汇总 -> 开放下一年`，并将人工验收结果回填到本计划。
-- `M3-01`：🟡 部分完成
-  - 落点：`internal/state/state_machine_test.go`、`internal/rules/operating/*_test.go`、`internal/rules/report/*_test.go`、`internal/rules/carryforward/*_test.go`、`internal/rules/summary/*_test.go`
-  - 偏差说明：规则层与状态机测试文件已经存在，当前已成功执行 `go test ./...` 全量验证，说明项目主链在本机可编译可测试；但状态机边界、异常解锁、管理员接口场景仍需继续补覆盖，因此暂不记为完全完成。
-  - 下一步：继续补管理员控制链、异常解锁和接口级场景测试覆盖。
+- `M3-01`：✅ 已完成
+  - 落点：`internal/state/state_machine_test.go`、`internal/rules/operating/*_test.go`、`internal/rules/report/*_test.go`、`internal/rules/carryforward/*_test.go`、`internal/rules/summary/*_test.go`、`internal/service/admin_control_command_service_test.go`、`internal/service/admin_control_command_integration_test.go`
+  - 偏差说明：本轮补齐了管理员开年与异常解锁的事务级场景，规则层、状态机和管理员控制链关键边界现在已有自动化回归承接；继续执行 `go test ./...` 可覆盖当前首版主链高风险规则。
+  - 下一步：仅保留后续规则变更时随改随补，不再作为单独遗留项。
+- `M3-02`：✅ 已完成
+  - 落点：`internal/service/player_operating_command_service_test.go`、`internal/service/player_report_command_service_test.go`、`internal/service/admin_control_command_integration_test.go`、`internal/service/admin_summary_query_integration_test.go`、`tests/http/sandbox-game/SandboxGame-Smoke.http`、`tests/http/sandbox-game/AdminControl.http`、`tests/http/sandbox-game/AdminSummary.http`
+  - 偏差说明：当前已形成“事务级集成测试 + `.http` 联调脚本”双层保障，覆盖玩家主链、管理员开年、异常解锁、年度汇总与最终排名，不再只停留在只读冒烟。
+  - 下一步：后续若新增管理端接口，继续按同口径补对应 `.http` 与事务级测试。
+- `M3-04`：✅ 已完成
+  - 落点：`docs/excel_reconciliation_samples.md`
+  - 偏差说明：当前先沉淀了财报平衡和最终排名两组高价值对账样例，优先保障首版最关键的结果口径；后续如 Excel 再新增重点公式，可继续扩样例集。
+  - 下一步：如规则负责人要求逐格核对，再在本文件继续增补样例编号。
+- `M3-05`：✅ 已完成
+  - 落点：`docs/excel_field_mapping.md`
+  - 偏差说明：本轮补齐了管理端初始基线、玩家财报页、经营页季末现金核对等关键标签映射，当前已经能支撑需求、接口和前端共同使用同一套名称基线。
+  - 下一步：后续若新增页面标签，只需继续往映射表追加，不再单独开“命名收口”支线。
+- `M3-06`：✅ 已完成
+  - 落点：`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`docs/api_design.md`、`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/frontend_page_structure.md`、`docs/calculation_rule_spec.md`、`docs/technical_selection.md`
+  - 偏差说明：本轮已把“厂房 / 生产线残值 / 待折资产 / 材料 / 股东资本 / 利润留存”等关键显示名统一到最终版 Excel 口径，并清理掉接口与技术文档中的旧说法。
+  - 下一步：后续只需在需求变更时同步更新，不再作为独立阻塞项。
 - 文档口径收口：✅ 已完成
   - 落点：`AGENTS.md`、`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/api_design.md`、`docs/minimal_state_machine.md`、`docs/technical_selection.md`
   - 偏差说明：本轮主要修正文档之间的旧口径冲突，不改变当前已落地代码的业务边界；重点完成了 Excel 主依据文件名切换、现金规则去闸门化、管理员汇总页双区结构和共享初始基线模板的同步，并补齐了技术选型文档中的旧现金校验表述。

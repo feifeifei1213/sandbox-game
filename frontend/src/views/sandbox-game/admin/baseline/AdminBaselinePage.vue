@@ -118,23 +118,23 @@ const fieldDefs: Array<{
 }> = [
   { key: 'baselineSalesRevenue', section: '损益', label: '销售收入', note: '共享模板基线输入项' },
   { key: 'baselineDirectCost', section: '损益', label: '直接成本', note: '共享模板基线输入项' },
-  { key: 'baselineComprehensiveCost', section: '损益', label: '综合成本', note: '共享模板基线输入项' },
+  { key: 'baselineComprehensiveCost', section: '损益', label: '综合费用', note: '共享模板基线输入项' },
   { key: 'baselineDepreciation', section: '损益', label: '折旧', note: '共享模板基线输入项' },
-  { key: 'baselineFinanceIncomeExpense', section: '损益', label: '财务损益', note: '共享模板基线输入项' },
-  { key: 'baselineExtraIncomeExpense', section: '损益', label: '营业外损益', note: '共享模板基线输入项' },
+  { key: 'baselineFinanceIncomeExpense', section: '损益', label: '财务收入/支出', note: '共享模板基线输入项' },
+  { key: 'baselineExtraIncomeExpense', section: '损益', label: '额外收入/支出', note: '共享模板基线输入项' },
   { key: 'baselineIncomeTax', section: '损益', label: '所得税', note: '共享模板基线输入项' },
-  { key: 'baselineFactoryAsset', section: '资产', label: '厂房资产', note: '共享模板基线输入项' },
-  { key: 'baselineLineResidual', section: '资产', label: '生产线净值', note: '共享模板基线输入项' },
-  { key: 'baselineDepreciableAsset', section: '资产', label: '待折旧资产', note: '共享模板基线输入项' },
+  { key: 'baselineFactoryAsset', section: '资产', label: '厂房', note: '共享模板基线输入项' },
+  { key: 'baselineLineResidual', section: '资产', label: '生产线残值', note: '共享模板基线输入项' },
+  { key: 'baselineDepreciableAsset', section: '资产', label: '待折资产', note: '共享模板基线输入项' },
   { key: 'baselineCash', section: '资产', label: '现金', note: '共享模板基线输入项' },
-  { key: 'baselineReceivable', section: '资产', label: '应收账款', note: '共享模板基线输入项' },
+  { key: 'baselineReceivable', section: '资产', label: '应收款', note: '共享模板基线输入项' },
   { key: 'baselineWorkInProgress', section: '存货', label: '在制品', note: '共享模板基线输入项' },
   { key: 'baselineFinishedGoods', section: '存货', label: '成品', note: '共享模板基线输入项' },
-  { key: 'baselineRawMaterials', section: '存货', label: '原材料', note: '共享模板基线输入项' },
-  { key: 'baselineShortTermLoan', section: '负债', label: '短期贷款', note: '共享模板基线输入项' },
-  { key: 'baselineLongTermLoan', section: '负债', label: '长期贷款', note: '共享模板基线输入项' },
-  { key: 'baselineShareCapital', section: '权益', label: '股本', note: '共享模板基线输入项' },
-  { key: 'baselineRetainedEarnings', section: '权益', label: '留存收益', note: '共享模板基线输入项' },
+  { key: 'baselineRawMaterials', section: '存货', label: '材料', note: '共享模板基线输入项' },
+  { key: 'baselineShortTermLoan', section: '负债', label: '短期负债', note: '共享模板基线输入项' },
+  { key: 'baselineLongTermLoan', section: '负债', label: '长期负债', note: '共享模板基线输入项' },
+  { key: 'baselineShareCapital', section: '权益', label: '股东资本', note: '共享模板基线输入项' },
+  { key: 'baselineRetainedEarnings', section: '权益', label: '利润留存', note: '共享模板基线输入项' },
 ]
 
 const shellStore = useAdminShellStore()
@@ -408,3 +408,4 @@ function formatDateTime(value?: string | null) {
   }
 }
 </style>
+

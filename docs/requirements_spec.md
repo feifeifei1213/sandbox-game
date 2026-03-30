@@ -233,7 +233,7 @@
 - 当前已确认手工项包括：
   - 在制品
   - 成品
-  - 原料
+  - 材料
   - 所得税税率
 
 #### 6.3.3 税率输入规则
@@ -516,6 +516,7 @@
 - `docs/database_design.md`
 - `docs/implementation_plan.md`
 - `game doc/Excel计算规则与跨表联动说明.md`
+
 
 
 

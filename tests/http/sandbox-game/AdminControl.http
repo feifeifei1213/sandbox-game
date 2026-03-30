@@ -1,0 +1,55 @@
+﻿@host = http://127.0.0.1:8080
+@baseUrl = {{host}}/api/v1/sandbox-game
+
+@adminRole = ADMIN
+@adminUserId = 1
+@adminUsername = admin
+
+### 管理员：读取年度控制配置
+GET {{baseUrl}}/admin-control/get-config
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：更新最终年份
+PUT {{baseUrl}}/admin-control/update-final-year
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "finalYear": 8
+}
+
+### 管理员：读取共享初始基线
+GET {{baseUrl}}/admin-control/get-initial-baseline
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：开放下一年
+### 前提：全部未破产组已完成当前开放年份财报
+POST {{baseUrl}}/admin-control/open-next-year
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "targetYearNo": 1
+}
+
+### 管理员：异常解锁某组某年
+### 前提：目标年份已完成，且下一年尚未开放
+POST {{baseUrl}}/admin-control/unlock-year
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "groupId": 1,
+  "yearNo": 0,
+  "reason": "联调回收本年结果后重新提交"
+}

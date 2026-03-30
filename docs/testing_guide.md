@@ -174,7 +174,9 @@
 首版当前已落的联调用例入口：
 
 - `tests/http/sandbox-game/SandboxGame-Smoke.http`
-- 该文件优先承担“本机联调冒烟 + 演示前自检”职责
+- `tests/http/sandbox-game/AdminControl.http`
+- `tests/http/sandbox-game/AdminSummary.http`
+- 这些文件优先承担“本机联调冒烟 + 演示前自检”职责
 - 后续若接口继续增加，再按领域拆分成独立 `.http` 文件
 
 ### 5.1 示例
@@ -242,6 +244,8 @@ DESC sg_group_summary_snapshot;
 
 具体页面路径、旁路身份、执行顺序与联调注意事项，统一以 [`docs/integration_acceptance_runbook.md`](./integration_acceptance_runbook.md) 为准。
 
+Excel 口径回归样例统一以 [`docs/excel_reconciliation_samples.md`](./excel_reconciliation_samples.md) 为准。
+
 ---
 
 ## 8. 质量门禁建议
@@ -254,4 +258,5 @@ DESC sg_group_summary_snapshot;
 4. 受影响接口 `.http` 用例冒烟通过
 5. 高风险规则具备自动化测试或人工回归记录
 6. 文档同步更新
+
 

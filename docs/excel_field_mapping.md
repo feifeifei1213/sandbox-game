@@ -1,8 +1,8 @@
 ﻿# 沙盘经营系统 Excel 字段与页面映射文档（首版）
 
-> 更新日期：2026-03-25  
+> 更新日期：2026-03-29  
 > 适用方式：基于当前 Excel 模板、正式需求与接口/数据库设计，先冻结“结构性映射”和“关键字段映射”，作为后续前端页面、接口字段、规则实现的统一对照表。  
-> 文档定位：本文件不是完整逐格抄录 Excel，而是说明“哪些字段已经冻结、哪些字段仍待继续细化映射”。
+> 文档定位：本文件不是完整逐格抄录 Excel，而是说明“哪些字段已经冻结、哪些映射当前仍未逐格穷尽”。
 
 ## 1. 文档目标
 
@@ -39,15 +39,15 @@
 - 跨年承接关键字段映射
 - 经营页 payload 区块锚点结构
 
-首版暂不冻结：
+首版暂不逐格穷尽：
 
-- 全经营页逐格中文标签
-- 所有展示用文案的最终名称
-- 若 Excel 后续再有名称微调时受影响的标签层字段
+- 全经营页逐格中文标签的完整清单
+- 非业务型帮助文案与说明文案的排版细修
+- 少量不影响规则实现的展示层标签补齐
 
 补充约束：
 
-- 当前中文显示名已按最新版 `1组 最终版.xlsx` 同步为 `材料`、`在建生产线`、`生产线残值`、`生产厂房` 等口径。
+- 当前中文显示名已按最新版 `1组 最终版.xlsx` 同步为 `材料`、`待折资产`、`生产线残值`、`厂房` 等口径。
 - 系统字段名与数据库字段名保持稳定，不因 Excel 中文标签微调直接改名。
 
 ### 2.3 字段分类
@@ -174,7 +174,7 @@
 | `previousCash` | 上年财报 `G13` | 当年经营 `C59` | 现金承接 |
 | `previousReceivable` | 上年财报 `G14` | 当年财报资产侧 | 应收承接 |
 | `shareholderCapital` | 上年财报 `K15` | 当年财报权益侧 | 股东资本承接 |
-| `retainedEarnings` | 上年财报 `K16+K17` | 当年财报权益侧 | 留存收益承接 |
+| `retainedEarnings` | 上年财报 `K16+K17` | 当年财报权益侧 | 利润留存承接 |
 
 ### 4.6 经营页季度现金核对展示
 
@@ -208,7 +208,7 @@
 | `quarter.receivableUpdate` | `B35:O37` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 供应链订单、应收账款更新与回款记录 |
 | `quarter.deliverySettlement` | `B38:O40` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 包含交货销售额、交货成本、管理人员费用 |
 | `yearEnd.longTermLoan` | `B42:P44` | `object` | `YEAR_END` | `结构冻结` | 长期贷款账期更新、还款与新贷款 |
-| `yearEnd.assetAdjustment` | `B45:O53` | `object` | `YEAR_END` | `结构冻结，细项可补充` | 包含维护费、厂房资产、生产线残值/折旧、新市场培育 |
+| `yearEnd.assetAdjustment` | `B45:O53` | `object` | `YEAR_END` | `结构冻结，细项可补充` | 包含维护费、厂房、生产线残值/折旧、新市场培育 |
 | `extra.incomeAndPenalty` | `A54:O58` | `quarterMap<object>` | `随当期提交` | `结构冻结` | 包含折现费用、额外支出及罚款、额外收入及奖励 |
 
 补充建议：
@@ -217,6 +217,22 @@
 - 若某区块是“按产品/区域/费用类型”的二维输入，推荐以显式对象数组存储，而不是 `G14/I14/K14/M14` 这类坐标命名。
 - 经营页中的 `periodEndCash`、`quarterCashCheck`、`planRevenue`、`comprehensiveCostTotal` 等结果值应由规则层计算后回填视图，不建议前端自行算。
 
+### 4.7.1 页面关键标签对照（当前已落前端）
+
+| 页面 | 系统字段 / 区块 | Excel 当前显示名 | 当前前端显示名 | 说明 |
+|---|---|---|---|---|
+| 管理端初始基线 | `baselineFactoryAsset` | 厂房 | 厂房 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineLineResidual` | 生产线残值 | 生产线残值 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineDepreciableAsset` | 待折资产 | 待折资产 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineReceivable` | 应收款 | 应收款 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineRawMaterials` | 材料 | 材料 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineShortTermLoan` | 短期负债 | 短期负债 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineLongTermLoan` | 长期负债 | 长期负债 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineShareCapital` | 股东资本 | 股东资本 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineRetainedEarnings` | 利润留存 | 利润留存 | 已按最终版 Excel 收口 |
+| 玩家财报页 | `rawMaterials` | 材料 | 材料 | 绿色手工项 |
+| 玩家财报页 | `incomeTaxRate` | 所得税税率 | 所得税税率 | 下拉值 `0.25 / 0.15 / 0` |
+| 玩家经营页 | `quarterCashCheckLabel` | 核对季末现金 | 核对季末现金 | 只读展示标签 |
 ### 4.8 与接口/数据库的直接落点
 
 | 文档对象 | 对应映射章节 | 说明 |
@@ -278,3 +294,5 @@
   - `docs/database_design.md`
   - `docs/calculation_rule_spec.md`
 - 禁止因为 Excel 某个中文标题变化，就直接重命名数据库字段。
+
+
