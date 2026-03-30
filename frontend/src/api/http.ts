@@ -1,48 +1,16 @@
 ﻿import type { CommonResult } from '@/types/http'
+import { clearStoredAuthSession, getStoredAuthSession } from '@/utils/auth-session'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
-
-export function buildBypassHeaders(options: {
-  roleType?: string
-  userId?: string
-  username?: string
-  groupId?: string
-} = {}): HeadersInit {
-  if (!import.meta.env.DEV) {
-    return {}
-  }
-
-  const headers: Record<string, string> = {}
-  if (options.roleType) {
-    headers['X-Role-Type'] = options.roleType
-  }
-  if (options.userId) {
-    headers['X-User-Id'] = options.userId
-  }
-  if (options.username) {
-    headers['X-Username'] = options.username
-  }
-  if (options.groupId) {
-    headers['X-Group-Id'] = options.groupId
-  }
-  return headers
-}
 
 function buildDefaultHeaders(): HeadersInit {
   const headers: Record<string, string> = {
     Accept: 'application/json',
   }
 
-  if (import.meta.env.DEV) {
-    Object.assign(
-      headers,
-      buildBypassHeaders({
-        roleType: import.meta.env.VITE_BYPASS_ROLE_TYPE ?? 'GROUP',
-        userId: import.meta.env.VITE_BYPASS_USER_ID ?? '101',
-        username: import.meta.env.VITE_BYPASS_USERNAME ?? 'group01',
-        groupId: import.meta.env.VITE_BYPASS_GROUP_ID ?? '1',
-      }),
-    )
+  const session = getStoredAuthSession()
+  if (session) {
+    headers.Authorization = `${session.tokenType} ${session.accessToken}`
   }
 
   return headers
@@ -59,14 +27,22 @@ export async function request<T>(url: string, init: RequestInit = {}): Promise<T
   })
 
   const raw = await response.text()
-  const json = raw ? (JSON.parse(raw) as CommonResult<T>) : null
+  const json = tryParseCommonResult<T>(raw)
+
+  if (response.status === 401) {
+    clearStoredAuthSession()
+  }
 
   if (!response.ok) {
-    throw new Error(json?.msg || `请求失败（${response.status}）`)
+    throw new Error(resolveHttpErrorMessage(response.status, json, raw))
   }
 
   if (!json) {
-    throw new Error('接口返回为空')
+    throw new Error(resolveNonJSONMessage(raw))
+  }
+
+  if (json.code === 401) {
+    clearStoredAuthSession()
   }
 
   if (json.code !== 0) {
@@ -74,4 +50,41 @@ export async function request<T>(url: string, init: RequestInit = {}): Promise<T
   }
 
   return json.data
+}
+
+function tryParseCommonResult<T>(raw: string): CommonResult<T> | null {
+  if (!raw.trim()) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw) as CommonResult<T>
+  } catch {
+    return null
+  }
+}
+
+function resolveHttpErrorMessage<T>(status: number, json: CommonResult<T> | null, raw: string): string {
+  if (json?.msg) {
+    return json.msg
+  }
+  if (raw.trim()) {
+    return `接口返回异常：${truncateRawText(raw)}`
+  }
+  return `请求失败（${status}）`
+}
+
+function resolveNonJSONMessage(raw: string): string {
+  if (raw.trim()) {
+    return `接口返回非 JSON 内容：${truncateRawText(raw)}`
+  }
+  return '接口返回为空'
+}
+
+function truncateRawText(raw: string): string {
+  const normalized = raw.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= 120) {
+    return normalized
+  }
+  return `${normalized.slice(0, 117)}...`
 }

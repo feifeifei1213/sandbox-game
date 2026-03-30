@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-03-29  
+> 更新日期：2026-03-30  
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -20,8 +20,8 @@
 
 ## 开发执行层任务总览
 
-- 总任务数：`30`
-- 已完成：`28`
+- 总任务数：`32`
+- 已完成：`30`
 - 部分完成：`2`
 - 未开始：`0`
 - 阻塞：`0`
@@ -267,6 +267,8 @@
 | M2-10 | 接入财报查询、草稿、提交链路 | P0 | ✅ | M1-10、M1-11、M1-12、M2-09 | 财报页联调页面 | 财报查询、草稿、提交与平衡校验链路已接入正式前端工程，并通过事务级集成测试验证草稿持久化、正式年份提交、汇总快照写入与提交后只读 | 无 |
 | M2-11 | 搭建管理员页面基础框架 | P1 | ✅ | M2-04、现有 demo | 管理员导航、汇总页、年度控制页、初始基线页 | 管理员正式前端页面已落入 `frontend/` 工程，完成左侧菜单、汇总页、年度控制页、初始基线页与真实接口接入，并通过 `npm run build` | 无 |
 | M2-12 | 搭建组数据查看与异常解锁前端 | P1 | ✅ | M2-05、M2-06、M2-11 | 组数据查看页、解锁弹窗、日志提示 | 管理员正式前端已支持按组按年查看经营/财报只读视图、切换页面类型、发起异常解锁并展示最近一次原因记录，同时通过 `go test ./...` 与 `npm run build` | 无 |
+| M2-13 | 实现最小登录认证接口与认证中间件 | P0 | ✅ | M1-02、M1-04、`docs/api_design.md` 6.0 | `auth/login`、`auth/get-current-user`、`auth/logout`、认证中间件、密码校验 | 已补齐最小登录接口、Bearer 鉴权中间件、密码校验与登录态解析；业务接口默认按正式登录态识别 `ADMIN/GROUP`，未登录访问返回 `401`，并通过 `go test ./...` | 无 |
+| M2-14 | 实现统一登录页与角色自动跳转 | P0 | ✅ | M2-13、`docs/frontend_page_structure.md` | `/sandbox-game/login`、登录态存储、路由守卫、退出登录入口 | 已落统一登录页、登录态持久化、角色自动跳转与退出登录；玩家默认进入 `0年经营`，管理员默认进入 `汇总页`，并通过 `frontend/npm run build` | 无 |
 
 ### 9.5 M3：测试、收口与最终命名适配
 
@@ -287,24 +289,19 @@
    - 这是玩家主链，决定这个系统最核心的“能不能用”。
 3. 然后做 `M2-01 ~ M2-06`
    - 管理员控制链是游戏现场能否正常推进的关键。
-4. 再做 `M2-07 ~ M2-12`
+4. 再做 `M2-07 ~ M2-14`
    - 页面联调与操作闭环完成后，才能拿去做现场可调试初版。
 5. 最后做 `M3-01 ~ M3-06`
    - 测试和命名适配放最后收口，但单元测试建议边开发边补，不要真的全部压到最后一天。
 
 ### 9.7 当前可立即开工的最小任务包
 
-如果要面向“这周周末可调试初版”，在当前仓库已有进度基础上，下一批最值得继续推进的是下面这 9 个任务：
+如果要面向“正式版给真实玩家使用”的当前目标，在现有仓库进度基础上，下一批最值得继续推进的是下面这 4 个任务：
 
-1. `M2-07` 将玩家经营页 Demo 收口为正式前端骨架
-2. `M2-08` 接入经营页查询、草稿、阶段提交链路
-3. `M2-09` 将玩家财报页 Demo 收口为正式前端骨架
-4. `M2-10` 接入财报查询、草稿、提交链路
-5. `M2-11` 将管理员 Demo 收口为正式页面框架并接入已完成的汇总/年度控制接口
-6. `M2-12` 搭建组数据查看与异常解锁前端
-7. `M3-01` 为状态机、经营校验、季末现金计算、财报平衡补单元测试
-8. `M3-02` 为核心接口补集成测试
-9. `M3-03` 编写首版联调脚本与人工验收用例
+1. `M2-13` 实现最小登录认证接口与认证中间件
+2. `M2-14` 实现统一登录页与角色自动跳转
+3. `M3-03` 在演练库按真实流程走完一次完整主链验收
+4. `I1-01` 评估并开始实现定向异常解锁 `OPERATING / REPORT`
 
 ## 10) 变更记录
 
@@ -401,7 +398,18 @@
   - 落点：`frontend/src/api/sandbox-game/admin-group-data.ts`、`frontend/src/api/sandbox-game/admin-control.ts`、`frontend/src/stores/admin-group-data.ts`、`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`internal/http/handler/admin_group_data_handler.go`、`internal/service/admin_group_data_query_service.go`、`internal/app/router.go`
   - 偏差说明：本轮补齐了组数据页真实查询与异常解锁主链，新增管理员小组列表接口，前端已支持按组按年查看经营/财报只读视图、切换页面类型、发起异常解锁并展示最近一次原因记录，同时通过 `go test ./...` 与 `npm run build`；当前仍未单独提供“历史解锁日志列表查询”，若后续现场需要，可在管理端继续追加日志查询区。
   - 下一步：转入 `M3-03`，补管理员端联调脚本与人工验收用例。
-- `M3-03`：🟡 部分完成
+- `M2-13`：✅ 已完成
+  - 落点：`internal/http/handler/auth_handler.go`、`internal/service/auth_service.go`、`internal/http/middleware/auth_middleware.go`、`internal/app/router.go`、`internal/repository/account_repository.go`、`internal/service/auth_service_test.go`
+  - 偏差说明：本轮在不引入重型账号系统的前提下，基于现有 `sg_account` 和种子账号补齐了最小登录认证闭环；默认认证模式切到项目内 `Bearer` 令牌，同时保留 `auth.mode=bypass` 作为开发态兜底，不影响正式版默认行为。
+  - 下一步：转入 `M2-14`，补统一登录页、路由守卫与退出登录联调。
+- `M2-14`：✅ 已完成
+  - 落点：`frontend/src/views/sandbox-game/login/LoginPage.vue`、`frontend/src/stores/auth.ts`、`frontend/src/router/index.ts`、`frontend/src/api/http.ts`、`frontend/src/views/sandbox-game/admin/AdminLayout.vue`、`frontend/src/views/sandbox-game/player/operating/PlayerOperatingPage.vue`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`
+  - 偏差说明：本轮已将统一登录页、登录态持久化、角色自动跳转、页面守卫与退出登录接入正式前端工程，同时移除管理员接口对开发旁路头的依赖；玩家页 `preview=1` 仍仅保留为开发预览入口。
+  - 下一步：回到 `M3-03`，按正式登录入口补联调手册并在演练库走完整主链。
+- `正式版最小登录闭环`：✅ 已完成
+  - 落点：`internal/http/handler/auth_handler.go`、`internal/service/auth_service.go`、`frontend/src/views/sandbox-game/login/LoginPage.vue`、`frontend/src/stores/auth.ts`、`frontend/src/router/index.ts`
+  - 偏差说明：当前已切换到“统一登录页 + Bearer 登录态 + 角色自动跳转”的正式口径，开发旁路仅保留为可配置兜底与玩家页预览模式，不再是正式入口。
+  - 下一步：继续执行 `M3-03`，按正式登录入口完成一次完整联调演练。- `M3-03`：🟡 部分完成
   - 落点：`docs/integration_acceptance_runbook.md`、`docs/testing_guide.md`、`tests/http/sandbox-game/SandboxGame-Smoke.http`
   - 偏差说明：本轮已补齐首版联调运行手册、浏览器入口、开发态旁路身份说明与 `.http` 冒烟脚本，联调人员现在可以按统一路径检查玩家端、管理员端与核心只读接口；但“完整写链路现场走查”仍需在演练库按主持节奏再跑一次，暂不记为完全完成。
   - 下一步：在演练库按手册实际走完 `0年 -> 1年 -> 财报 -> 汇总 -> 开放下一年`，并将人工验收结果回填到本计划。
@@ -441,8 +449,19 @@
   - 落点：本文档 `9.4` 与 `11.1`
   - 偏差说明：经复核，先前将 `M2-01/M2-02` 的状态记录得不够准确；当前已按仓库实际代码修正为 `M2-01` 已完成、`M2-02` 已完成，因此后续状态回写要继续以当前仓库为准。
   - 下一步：后续新增管理员控制接口时，按实际代码落点继续回写，不再用“曾讨论过/曾做过别处代码”代替当前仓库状态。
+## 12) 正式版迭代池（不计入当前 M1 ~ M3 完成统计）
 
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I1-01 | 管理员异常解锁支持目标类型 `OPERATING / REPORT` | P0 | ⏳ 未开始 | `M2-06`、`docs/requirements_spec.md`、`docs/api_design.md` | `internal/http/dto/admin_control_dto.go`、`internal/http/handler/admin_control_handler.go`、`internal/service/admin_control_command_service.go`、`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`frontend/src/stores/admin-group-data.ts` | 管理员可明确选择“经营页解锁”或“财报页解锁”；当目标为 `OPERATING` 时，系统不得仅因财报页仍可编辑就拒绝解锁 | 当前仅完成需求收口，尚未开始实现 |
+| I1-02 | 异常解锁提示文案与结果文案改为目标化表达 | P1 | ⏳ 未开始 | `I1-01` | 管理端前端文案、错误码映射、接口错误提示说明 | 不再使用笼统“当前年份仍处于可编辑状态”，而是明确提示“经营页无需解锁 / 财报页无需解锁 / 下一年已开放”等原因 | 依赖 `I1-01` 明确目标类型字段 |
+| I1-03 | 评估“整年重开到 Q1_OPEN”是否独立成高级回退能力 | P1 | ⏳ 未开始 | `I1-01` | 需求补充说明、状态机讨论记录、接口草案 | 明确其是否作为独立能力推进，不与定向异常解锁混用 | 需后续单独确认业务风险与主持人操作边界 |
 
+### 12.1 本轮新增记录
 
-
+| 日期 | 记录 |
+|---|---|
+| 2026-03-30 | 结合 `M3-03` 联调发现，正式补充“定向异常解锁”迭代需求：管理员异常解锁需支持目标类型 `OPERATING / REPORT`，系统不能仅因财报页仍可编辑就阻止经营页解锁；同时明确“整年重开到 Q1_OPEN”暂不并入本轮。 |
+| 2026-03-30 | 根据“正式版给真实玩家使用”的交付口径，新增当前范围任务 `M2-13 / M2-14`：统一登录页、用户名密码登录、角色自动跳转与退出登录纳入首版，不再只依赖开发态旁路身份。 |
+| 2026-03-30 | 完成 M2-13 / M2-14：新增 uth/login、uth/get-current-user、uth/logout、Bearer 鉴权中间件、统一登录页、登录态存储、角色自动跳转与退出登录，并再次通过 go test ./... 与 rontend/npm run build。 |
 

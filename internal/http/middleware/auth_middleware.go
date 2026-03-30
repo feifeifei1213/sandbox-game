@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"sandbox-game/internal/enum"
+	"sandbox-game/internal/service"
 )
 
 const authIdentityContextKey = "auth_identity"
@@ -19,8 +21,8 @@ type AuthIdentity struct {
 	Username string
 }
 
-// AuthBypass 是 M1-02 阶段的认证占位实现。
-// 后续接入真实登录态后，再替换为正式认证中间件。
+// AuthBypass 是开发联调阶段保留的认证占位实现。
+// 当配置显式切换到 bypass 模式时，可继续复用旧的请求头透传方式。
 func AuthBypass() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		identity, err := buildBypassIdentity(c)
@@ -38,6 +40,30 @@ func AuthBypass() gin.HandlerFunc {
 	}
 }
 
+func RequireAuth(authService *service.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		accessToken, err := extractBearerToken(c.GetHeader("Authorization"))
+		if err != nil {
+			abortUnauthorized(c, "未登录或登录态已失效", err)
+			return
+		}
+
+		authenticatedUser, err := authService.AuthenticateAccessToken(c.Request.Context(), accessToken)
+		if err != nil {
+			abortUnauthorized(c, "未登录或登录态已失效", err)
+			return
+		}
+
+		c.Set(authIdentityContextKey, AuthIdentity{
+			UserID:   authenticatedUser.UserID,
+			RoleType: authenticatedUser.RoleType,
+			GroupID:  authenticatedUser.GroupID,
+			Username: authenticatedUser.Username,
+		})
+		c.Next()
+	}
+}
+
 func GetAuthIdentity(c *gin.Context) (AuthIdentity, bool) {
 	value, ok := c.Get(authIdentityContextKey)
 	if !ok {
@@ -45,6 +71,23 @@ func GetAuthIdentity(c *gin.Context) (AuthIdentity, bool) {
 	}
 	identity, ok := value.(AuthIdentity)
 	return identity, ok
+}
+
+func abortUnauthorized(c *gin.Context, message string, err error) {
+	AbortWithAppError(c, NewAppError(
+		http.StatusUnauthorized,
+		enum.UnauthorizedCode,
+		message,
+		err,
+	))
+}
+
+func extractBearerToken(authHeader string) (string, error) {
+	fields := strings.Fields(strings.TrimSpace(authHeader))
+	if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") || strings.TrimSpace(fields[1]) == "" {
+		return "", errors.New("invalid authorization header")
+	}
+	return fields[1], nil
 }
 
 func buildBypassIdentity(c *gin.Context) (AuthIdentity, error) {

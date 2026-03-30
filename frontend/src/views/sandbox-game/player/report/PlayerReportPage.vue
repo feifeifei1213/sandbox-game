@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="player-page">
     <div class="shell">
       <header class="page-header">
@@ -11,6 +11,8 @@
           <span class="pill">组别：{{ activeView?.groupId ?? '--' }}</span>
           <span class="pill">开放年份：{{ activeConfig?.currentOpenYear ?? '--' }}</span>
           <span class="pill">最终年份：{{ activeConfig?.finalYear ?? '--' }}</span>
+          <span v-if="!previewMode && currentUser" class="pill">账号：{{ currentUser.username }}</span>
+          <button v-if="!previewMode" class="logout-button" type="button" @click="handleLogout">退出登录</button>
           <span v-if="previewMode" class="pill preview-pill">开发预览</span>
         </div>
       </header>
@@ -35,15 +37,15 @@
             </div>
             <div class="status-item">
               <span>年度状态</span>
-              <strong>{{ activeView?.yearStatus || '--' }}</strong>
+              <strong>{{ formatYearStatus(activeView?.yearStatus) }}</strong>
             </div>
             <div class="status-item">
               <span>财报状态</span>
-              <strong>{{ activeView?.reportStatus || '--' }}</strong>
+              <strong>{{ formatReportStatus(activeView?.reportStatus) }}</strong>
             </div>
             <div class="status-item">
               <span>经营状态</span>
-              <strong>{{ activeView?.businessStatus || '--' }}</strong>
+              <strong>{{ formatBusinessStatus(activeView?.businessStatus) }}</strong>
             </div>
             <div class="status-item" :class="activeBalancePassed ? 'status-pass' : 'status-fail'">
               <span>平衡校验</span>
@@ -95,6 +97,8 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import ReportSheet from '@/components/sandbox-game/player/ReportSheet.vue'
 import ReportSidebar from '@/components/sandbox-game/player/ReportSidebar.vue'
+import { useAuthStore } from '@/stores/auth'
+import { formatBusinessStatus, formatReportStatus, formatYearStatus } from '@/utils/sandbox-game-display'
 import { usePlayerReportStore } from '@/stores/player-report'
 import type { PageMessage } from '@/stores/player-report'
 import {
@@ -114,6 +118,7 @@ const balanceTolerance = 0.000001
 const route = useRoute()
 const router = useRouter()
 const store = usePlayerReportStore()
+const authStore = useAuthStore()
 const {
   currentConfig,
   yearTabs,
@@ -132,6 +137,7 @@ const {
   missingFields,
   submitReady,
 } = storeToRefs(store)
+const { currentUser } = storeToRefs(authStore)
 
 const previewDraftManualPayload = ref<ReportManualPayload>({
   workInProgress: 6,
@@ -394,6 +400,14 @@ function goOperating() {
     query: previewMode.value ? { yearNo: String(activeSelectedYear.value), preview: '1' } : { yearNo: String(activeSelectedYear.value) },
   })
 }
+
+async function handleLogout() {
+  try {
+    await authStore.logout()
+  } finally {
+    await router.replace('/sandbox-game/login')
+  }
+}
 </script>
 
 <style scoped>
@@ -462,6 +476,15 @@ function goOperating() {
   border-color: #e0b24c;
   background: #fff5d8;
   color: #946200;
+}
+
+.logout-button {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #d4dae4;
+  background: #ffffff;
+  color: var(--text);
 }
 
 .toolbar-card {
@@ -597,3 +620,10 @@ function goOperating() {
   }
 }
 </style>
+
+
+
+
+
+
+

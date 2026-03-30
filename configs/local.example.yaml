@@ -1,4 +1,4 @@
-app:
+﻿app:
   name: sandbox-game
   version: 0.1.0
 
@@ -19,3 +19,5 @@ mysql:
 
 auth:
   mode: local
+  tokenSecret: sandbox-game-local-secret
+  tokenExpireSeconds: 28800

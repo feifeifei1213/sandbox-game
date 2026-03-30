@@ -42,6 +42,8 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	accountRepo := repository.NewAccountRepository(db)
 	adminActionLogRepo := repository.NewAdminActionLogRepository(db)
 
+	authService := service.NewAuthService(accountRepo, cfg.Auth)
+	authHandler := handler.NewAuthHandler(authService)
 	gameConfigQueryService := service.NewGameConfigQueryService(gameConfigRepo, groupRepo, groupYearRepo)
 	gameConfigHandler := handler.NewGameConfigHandler(gameConfigQueryService)
 	playerOperatingQueryService := service.NewPlayerOperatingQueryService(
@@ -123,32 +125,40 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	engine.GET("/healthz", healthHandler.GetHealth)
 
 	apiV1 := engine.Group("/api/v1/sandbox-game")
-	apiV1.Use(middleware.AuthBypass())
+	publicAuth := apiV1.Group("/auth")
+	publicAuth.POST("/login", authHandler.Login)
+
+	protected := apiV1.Group("")
+	protected.Use(resolveSandboxAuthMiddleware(cfg, authService))
 	{
-		gameConfig := apiV1.Group("/game-config")
+		authGroup := protected.Group("/auth")
+		authGroup.GET("/get-current-user", authHandler.GetCurrentUser)
+		authGroup.POST("/logout", authHandler.Logout)
+
+		gameConfig := protected.Group("/game-config")
 		gameConfig.GET("/get-current", gameConfigHandler.GetCurrent)
 		gameConfig.GET("/get-year-tabs", gameConfigHandler.GetYearTabs)
 
-		playerOperating := apiV1.Group("/player-operating")
+		playerOperating := protected.Group("/player-operating")
 		playerOperating.GET("/get-year-view", playerOperatingHandler.GetYearView)
 		playerOperating.PUT("/save-draft", playerOperatingHandler.SaveDraft)
 		playerOperating.POST("/submit-stage", playerOperatingHandler.SubmitStage)
 
-		playerReport := apiV1.Group("/player-report")
+		playerReport := protected.Group("/player-report")
 		playerReport.GET("/get-view", playerReportHandler.GetView)
 		playerReport.PUT("/save-draft", playerReportHandler.SaveDraft)
 		playerReport.POST("/submit", playerReportHandler.Submit)
 
-		adminSummary := apiV1.Group("/admin-summary")
+		adminSummary := protected.Group("/admin-summary")
 		adminSummary.GET("/get-year-summary", adminSummaryHandler.GetYearSummary)
 		adminSummary.GET("/get-final-ranking", adminSummaryHandler.GetFinalRanking)
 
-		adminGroupData := apiV1.Group("/admin-group-data")
+		adminGroupData := protected.Group("/admin-group-data")
 		adminGroupData.GET("/list-groups", adminGroupDataHandler.ListGroups)
 		adminGroupData.GET("/get-operating-view", adminGroupDataHandler.GetOperatingView)
 		adminGroupData.GET("/get-report-view", adminGroupDataHandler.GetReportView)
 
-		adminControl := apiV1.Group("/admin-control")
+		adminControl := protected.Group("/admin-control")
 		adminControl.GET("/get-config", adminControlHandler.GetConfig)
 		adminControl.PUT("/update-final-year", adminControlHandler.UpdateFinalYear)
 		adminControl.POST("/open-next-year", adminControlHandler.OpenNextYear)
@@ -169,4 +179,11 @@ func resolveGinMode(mode string) string {
 	default:
 		return gin.DebugMode
 	}
+}
+
+func resolveSandboxAuthMiddleware(cfg *appconfig.Config, authService *service.AuthService) gin.HandlerFunc {
+	if strings.EqualFold(strings.TrimSpace(cfg.Auth.Mode), "bypass") {
+		return middleware.AuthBypass()
+	}
+	return middleware.RequireAuth(authService)
 }

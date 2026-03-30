@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <aside class="sidebar">
     <section class="panel">
       <h3>页面状态</h3>
@@ -9,19 +9,19 @@
         </div>
         <div>
           <dt>年度状态</dt>
-          <dd>{{ view?.yearStatus || '--' }}</dd>
+          <dd>{{ formatYearStatus(view?.yearStatus) }}</dd>
         </div>
         <div>
           <dt>当前阶段</dt>
-          <dd>{{ view?.currentStageCode || '--' }}</dd>
+          <dd>{{ formatStageCode(view?.currentStageCode) }}</dd>
         </div>
         <div>
           <dt>财报状态</dt>
-          <dd>{{ view?.reportStatus || '--' }}</dd>
+          <dd>{{ formatReportStatus(view?.reportStatus) }}</dd>
         </div>
         <div>
           <dt>经营状态</dt>
-          <dd :class="{ danger: view?.businessStatus === 'BANKRUPT' }">{{ view?.businessStatus || '--' }}</dd>
+          <dd :class="{ danger: view?.businessStatus === 'BANKRUPT' }">{{ formatBusinessStatus(view?.businessStatus) }}</dd>
         </div>
         <div>
           <dt>最近草稿</dt>
@@ -37,7 +37,7 @@
           {{ saving ? '保存中...' : '保存草稿' }}
         </button>
         <button type="button" class="btn primary" :disabled="saving || submitting || !view?.canSubmit" @click="$emit('submit')">
-          {{ submitting ? '提交中...' : `提交 ${view?.currentStageCode || ''}` }}
+          {{ submitting ? '提交中...' : `提交${view?.currentStageCode ? formatStageCode(view.currentStageCode) : ''}` }}
         </button>
       </div>
       <p class="hint">阶段提交成功后，会提醒玩家关注贷款更新。</p>
@@ -48,7 +48,7 @@
       <ul class="history-list">
         <li v-if="!view?.stageSubmitHistory?.length" class="empty">当前年份还没有正式提交记录</li>
         <li v-for="item in view?.stageSubmitHistory" :key="`${item.stageCode}-${item.submitVersion}`">
-          <strong>{{ item.stageCode }}</strong>
+          <strong>{{ formatStageCode(item.stageCode) }}</strong>
           <span>v{{ item.submitVersion }}</span>
           <span>期末现金 {{ item.periodEndCash.toLocaleString('zh-CN') }}</span>
           <span>{{ formatTime(item.submitTime) }}</span>
@@ -62,6 +62,12 @@
 import { computed } from 'vue'
 
 import type { PlayerOperatingView } from '@/types/sandbox-game'
+import {
+  formatBusinessStatus,
+  formatReportStatus,
+  formatStageCode,
+  formatYearStatus,
+} from '@/utils/sandbox-game-display'
 
 const props = defineProps<{
   view: PlayerOperatingView | null

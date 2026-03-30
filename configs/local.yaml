@@ -1,4 +1,4 @@
-app:
+﻿app:
   name: sandbox-game
   version: 0.1.0
 
@@ -13,9 +13,11 @@ log:
   level: debug
 
 mysql:
-  dsn: root:123456@tcp(127.0.0.1:3306)/sandbox_game?charset=utf8mb4&parseTime=True&loc=Local
+  dsn: root:123456@tcp(127.0.0.1:3306)/sandbox_game_rehearsal?charset=utf8mb4&parseTime=True&loc=Local
   maxOpenConns: 10
   maxIdleConns: 5
 
 auth:
   mode: local
+  tokenSecret: sandbox-game-local-secret
+  tokenExpireSeconds: 28800

@@ -1,7 +1,8 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
+import { formatStageCode } from '@/utils/sandbox-game-display'
 import {
   getPlayerOperatingYearView,
   savePlayerOperatingDraft,

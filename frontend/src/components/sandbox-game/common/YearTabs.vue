@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="year-tabs">
     <button
       v-for="item in tabs"
@@ -15,13 +15,14 @@
       @click="$emit('select', item.yearNo)"
     >
       <span class="label">{{ item.label }}</span>
-      <span class="status">{{ item.tabStatus }}</span>
+      <span class="status">{{ formatYearTabStatus(item.tabStatus) }}</span>
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { YearTabItem } from '@/types/sandbox-game'
+import { formatYearTabStatus } from '@/utils/sandbox-game-display'
 
 defineProps<{
   tabs: YearTabItem[]

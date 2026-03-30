@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <aside class="sidebar">
     <section class="panel">
       <h3>当前状态</h3>
@@ -9,15 +9,15 @@
         </div>
         <div>
           <dt>年度状态</dt>
-          <dd>{{ view?.yearStatus || '--' }}</dd>
+          <dd>{{ formatYearStatus(view?.yearStatus) }}</dd>
         </div>
         <div>
           <dt>财报状态</dt>
-          <dd>{{ view?.reportStatus || '--' }}</dd>
+          <dd>{{ formatReportStatus(view?.reportStatus) }}</dd>
         </div>
         <div>
           <dt>经营状态</dt>
-          <dd :class="{ danger: view?.businessStatus === 'BANKRUPT' }">{{ view?.businessStatus || '--' }}</dd>
+          <dd :class="{ danger: view?.businessStatus === 'BANKRUPT' }">{{ formatBusinessStatus(view?.businessStatus) }}</dd>
         </div>
         <div>
           <dt>最近草稿</dt>
@@ -66,6 +66,11 @@
 import { computed } from 'vue'
 
 import type { PlayerReportView, ReportComputedPayload } from '@/types/sandbox-game'
+import {
+  formatBusinessStatus,
+  formatReportStatus,
+  formatYearStatus,
+} from '@/utils/sandbox-game-display'
 
 const props = defineProps<{
   view: PlayerReportView | null

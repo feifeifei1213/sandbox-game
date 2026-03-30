@@ -40,7 +40,9 @@ type MySQLConfig struct {
 }
 
 type AuthConfig struct {
-	Mode string `mapstructure:"mode"`
+	Mode               string `mapstructure:"mode"`
+	TokenSecret        string `mapstructure:"tokenSecret"`
+	TokenExpireSeconds int64  `mapstructure:"tokenExpireSeconds"`
 }
 
 // Address 返回 HTTP 服务监听地址。
@@ -73,6 +75,8 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("mysql.maxOpenConns", 10)
 	v.SetDefault("mysql.maxIdleConns", 5)
 	v.SetDefault("auth.mode", "local")
+	v.SetDefault("auth.tokenSecret", "sandbox-game-local-secret")
+	v.SetDefault("auth.tokenExpireSeconds", 28800)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config file %s: %w", configPath, err)

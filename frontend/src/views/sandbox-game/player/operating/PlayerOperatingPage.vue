@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="player-page">
     <div class="shell">
       <header class="page-header">
@@ -11,6 +11,8 @@
           <span class="pill">组别：{{ activeView?.groupId ?? '--' }}</span>
           <span class="pill">开放年份：{{ activeConfig?.currentOpenYear ?? '--' }}</span>
           <span class="pill">最终年份：{{ activeConfig?.finalYear ?? '--' }}</span>
+          <span v-if="!previewMode && currentUser" class="pill">账号：{{ currentUser.username }}</span>
+          <button v-if="!previewMode" class="logout-button" type="button" @click="handleLogout">退出登录</button>
           <span v-if="previewMode" class="pill preview-pill">开发预览</span>
         </div>
       </header>
@@ -35,15 +37,15 @@
             </div>
             <div class="status-item">
               <span>年度状态</span>
-              <strong>{{ activeView?.yearStatus || '--' }}</strong>
+              <strong>{{ formatYearStatus(activeView?.yearStatus) }}</strong>
             </div>
             <div class="status-item">
               <span>经营阶段</span>
-              <strong>{{ activeView?.currentStageCode || '--' }}</strong>
+              <strong>{{ formatStageCode(activeView?.currentStageCode) }}</strong>
             </div>
             <div class="status-item">
               <span>财报状态</span>
-              <strong>{{ activeView?.reportStatus || '--' }}</strong>
+              <strong>{{ formatReportStatus(activeView?.reportStatus) }}</strong>
             </div>
           </section>
 
@@ -87,6 +89,8 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import OperatingSheet from '@/components/sandbox-game/player/OperatingSheet.vue'
 import OperatingSidebar from '@/components/sandbox-game/player/OperatingSidebar.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
+import { useAuthStore } from '@/stores/auth'
+import { formatReportStatus, formatStageCode, formatYearStatus } from '@/utils/sandbox-game-display'
 import type { PageMessage } from '@/stores/player-operating'
 import { usePlayerOperatingStore } from '@/stores/player-operating'
 import {
@@ -103,6 +107,7 @@ const AUTO_SAVE_INTERVAL = 5 * 60 * 1000
 const route = useRoute()
 const router = useRouter()
 const store = usePlayerOperatingStore()
+const authStore = useAuthStore()
 const {
   currentConfig,
   yearTabs,
@@ -117,6 +122,7 @@ const {
   pageMessage,
   reportEnabled,
 } = storeToRefs(store)
+const { currentUser } = storeToRefs(authStore)
 
 const previewDraftPayload = ref<OperatingPayload>(buildPreviewOperatingPayload(0))
 const previewDirty = ref(false)
@@ -291,6 +297,14 @@ function goReport() {
     path: '/sandbox-game/player/report',
     query: previewMode.value ? { yearNo: String(activeSelectedYear.value), preview: '1' } : { yearNo: String(activeSelectedYear.value) },
   })
+}
+
+async function handleLogout() {
+  try {
+    await authStore.logout()
+  } finally {
+    await router.replace('/sandbox-game/login')
+  }
 }
 
 function resetPreviewState(yearNo: number) {
@@ -525,6 +539,15 @@ function buildPreviewDerivedValues(yearNo: number) {
   color: #946200;
 }
 
+.logout-button {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #d4dae4;
+  background: #ffffff;
+  color: var(--text);
+}
+
 .toolbar-card {
   padding: 16px 18px;
   border-bottom: 1px solid var(--line);
@@ -648,3 +671,12 @@ function buildPreviewDerivedValues(yearNo: number) {
   }
 }
 </style>
+
+
+
+
+
+
+
+
+

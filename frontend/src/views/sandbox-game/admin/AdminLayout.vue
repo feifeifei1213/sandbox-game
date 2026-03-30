@@ -12,6 +12,8 @@
           <span class="pill">当前开放：{{ config?.currentOpenYear ?? '--' }}</span>
           <span class="pill">共享基线：{{ config?.initialBaselineSubmitted ? '已提交' : '未提交' }}</span>
           <span class="pill">下一年：{{ config?.nextOpenableYear ?? '--' }}</span>
+          <span v-if="currentUser" class="pill">账号：{{ currentUser.username }}</span>
+          <button class="logout-button" type="button" @click="handleLogout">退出登录</button>
         </div>
       </header>
 
@@ -34,13 +36,17 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { RouterView } from 'vue-router'
+import { RouterView, useRouter } from 'vue-router'
 
 import AdminNav from '@/components/sandbox-game/admin/AdminNav.vue'
 import { useAdminShellStore } from '@/stores/admin-shell'
+import { useAuthStore } from '@/stores/auth'
 
+const router = useRouter()
 const shellStore = useAdminShellStore()
+const authStore = useAuthStore()
 const { config, pageMessage } = storeToRefs(shellStore)
+const { currentUser } = storeToRefs(authStore)
 
 onMounted(async () => {
   if (config.value) {
@@ -52,6 +58,14 @@ onMounted(async () => {
     // 错误消息由 store 统一展示。
   }
 })
+
+async function handleLogout() {
+  try {
+    await authStore.logout()
+  } finally {
+    await router.replace('/sandbox-game/login')
+  }
+}
 </script>
 
 <style scoped>
@@ -114,6 +128,15 @@ onMounted(async () => {
   border: 1px solid var(--line);
   background: #ffffff;
   font-size: 13px;
+}
+
+.logout-button {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #d4dae4;
+  background: #ffffff;
+  color: var(--text);
 }
 
 .message-bar {
