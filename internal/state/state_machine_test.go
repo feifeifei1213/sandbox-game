@@ -146,11 +146,11 @@ func TestBuildOperatingPermissionForQ1(t *testing.T) {
 	}
 }
 
-func TestUnlockCompletedYearFallsBackToOperating(t *testing.T) {
+func TestUnlockOperatingYearFallsBackToTargetStage(t *testing.T) {
 	t.Parallel()
 
 	machine := NewStateMachine()
-	next, err := machine.UnlockYear(RuntimeState{
+	next, err := machine.UnlockOperatingYear(RuntimeState{
 		YearNo:           1,
 		YearType:         enum.YearTypeFormal,
 		YearStatus:       enum.YearStatusCompleted,
@@ -158,13 +158,16 @@ func TestUnlockCompletedYearFallsBackToOperating(t *testing.T) {
 		ReportStatus:     enum.ReportStatusSubmitted,
 		BusinessStatus:   enum.BusinessStatusNormal,
 		SummaryEffective: true,
-	}, false)
+	}, StageCodeQ2, false)
 	if err != nil {
-		t.Fatalf("unlock year failed: %v", err)
+		t.Fatalf("unlock operating year failed: %v", err)
 	}
 
 	if next.YearStatus != enum.YearStatusOperating {
 		t.Fatalf("expected yearStatus=%s, got %s", enum.YearStatusOperating, next.YearStatus)
+	}
+	if next.StageStatus != enum.StageStatusQ2Open {
+		t.Fatalf("expected stageStatus=%s, got %s", enum.StageStatusQ2Open, next.StageStatus)
 	}
 	if next.ReportStatus != enum.ReportStatusLocked {
 		t.Fatalf("expected reportStatus=%s, got %s", enum.ReportStatusLocked, next.ReportStatus)
@@ -174,18 +177,49 @@ func TestUnlockCompletedYearFallsBackToOperating(t *testing.T) {
 	}
 }
 
+func TestUnlockReportYearFallsBackToReportPending(t *testing.T) {
+	t.Parallel()
+
+	machine := NewStateMachine()
+	next, err := machine.UnlockReportYear(RuntimeState{
+		YearNo:           1,
+		YearType:         enum.YearTypeFormal,
+		YearStatus:       enum.YearStatusCompleted,
+		StageStatus:      enum.StageStatusYearEndOpen,
+		ReportStatus:     enum.ReportStatusSubmitted,
+		BusinessStatus:   enum.BusinessStatusNormal,
+		SummaryEffective: true,
+	}, false)
+	if err != nil {
+		t.Fatalf("unlock report year failed: %v", err)
+	}
+
+	if next.YearStatus != enum.YearStatusReportPending {
+		t.Fatalf("expected yearStatus=%s, got %s", enum.YearStatusReportPending, next.YearStatus)
+	}
+	if next.StageStatus != enum.StageStatusYearEndOpen {
+		t.Fatalf("expected stageStatus=%s, got %s", enum.StageStatusYearEndOpen, next.StageStatus)
+	}
+	if next.ReportStatus != enum.ReportStatusOpen {
+		t.Fatalf("expected reportStatus=%s, got %s", enum.ReportStatusOpen, next.ReportStatus)
+	}
+	if next.SummaryEffective {
+		t.Fatal("expected summary to be withdrawn after report unlock")
+	}
+}
+
 func TestUnlockRejectedAfterNextYearOpened(t *testing.T) {
 	t.Parallel()
 
 	machine := NewStateMachine()
-	_, err := machine.UnlockYear(RuntimeState{
+	_, err := machine.UnlockOperatingYear(RuntimeState{
 		YearNo:         1,
 		YearType:       enum.YearTypeFormal,
 		YearStatus:     enum.YearStatusCompleted,
 		StageStatus:    enum.StageStatusYearEndOpen,
 		ReportStatus:   enum.ReportStatusSubmitted,
 		BusinessStatus: enum.BusinessStatusNormal,
-	}, true)
+	}, StageCodeYearEnd, true)
 	if err == nil {
 		t.Fatal("expected unlock to be rejected")
 	}

@@ -15,7 +15,9 @@ type AdminControlSubmitInitialBaselineRequest struct {
 }
 
 type AdminControlUnlockYearRequest struct {
-	GroupID *int64 `json:"groupId" binding:"required"`
-	YearNo  *int   `json:"yearNo" binding:"required"`
-	Reason  string `json:"reason" binding:"required"`
+	GroupID          *int64  `json:"groupId" binding:"required"`
+	YearNo           *int    `json:"yearNo" binding:"required"`
+	UnlockTargetType string  `json:"unlockTargetType"`
+	TargetStageCode  *string `json:"targetStageCode"`
+	Reason           string  `json:"reason"`
 }

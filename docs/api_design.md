@@ -731,55 +731,9 @@ Go DTO 建议：
 {
   "groupId": 1,
   "yearNo": 2,
-  "reason": "现场核对后发现 Q2 数据需修正"
-}
-```
-
-规则：
-
-- 仅管理员可执行
-- 仅允许在 `下一年尚未开放前` 执行
-- 前端不预判是否可解锁，管理员点击后直接提交；服务端只做最小硬校验
-- 若该年已提交财报，则财报自动失效
-- 若该年已计入汇总，则汇总临时撤回
-- 若该年结果曾触发该组破产，解锁成功后应临时恢复为 `NORMAL`，待重新提交后再重新判定
-- 必须记录解锁日志
-
-最小硬校验建议：
-
-- 目标组存在
-- 目标年份存在
-- 下一年尚未开放
-- 目标年份当前不是已可编辑状态
-
-响应字段建议：
-
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `groupId` | `int64` | 目标组 |
-| `yearNo` | `int` | 目标年份 |
-| `yearStatus` | `string` | 解锁后年份主状态 |
-| `stageStatus` | `string` | 解锁后经营阶段状态 |
-| `reportStatus` | `string` | 解锁后财报状态 |
-| `summaryEffective` | `bool` | 是否仍计入正式汇总 |
-| `businessStatus` | `string` | 解锁后经营状态 |
-| `unlockLogId` | `int64` | 解锁日志 ID |
-
-#### 6.5.7 定向异常解锁扩展（高优先级迭代项）
-
-背景：
-
-- 当前 `unlock-year` 仅按“某组 + 某年”做年份级解锁，无法表达管理员本次究竟要回退经营页还是财报页。
-- 正式需求已确认：后续迭代需支持按目标页面发起解锁。
-
-请求体扩展建议：
-
-```json
-{
-  "groupId": 1,
-  "yearNo": 0,
   "unlockTargetType": "OPERATING",
-  "reason": "现场核对后需要回退经营页"
+  "targetStageCode": "Q2",
+  "reason": "现场核对后发现 Q2 数据需修正"
 }
 ```
 
@@ -790,24 +744,86 @@ Go DTO 建议：
 | `groupId` | `int64` | 是 | 目标组 |
 | `yearNo` | `int` | 是 | 目标年份 |
 | `unlockTargetType` | `string` | 是 | `OPERATING` / `REPORT` |
-| `reason` | `string` | 是 | 管理员确认后的原因 |
+| `targetStageCode` | `string` | 条件必填 | 当 `unlockTargetType = OPERATING` 时必填，允许值：`Q1 / Q2 / Q3 / Q4 / YEAR_END` |
+| `reason` | `string` | 是 | 管理员填写的异常解锁原因 |
 
-规则补充：
+规则：
 
-- 当 `unlockTargetType = OPERATING` 时，服务端不得仅因财报页仍处于可编辑状态，就返回“当前年份仍处于可编辑状态，无需解锁”。
-- `OPERATING` 解锁成功后，应把目标年份恢复到经营态，并锁回或失效财报结果。
-- `REPORT` 解锁成功后，只回收财报结果，不额外放开经营页已锁定区。
-- 错误提示应与目标类型一致，例如：
-  - `经营页当前无需解锁`
-  - `财报页当前无需解锁`
-  - `下一年已开放，不能再解锁本年`
+- 仅管理员可执行。
+- 仅允许在 `下一年尚未开放前` 执行。
+- 前端不做复杂可解锁预判，管理员点击后直接提交；服务端负责最终硬校验。
+- 仅允许对“已正式提交”的目标阶段或财报结果执行异常解锁。
+- 当 `unlockTargetType = OPERATING` 时，服务端不得仅因财报页仍处于可编辑状态，就返回“当前年份已处于可编辑状态”。
+- 当 `unlockTargetType = REPORT` 时，不回退经营页已生效阶段。
+- 经营页异常解锁后：
+  - 早于目标阶段的经营结果继续有效并保持只读
+  - 目标阶段恢复可编辑
+  - 晚于目标阶段的经营结果失效但保留原值，标记为 `失效草稿`
+  - 财报结果同步失效，财报手工值保留为 `失效草稿`
+- 财报页异常解锁后：
+  - 经营页已生效结果保持不变
+  - 财报结果失效并恢复可编辑
+  - 财报手工值保留为 `失效草稿`
+- 若该年已计入汇总，则汇总必须立即失效。
+- 若该年结果曾触发该组破产，且破产依据来自本次被失效的结果，则解锁成功后应临时恢复为 `NORMAL`，待重新提交后再重新判定。
+- 必须记录异常解锁日志与管理员动作日志。
 
-兼容策略建议：
+响应字段建议：
 
-- 保持路径 `POST /admin-control/unlock-year` 不变。
-- 在后续迭代中为请求体新增 `unlockTargetType` 必填字段。
-- 管理端组数据页解锁弹窗需同步增加“解锁目标”选择，不再只传 `groupId + yearNo + reason`。
-- 当前已落地接口仍视为 `v1` 口径，直到上述扩展正式开发完成。
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `groupId` | `int64` | 目标组 |
+| `yearNo` | `int` | 目标年份 |
+| `unlockTargetType` | `string` | 本次解锁目标类型 |
+| `targetStageCode` | `string` | 本次回退阶段；当目标为 `REPORT` 时可为空 |
+| `yearStatus` | `string` | 解锁后年份主状态 |
+| `editableStageCode` | `string` | 当前重新开放可编辑的经营阶段；财报页解锁时可为空 |
+| `reportStatus` | `string` | 解锁后财报状态 |
+| `summaryEffective` | `bool` | 是否仍计入正式汇总 |
+| `businessStatus` | `string` | 解锁后经营状态 |
+| `unlockLogId` | `int64` | 解锁日志 ID |
+
+#### 6.5.7 后端实现规则清单
+
+1. DTO 与枚举
+- `UnlockYearReq` 必须新增 `unlockTargetType`、`targetStageCode` 字段。
+- 服务端应显式定义 `UnlockTargetType` 与 `StageCode` 枚举，避免字符串散落在业务代码中。
+
+2. 服务端校验
+- 校验目标组、目标年份存在。
+- 校验下一年尚未开放。
+- 校验 `reason` 非空。
+- 校验 `unlockTargetType` 合法。
+- 当目标为 `OPERATING` 时，校验 `targetStageCode` 合法且该阶段已正式提交。
+- 当目标为 `REPORT` 时，校验财报结果已正式提交。
+
+3. 经营页异常解锁执行规则
+- 按目标阶段回退有效状态，而不是回退到“当前最新阶段”。
+- 目标阶段之前的有效经营结果继续保留。
+- 目标阶段之后的经营结果与财报结果转为 `失效草稿`。
+- `失效草稿` 原值必须保留，不允许直接清空。
+
+4. 财报页异常解锁执行规则
+- 不改变经营页已生效阶段。
+- 财报结果转为 `失效草稿` 并恢复为可编辑。
+- 汇总结果同步失效。
+
+5. 结果口径与关联处理
+- 汇总、破产判定、下一年结转只读取 `有效结果`，不读取 `失效草稿`。
+- 当异常解锁导致原破产依据失效时，应临时恢复 `NORMAL`。
+- 重新提交成功后，再重新生成正式汇总与正式状态。
+
+6. 审计与日志
+- `sg_admin_unlock_log` 应补充或正式使用：目标类型、目标阶段、原因、解锁前状态、解锁后状态。
+- `sg_admin_action_log` 继续记录操作人、操作时间与动作摘要。
+
+7. 错误码与提示
+- 错误提示必须目标化，不再只返回通用“当前年份已处于可编辑状态”。
+- 推荐至少区分：经营页无需解锁、财报页无需解锁、目标阶段未提交、财报未提交、下一年已开放、目标类型非法、阶段非法。
+
+8. 测试覆盖
+- 单元测试覆盖：`OPERATING/Q1`、`OPERATING/Q2`、`OPERATING/YEAR_END`、`REPORT` 四类主场景。
+- 集成测试覆盖：失效草稿保留、汇总失效、破产恢复、重新提交后重新生效。
 
 ---
 
@@ -1010,7 +1026,13 @@ type AdminActionSummaryResp struct {
 | `ErrAdminControlInitialBaselineInvalid` | `422` | 初始基线载荷缺失或结构非法 | `初始基线数据不完整` |
 | `ErrAdminControlUnlockTargetNotFound` | `404` | 目标组或目标年份不存在 | `未找到需要解锁的目标数据` |
 | `ErrAdminControlUnlockNextYearOpened` | `409` | 下一年已开放后仍尝试解锁 | `下一年已开放，不能再解锁本年` |
-| `ErrAdminControlUnlockAlreadyEditable` | `409` | 目标年份本就可编辑 | `当前年份已处于可编辑状态` |
+| `ErrAdminControlUnlockTargetTypeRequired` | `422` | 未选择解锁目标类型 | `请选择解锁目标` |
+| `ErrAdminControlUnlockTargetTypeInvalid` | `422` | 解锁目标类型非法 | `异常解锁目标类型不合法` |
+| `ErrAdminControlUnlockStageRequired` | `422` | 经营页异常解锁未选择阶段 | `请选择要回退的经营阶段` |
+| `ErrAdminControlUnlockStageInvalid` | `422` | 回退阶段非法 | `经营回退阶段不合法` |
+| `ErrAdminControlUnlockTargetNotSubmitted` | `409` | 目标阶段或财报尚未正式提交 | `目标尚未正式提交，不能解锁` |
+| `ErrAdminControlOperatingAlreadyEditable` | `409` | 经营页当前无需解锁 | `经营页当前无需解锁` |
+| `ErrAdminControlReportAlreadyEditable` | `409` | 财报页当前无需解锁 | `财报页当前无需解锁` |
 | `ErrAdminControlUnlockReasonRequired` | `422` | 未填写解锁原因 | `请填写异常解锁原因` |
 
 ---
@@ -1077,4 +1099,5 @@ type AdminActionSummaryResp struct {
 - `ReportManualPayload` 的最终字段命名说明
 - 详细接口示例 JSON 样例库
 - `.http` 用例文件
-- 异常解锁目标类型扩展（unlockTargetType）及对应前端解锁弹窗的目标化交互
+- 异常解锁日志的高级筛选条件与导出策略
+

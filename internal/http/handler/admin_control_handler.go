@@ -297,7 +297,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusBadRequest,
 			enum.BadRequestCode,
-			"\u5f02\u5e38\u89e3\u9501\u53c2\u6570\u4e0d\u6b63\u786e",
+			"异常解锁参数不正确",
 			err,
 		))
 		return
@@ -306,7 +306,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusBadRequest,
 			enum.BadRequestCode,
-			"groupId \u53c2\u6570\u4e0d\u6b63\u786e",
+			"groupId 参数不正确",
 			nil,
 		))
 		return
@@ -315,22 +315,29 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusBadRequest,
 			enum.BadRequestCode,
-			"yearNo \u53c2\u6570\u4e0d\u6b63\u786e",
+			"yearNo 参数不正确",
 			nil,
 		))
 		return
 	}
-	if !ensureAdminIdentity(c, "\u5f53\u524d\u8eab\u4efd\u65e0\u6743\u6267\u884c\u5f02\u5e38\u89e3\u9501") {
+	if !ensureAdminIdentity(c, "当前身份无权执行异常解锁") {
 		return
+	}
+
+	targetStageCode := ""
+	if req.TargetStageCode != nil {
+		targetStageCode = *req.TargetStageCode
 	}
 
 	identity, _ := middleware.GetAuthIdentity(c)
 	result, err := h.commandService.UnlockYear(c.Request.Context(), service.UnlockYearCommand{
-		GroupID:      *req.GroupID,
-		YearNo:       *req.YearNo,
-		Reason:       req.Reason,
-		OperatorID:   identity.UserID,
-		OperatorName: identity.Username,
+		GroupID:          *req.GroupID,
+		YearNo:           *req.YearNo,
+		UnlockTargetType: req.UnlockTargetType,
+		TargetStageCode:  targetStageCode,
+		Reason:           req.Reason,
+		OperatorID:       identity.UserID,
+		OperatorName:     identity.Username,
 	})
 	if err != nil {
 		switch {
@@ -338,24 +345,52 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusNotFound,
 				enum.NotFoundCode,
-				"\u672a\u627e\u5230\u76ee\u6807\u5c0f\u7ec4\u6216\u5e74\u4efd\u6570\u636e",
+				"未找到目标小组或年份数据",
 				err,
 			))
 		case errors.Is(err, service.ErrAdminControlUnlockReasonRequired):
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusUnprocessableEntity,
 				enum.UnprocessableEntityCode,
-				"\u89e3\u9501\u539f\u56e0\u4e0d\u80fd\u4e3a\u7a7a",
+				"解锁原因不能为空",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlUnlockTargetTypeRequired):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"解锁目标不能为空",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlUnlockTargetTypeInvalid):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"解锁目标不合法",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlUnlockStageRequired):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"经营页回退阶段不能为空",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlUnlockStageInvalid):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"经营页回退阶段不合法",
 				err,
 			))
 		case errors.Is(err, service.ErrAdminControlUnlockNotAllowed):
 			msg := err.Error()
 			if msg == "" || msg == service.ErrAdminControlUnlockNotAllowed.Error() {
-				msg = "\u5f53\u524d\u5e74\u4efd\u4e0d\u6ee1\u8db3\u5f02\u5e38\u89e3\u9501\u6761\u4ef6"
+				msg = "当前目标不满足异常解锁条件"
 			}
 			middleware.AbortWithAppError(c, middleware.NewAppError(
-				http.StatusUnprocessableEntity,
-				enum.UnprocessableEntityCode,
+				http.StatusConflict,
+				enum.ConflictCode,
 				msg,
 				err,
 			))
@@ -363,7 +398,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,
 				enum.InternalServerErrorCode,
-				"\u5f02\u5e38\u89e3\u9501\u5931\u8d25",
+				"异常解锁失败",
 				err,
 			))
 		}

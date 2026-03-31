@@ -12,6 +12,7 @@ import (
 	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
 	"sandbox-game/internal/repository"
+	"sandbox-game/internal/state"
 )
 
 func TestOpenNextYearOpensFormalYearForNormalGroupsOnly(t *testing.T) {
@@ -124,11 +125,13 @@ func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *test
 
 	service := NewAdminControlCommandService(tx)
 	result, err := service.UnlockYear(ctx, UnlockYearCommand{
-		GroupID:      groupID,
-		YearNo:       1,
-		Reason:       "联调修正：回收 1 年结果重新提交",
-		OperatorID:   90012,
-		OperatorName: "integration-admin",
+		GroupID:          groupID,
+		YearNo:           1,
+		UnlockTargetType: unlockTargetTypeOperating,
+		TargetStageCode:  state.StageCodeQ2,
+		Reason:           "integration fix: rollback to Q2",
+		OperatorID:       90012,
+		OperatorName:     "integration-admin",
 	})
 	if err != nil {
 		t.Fatalf("unlock year: %v", err)
@@ -137,8 +140,17 @@ func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *test
 	if result.YearStatus != enum.YearStatusOperating {
 		t.Fatalf("expected unlocked year status OPERATING, got %s", result.YearStatus)
 	}
-	if result.StageStatus != enum.StageStatusYearEndOpen {
-		t.Fatalf("expected unlocked stage status YEAR_END_OPEN, got %s", result.StageStatus)
+	if result.UnlockTargetType != unlockTargetTypeOperating {
+		t.Fatalf("expected unlock target type OPERATING, got %s", result.UnlockTargetType)
+	}
+	if result.TargetStageCode == nil || *result.TargetStageCode != state.StageCodeQ2 {
+		t.Fatalf("expected targetStageCode Q2, got %#v", result.TargetStageCode)
+	}
+	if result.EditableStageCode == nil || *result.EditableStageCode != state.StageCodeQ2 {
+		t.Fatalf("expected editableStageCode Q2, got %#v", result.EditableStageCode)
+	}
+	if result.StageStatus != enum.StageStatusQ2Open {
+		t.Fatalf("expected unlocked stage status Q2_OPEN, got %s", result.StageStatus)
 	}
 	if result.ReportStatus != enum.ReportStatusLocked {
 		t.Fatalf("expected unlocked report status REPORT_LOCKED, got %s", result.ReportStatus)
@@ -170,7 +182,7 @@ func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *test
 	if err != nil {
 		t.Fatalf("reload year state: %v", err)
 	}
-	if yearState.YearStatus != enum.YearStatusOperating || yearState.ReportStatus != enum.ReportStatusLocked || yearState.SummaryEffective {
+	if yearState.YearStatus != enum.YearStatusOperating || yearState.StageStatus != enum.StageStatusQ2Open || yearState.ReportStatus != enum.ReportStatusLocked || yearState.SummaryEffective {
 		t.Fatalf("unexpected year state after unlock: %#v", yearState)
 	}
 
@@ -313,9 +325,9 @@ func createAdminIntegrationGroup(t *testing.T, ctx context.Context, tx *gorm.DB,
 	t.Helper()
 
 	now := time.Now()
-	uniqueSeed := now.UnixNano()
+	uniqueSeed := nextIntegrationUniqueSeed()
 	group := entity.Group{
-		GroupNo:        int(920000 + uniqueSeed%100000),
+		GroupNo:        integrationGroupNoFromSeed(uniqueSeed),
 		GroupCode:      fmt.Sprintf("IT_ADMIN_%d", uniqueSeed),
 		GroupName:      name,
 		BusinessStatus: businessStatus,

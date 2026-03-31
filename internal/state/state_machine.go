@@ -41,7 +41,6 @@ var stageCodeByStatus = map[string]string{
 	enum.StageStatusYearEndOpen: StageCodeYearEnd,
 }
 
-// RuntimeState 表示组 + 年维度的最小运行时状态。
 type RuntimeState struct {
 	YearNo                    int
 	YearType                  string
@@ -54,19 +53,14 @@ type RuntimeState struct {
 	LatestReportSubmitVersion int
 }
 
-// StateMachine 提供首版最小状态迁移能力。
 type StateMachine struct {
 	guard *TransitionGuard
 }
 
-// NewStateMachine 创建状态机服务。
 func NewStateMachine() *StateMachine {
-	return &StateMachine{
-		guard: NewTransitionGuard(),
-	}
+	return &StateMachine{guard: NewTransitionGuard()}
 }
 
-// Validate 用于校验状态枚举和状态组合是否自洽。
 func (m *StateMachine) Validate(current RuntimeState) error {
 	if !enum.IsValidYearType(current.YearType) {
 		return fmt.Errorf("%w: unsupported yearType=%s", ErrInvalidRuntimeState, current.YearType)
@@ -117,7 +111,6 @@ func (m *StateMachine) Validate(current RuntimeState) error {
 	return nil
 }
 
-// OpenYear 将某个 LOCKED 年份开放为 OPERATING。
 func (m *StateMachine) OpenYear(current RuntimeState) (RuntimeState, error) {
 	if err := m.Validate(current); err != nil {
 		return current, err
@@ -135,7 +128,6 @@ func (m *StateMachine) OpenYear(current RuntimeState) (RuntimeState, error) {
 	return next, nil
 }
 
-// SubmitStage 推进经营阶段，年末提交后进入待财报状态。
 func (m *StateMachine) SubmitStage(current RuntimeState, stageCode string) (RuntimeState, error) {
 	if err := m.Validate(current); err != nil {
 		return current, err
@@ -167,7 +159,6 @@ func (m *StateMachine) SubmitStage(current RuntimeState, stageCode string) (Runt
 	return next, nil
 }
 
-// StartReport 将待财报状态推进为财报填写中。
 func (m *StateMachine) StartReport(current RuntimeState) (RuntimeState, error) {
 	if err := m.Validate(current); err != nil {
 		return current, err
@@ -175,6 +166,7 @@ func (m *StateMachine) StartReport(current RuntimeState) (RuntimeState, error) {
 	if current.BusinessStatus == enum.BusinessStatusBankrupt {
 		return current, fmt.Errorf("%w: bankrupt group cannot start report", ErrReportCannotStart)
 	}
+
 	switch current.YearStatus {
 	case enum.YearStatusReportPending:
 		next := current
@@ -187,7 +179,6 @@ func (m *StateMachine) StartReport(current RuntimeState) (RuntimeState, error) {
 	}
 }
 
-// SubmitReport 将财报状态推进为已完成，并根据年份决定是否计入正式汇总。
 func (m *StateMachine) SubmitReport(current RuntimeState) (RuntimeState, error) {
 	if err := m.Validate(current); err != nil {
 		return current, err
@@ -205,8 +196,29 @@ func (m *StateMachine) SubmitReport(current RuntimeState) (RuntimeState, error) 
 	return next, nil
 }
 
-// UnlockYear 负责把某组某年恢复为可重新编辑状态。
-func (m *StateMachine) UnlockYear(current RuntimeState, nextYearAlreadyOpened bool) (RuntimeState, error) {
+func (m *StateMachine) UnlockOperatingYear(current RuntimeState, targetStageCode string, nextYearAlreadyOpened bool) (RuntimeState, error) {
+	if err := m.Validate(current); err != nil {
+		return current, err
+	}
+	if !m.guard.CanUnlockYear(current, nextYearAlreadyOpened) {
+		return current, fmt.Errorf("%w: yearStatus=%s, nextYearAlreadyOpened=%t", ErrYearCannotUnlock, current.YearStatus, nextYearAlreadyOpened)
+	}
+
+	targetStageStatus, ok := StageStatusByCode(targetStageCode)
+	if !ok {
+		return current, fmt.Errorf("%w: stageCode=%s", ErrInvalidStageCode, targetStageCode)
+	}
+
+	next := current
+	next.YearStatus = enum.YearStatusOperating
+	next.StageStatus = targetStageStatus
+	next.ReportStatus = enum.ReportStatusLocked
+	next.SummaryEffective = false
+
+	return next, nil
+}
+
+func (m *StateMachine) UnlockReportYear(current RuntimeState, nextYearAlreadyOpened bool) (RuntimeState, error) {
 	if err := m.Validate(current); err != nil {
 		return current, err
 	}
@@ -215,28 +227,24 @@ func (m *StateMachine) UnlockYear(current RuntimeState, nextYearAlreadyOpened bo
 	}
 
 	next := current
-	next.YearStatus = enum.YearStatusOperating
-	next.StageStatus = unlockStageStatus(current)
-	next.ReportStatus = enum.ReportStatusLocked
+	next.YearStatus = enum.YearStatusReportPending
+	next.StageStatus = enum.StageStatusYearEndOpen
+	next.ReportStatus = enum.ReportStatusOpen
 	next.SummaryEffective = false
 
 	return next, nil
 }
 
-// CurrentStageCode 将当前阶段状态映射为接口层使用的阶段编码。
 func CurrentStageCode(stageStatus string) string {
 	return stageCodeByStatus[stageStatus]
 }
 
-// IsValidStageCode 判断阶段编码是否合法。
 func IsValidStageCode(stageCode string) bool {
 	_, ok := stageStatusByCode[stageCode]
 	return ok
 }
 
-func unlockStageStatus(current RuntimeState) string {
-	if current.YearStatus == enum.YearStatusOperating {
-		return current.StageStatus
-	}
-	return enum.StageStatusYearEndOpen
+func StageStatusByCode(stageCode string) (string, bool) {
+	stageStatus, ok := stageStatusByCode[stageCode]
+	return stageStatus, ok
 }

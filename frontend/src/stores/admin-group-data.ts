@@ -1,4 +1,4 @@
-﻿import { computed, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { unlockAdminYear } from '@/api/sandbox-game/admin-control'
@@ -12,8 +12,12 @@ import type { PlayerOperatingView, PlayerReportView } from '@/types/sandbox-game
 import type {
   AdminGroupDataPageType,
   AdminGroupOption,
+  UnlockStageCode,
+  UnlockTargetType,
   UnlockYearResult,
 } from '@/types/sandbox-game-admin'
+
+const DEFAULT_OPERATING_STAGE: UnlockStageCode = 'YEAR_END'
 
 export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', () => {
   const groups = ref<AdminGroupOption[]>([])
@@ -27,6 +31,8 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
   const pageMessage = ref<PageMessage | null>(null)
   const unlockDialogVisible = ref(false)
   const unlockReason = ref('')
+  const unlockTargetType = ref<UnlockTargetType>('OPERATING')
+  const unlockTargetStageCode = ref<UnlockStageCode | null>(DEFAULT_OPERATING_STAGE)
   const latestUnlockResult = ref<UnlockYearResult | null>(null)
   const latestUnlockReason = ref('')
 
@@ -109,6 +115,8 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
 
   function openUnlockDialog() {
     unlockReason.value = ''
+    unlockTargetType.value = selectedPageType.value === 'report' ? 'REPORT' : 'OPERATING'
+    unlockTargetStageCode.value = resolveDefaultUnlockStageCode()
     unlockDialogVisible.value = true
   }
 
@@ -120,6 +128,20 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
     unlockReason.value = reason
   }
 
+  function setUnlockTargetType(targetType: UnlockTargetType) {
+    unlockTargetType.value = targetType
+    if (targetType === 'OPERATING' && !unlockTargetStageCode.value) {
+      unlockTargetStageCode.value = resolveDefaultUnlockStageCode()
+    }
+    if (targetType === 'REPORT') {
+      unlockTargetStageCode.value = null
+    }
+  }
+
+  function setUnlockTargetStageCode(stageCode: UnlockStageCode) {
+    unlockTargetStageCode.value = stageCode
+  }
+
   async function submitUnlock() {
     if (selectedGroupId.value === null) {
       throw new Error('请先选择目标小组')
@@ -127,12 +149,17 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
     if (!unlockReason.value.trim()) {
       throw new Error('解锁原因不能为空')
     }
+    if (unlockTargetType.value === 'OPERATING' && !unlockTargetStageCode.value) {
+      throw new Error('请选择要回退的经营阶段')
+    }
 
     unlocking.value = true
     try {
       const result = await unlockAdminYear({
         groupId: selectedGroupId.value,
         yearNo: selectedYear.value,
+        unlockTargetType: unlockTargetType.value,
+        targetStageCode: unlockTargetType.value === 'OPERATING' ? unlockTargetStageCode.value : null,
         reason: unlockReason.value.trim(),
       })
       latestUnlockResult.value = result
@@ -140,7 +167,7 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
       unlockDialogVisible.value = false
       pageMessage.value = {
         type: 'success',
-        text: `异常解锁已提交，目标为第 ${selectedGroup.value?.groupNo ?? '--'} 组 ${selectedYear.value} 年。`,
+        text: `异常解锁已提交，第 ${selectedGroup.value?.groupNo ?? '--'} 组 ${selectedYear.value} 年已进入新的可编辑状态。`,
       }
       await loadCurrentView({ silent: true })
       return result
@@ -150,6 +177,14 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
     } finally {
       unlocking.value = false
     }
+  }
+
+  function resolveDefaultUnlockStageCode(): UnlockStageCode {
+    const currentStageCode = operatingView.value?.currentStageCode as UnlockStageCode | undefined
+    if (currentStageCode && ['Q1', 'Q2', 'Q3', 'Q4', 'YEAR_END'].includes(currentStageCode)) {
+      return currentStageCode
+    }
+    return DEFAULT_OPERATING_STAGE
   }
 
   return {
@@ -164,6 +199,8 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
     pageMessage,
     unlockDialogVisible,
     unlockReason,
+    unlockTargetType,
+    unlockTargetStageCode,
     latestUnlockResult,
     latestUnlockReason,
     selectedGroup,
@@ -177,6 +214,8 @@ export const useAdminGroupDataStore = defineStore('sandbox-admin-group-data', ()
     openUnlockDialog,
     closeUnlockDialog,
     setUnlockReason,
+    setUnlockTargetType,
+    setUnlockTargetStageCode,
     submitUnlock,
   }
 })
@@ -187,6 +226,3 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
   }
   return { type: 'error', text: fallback }
 }
-
-
-

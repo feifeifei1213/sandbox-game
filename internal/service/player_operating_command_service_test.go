@@ -196,9 +196,9 @@ func createIntegrationOperatingFixtures(t *testing.T, ctx context.Context, tx *g
 	t.Helper()
 
 	now := time.Now()
-	uniqueSeed := now.UnixNano()
+	uniqueSeed := nextIntegrationUniqueSeed()
 	group := entity.Group{
-		GroupNo:        int(900000 + uniqueSeed%100000),
+		GroupNo:        integrationGroupNoFromSeed(uniqueSeed),
 		GroupCode:      fmt.Sprintf("IT_OPERATING_%d", uniqueSeed),
 		GroupName:      "经营提交流程集成测试组",
 		BusinessStatus: enum.BusinessStatusNormal,

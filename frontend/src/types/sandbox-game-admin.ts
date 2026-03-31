@@ -1,5 +1,8 @@
 ﻿export type AdminGroupDataPageType = 'operating' | 'report'
 
+export type UnlockTargetType = 'OPERATING' | 'REPORT'
+export type UnlockStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEAR_END'
+
 export interface AdminActionSummary {
   actionCode: string
   operatorName: string
@@ -45,12 +48,17 @@ export interface OpenNextYearResult {
 export interface UnlockYearRequest {
   groupId: number
   yearNo: number
+  unlockTargetType: UnlockTargetType
+  targetStageCode?: UnlockStageCode | null
   reason: string
 }
 
 export interface UnlockYearResult {
   groupId: number
   yearNo: number
+  unlockTargetType: UnlockTargetType
+  targetStageCode: UnlockStageCode | null
+  editableStageCode: UnlockStageCode | null
   yearStatus: string
   stageStatus: string
   reportStatus: string

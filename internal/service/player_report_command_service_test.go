@@ -271,10 +271,10 @@ func createFormalReportFixtures(t *testing.T, ctx context.Context, tx *gorm.DB) 
 func createIntegrationGroup(t *testing.T, ctx context.Context, tx *gorm.DB, now time.Time, codePrefix string) int64 {
 	t.Helper()
 
-	uniqueSeed := now.UnixNano()
+	uniqueSeed := nextIntegrationUniqueSeed()
 	groupCode := fmt.Sprintf("ITR%d", uniqueSeed)
 	group := entity.Group{
-		GroupNo:        int(900000 + uniqueSeed%100000),
+		GroupNo:        integrationGroupNoFromSeed(uniqueSeed),
 		GroupCode:      groupCode,
 		GroupName:      codePrefix,
 		BusinessStatus: enum.BusinessStatusNormal,

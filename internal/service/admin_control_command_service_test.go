@@ -113,9 +113,26 @@ func TestEnsureUnlockYearAllowedRejectsBlankReason(t *testing.T) {
 		SummaryEffective: true,
 	}
 
-	_, err := ensureUnlockYearAllowed(current, "   ", false)
+	_, err := ensureUnlockYearAllowed(current, "   ", unlockTargetTypeOperating, state.StageCodeYearEnd, false)
 	if !errors.Is(err, ErrAdminControlUnlockReasonRequired) {
 		t.Fatalf("expected ErrAdminControlUnlockReasonRequired, got %v", err)
+	}
+}
+
+func TestEnsureUnlockYearAllowedRejectsMissingTargetType(t *testing.T) {
+	current := state.RuntimeState{
+		YearNo:           2,
+		YearType:         enum.YearTypeFormal,
+		YearStatus:       enum.YearStatusCompleted,
+		StageStatus:      enum.StageStatusYearEndOpen,
+		ReportStatus:     enum.ReportStatusSubmitted,
+		BusinessStatus:   enum.BusinessStatusNormal,
+		SummaryEffective: true,
+	}
+
+	_, err := ensureUnlockYearAllowed(current, "reason text", "", "", false)
+	if !errors.Is(err, ErrAdminControlUnlockTargetTypeRequired) {
+		t.Fatalf("expected ErrAdminControlUnlockTargetTypeRequired, got %v", err)
 	}
 }
 
@@ -130,7 +147,7 @@ func TestEnsureUnlockYearAllowedRejectsWhenNextYearAlreadyOpened(t *testing.T) {
 		SummaryEffective: true,
 	}
 
-	_, err := ensureUnlockYearAllowed(current, "reason text", true)
+	_, err := ensureUnlockYearAllowed(current, "reason text", unlockTargetTypeOperating, state.StageCodeYearEnd, true)
 	if !errors.Is(err, ErrAdminControlUnlockNotAllowed) {
 		t.Fatalf("expected ErrAdminControlUnlockNotAllowed, got %v", err)
 	}
@@ -139,27 +156,7 @@ func TestEnsureUnlockYearAllowedRejectsWhenNextYearAlreadyOpened(t *testing.T) {
 	}
 }
 
-func TestEnsureUnlockYearAllowedRejectsAlreadyEditableYear(t *testing.T) {
-	current := state.RuntimeState{
-		YearNo:           2,
-		YearType:         enum.YearTypeFormal,
-		YearStatus:       enum.YearStatusOperating,
-		StageStatus:      enum.StageStatusQ2Open,
-		ReportStatus:     enum.ReportStatusLocked,
-		BusinessStatus:   enum.BusinessStatusNormal,
-		SummaryEffective: false,
-	}
-
-	_, err := ensureUnlockYearAllowed(current, "need reopen locked section", false)
-	if !errors.Is(err, ErrAdminControlUnlockNotAllowed) {
-		t.Fatalf("expected ErrAdminControlUnlockNotAllowed, got %v", err)
-	}
-	if err.Error() != unlockYearBlockedReasonAlreadyEditing {
-		t.Fatalf("expected already editable reason, got %q", err.Error())
-	}
-}
-
-func TestEnsureUnlockYearAllowedAllowsCompletedYear(t *testing.T) {
+func TestEnsureUnlockYearAllowedRejectsOperatingUnlockWithoutStage(t *testing.T) {
 	current := state.RuntimeState{
 		YearNo:           2,
 		YearType:         enum.YearTypeFormal,
@@ -170,15 +167,92 @@ func TestEnsureUnlockYearAllowedAllowsCompletedYear(t *testing.T) {
 		SummaryEffective: true,
 	}
 
-	next, err := ensureUnlockYearAllowed(current, "fix year end report", false)
+	_, err := ensureUnlockYearAllowed(current, "reason text", unlockTargetTypeOperating, "", false)
+	if !errors.Is(err, ErrAdminControlUnlockStageRequired) {
+		t.Fatalf("expected ErrAdminControlUnlockStageRequired, got %v", err)
+	}
+}
+
+func TestEnsureUnlockYearAllowedRejectsOperatingTargetAlreadyEditable(t *testing.T) {
+	current := state.RuntimeState{
+		YearNo:           2,
+		YearType:         enum.YearTypeFormal,
+		YearStatus:       enum.YearStatusOperating,
+		StageStatus:      enum.StageStatusQ2Open,
+		ReportStatus:     enum.ReportStatusLocked,
+		BusinessStatus:   enum.BusinessStatusNormal,
+		SummaryEffective: false,
+	}
+
+	_, err := ensureUnlockYearAllowed(current, "need reopen q2", unlockTargetTypeOperating, state.StageCodeQ2, false)
+	if !errors.Is(err, ErrAdminControlUnlockNotAllowed) {
+		t.Fatalf("expected ErrAdminControlUnlockNotAllowed, got %v", err)
+	}
+	if err.Error() != unlockYearBlockedReasonOperatingEditable {
+		t.Fatalf("expected operating already editable reason, got %q", err.Error())
+	}
+}
+
+func TestEnsureUnlockYearAllowedRejectsReportTargetAlreadyEditable(t *testing.T) {
+	current := state.RuntimeState{
+		YearNo:           2,
+		YearType:         enum.YearTypeFormal,
+		YearStatus:       enum.YearStatusReportPending,
+		StageStatus:      enum.StageStatusYearEndOpen,
+		ReportStatus:     enum.ReportStatusOpen,
+		BusinessStatus:   enum.BusinessStatusNormal,
+		SummaryEffective: false,
+	}
+
+	_, err := ensureUnlockYearAllowed(current, "need reopen report", unlockTargetTypeReport, "", false)
+	if !errors.Is(err, ErrAdminControlUnlockNotAllowed) {
+		t.Fatalf("expected ErrAdminControlUnlockNotAllowed, got %v", err)
+	}
+	if err.Error() != unlockYearBlockedReasonReportEditable {
+		t.Fatalf("expected report already editable reason, got %q", err.Error())
+	}
+}
+
+func TestEnsureUnlockYearAllowedRejectsUnsubmittedOperatingTarget(t *testing.T) {
+	current := state.RuntimeState{
+		YearNo:           2,
+		YearType:         enum.YearTypeFormal,
+		YearStatus:       enum.YearStatusOperating,
+		StageStatus:      enum.StageStatusQ3Open,
+		ReportStatus:     enum.ReportStatusLocked,
+		BusinessStatus:   enum.BusinessStatusNormal,
+		SummaryEffective: false,
+	}
+
+	_, err := ensureUnlockYearAllowed(current, "need reopen year end", unlockTargetTypeOperating, state.StageCodeYearEnd, false)
+	if !errors.Is(err, ErrAdminControlUnlockNotAllowed) {
+		t.Fatalf("expected ErrAdminControlUnlockNotAllowed, got %v", err)
+	}
+	if err.Error() != unlockYearBlockedReasonTargetNotSubmitted {
+		t.Fatalf("expected target not submitted reason, got %q", err.Error())
+	}
+}
+
+func TestEnsureUnlockYearAllowedAllowsCompletedYearToQ2(t *testing.T) {
+	current := state.RuntimeState{
+		YearNo:           2,
+		YearType:         enum.YearTypeFormal,
+		YearStatus:       enum.YearStatusCompleted,
+		StageStatus:      enum.StageStatusYearEndOpen,
+		ReportStatus:     enum.ReportStatusSubmitted,
+		BusinessStatus:   enum.BusinessStatusNormal,
+		SummaryEffective: true,
+	}
+
+	next, err := ensureUnlockYearAllowed(current, "fix q2 result", unlockTargetTypeOperating, state.StageCodeQ2, false)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if next.YearStatus != enum.YearStatusOperating {
 		t.Fatalf("expected year status OPERATING, got %s", next.YearStatus)
 	}
-	if next.StageStatus != enum.StageStatusYearEndOpen {
-		t.Fatalf("expected stage status YEAR_END_OPEN, got %s", next.StageStatus)
+	if next.StageStatus != enum.StageStatusQ2Open {
+		t.Fatalf("expected stage status Q2_OPEN, got %s", next.StageStatus)
 	}
 	if next.ReportStatus != enum.ReportStatusLocked {
 		t.Fatalf("expected report status REPORT_LOCKED, got %s", next.ReportStatus)
@@ -188,7 +262,30 @@ func TestEnsureUnlockYearAllowedAllowsCompletedYear(t *testing.T) {
 	}
 }
 
-func TestEnsureUnlockYearAllowedAllowsBankruptOperatingYear(t *testing.T) {
+func TestEnsureUnlockYearAllowedAllowsCompletedYearReportUnlock(t *testing.T) {
+	current := state.RuntimeState{
+		YearNo:           2,
+		YearType:         enum.YearTypeFormal,
+		YearStatus:       enum.YearStatusCompleted,
+		StageStatus:      enum.StageStatusYearEndOpen,
+		ReportStatus:     enum.ReportStatusSubmitted,
+		BusinessStatus:   enum.BusinessStatusNormal,
+		SummaryEffective: true,
+	}
+
+	next, err := ensureUnlockYearAllowed(current, "fix report", unlockTargetTypeReport, "", false)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if next.YearStatus != enum.YearStatusReportPending {
+		t.Fatalf("expected year status REPORT_PENDING, got %s", next.YearStatus)
+	}
+	if next.ReportStatus != enum.ReportStatusOpen {
+		t.Fatalf("expected report status REPORT_OPEN, got %s", next.ReportStatus)
+	}
+}
+
+func TestEnsureUnlockYearAllowedAllowsBankruptOperatingYearRollback(t *testing.T) {
 	current := state.RuntimeState{
 		YearNo:           2,
 		YearType:         enum.YearTypeFormal,
@@ -199,12 +296,12 @@ func TestEnsureUnlockYearAllowedAllowsBankruptOperatingYear(t *testing.T) {
 		SummaryEffective: false,
 	}
 
-	next, err := ensureUnlockYearAllowed(current, "resume editing after bankrupt", false)
+	next, err := ensureUnlockYearAllowed(current, "resume editing after bankrupt", unlockTargetTypeOperating, state.StageCodeQ2, false)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
-	if next.StageStatus != enum.StageStatusQ3Open {
-		t.Fatalf("expected stage status to remain Q3_OPEN, got %s", next.StageStatus)
+	if next.StageStatus != enum.StageStatusQ2Open {
+		t.Fatalf("expected stage status Q2_OPEN, got %s", next.StageStatus)
 	}
 	if next.BusinessStatus != enum.BusinessStatusBankrupt {
 		t.Fatalf("expected business status to remain BANKRUPT before recovery, got %s", next.BusinessStatus)

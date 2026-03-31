@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="page-content">
     <header class="hero">
       <div>
@@ -122,7 +122,7 @@
         <section class="panel-card">
           <div class="panel-head">
             <strong>当前状态</strong>
-            <span>根据当前查看页面展示年度 / 阶段 / 财报状态。</span>
+            <span>根据当前查看页面展示年度、阶段和财报状态。</span>
           </div>
           <div class="status-grid">
             <div class="status-item">
@@ -162,7 +162,7 @@
             <span>是否解锁由管理员现场判断，服务端只做最小硬校验。</span>
           </div>
           <div class="unlock-box">
-            <p>若发现该组该年数据需要重新提交，可发起异常解锁，恢复当前年份为可编辑状态。</p>
+            <p>若发现该组该年需要重提，可选择解锁经营页或财报页。经营页支持回退到指定阶段，财报页则仅重新开放财报填写。</p>
             <button type="button" class="btn primary full" :disabled="!selectedGroup || unlocking" @click="openUnlockDialog">
               {{ unlocking ? '提交中...' : '打开异常解锁弹窗' }}
             </button>
@@ -172,12 +172,16 @@
         <section class="panel-card" v-if="latestUnlockResult">
           <div class="panel-head">
             <strong>最近一次解锁记录</strong>
-            <span>显示当前页面最近一次成功提交的异常解锁结果。</span>
+            <span>显示本次管理会话最近一次成功提交的异常解锁结果。</span>
           </div>
           <div class="meta-list">
             <div class="meta-item">
               <span>解锁日志 ID</span>
               <strong>{{ latestUnlockResult.unlockLogId }}</strong>
+            </div>
+            <div class="meta-item">
+              <span>解锁目标</span>
+              <strong>{{ formatUnlockTargetType(latestUnlockResult.unlockTargetType) }}</strong>
             </div>
             <div class="meta-item">
               <span>年份状态</span>
@@ -190,6 +194,14 @@
             <div class="meta-item">
               <span>财报状态</span>
               <strong>{{ formatReportStatus(latestUnlockResult.reportStatus) }}</strong>
+            </div>
+            <div class="meta-item" v-if="latestUnlockResult.targetStageCode">
+              <span>回退阶段</span>
+              <strong>{{ formatStageCode(latestUnlockResult.targetStageCode) }}</strong>
+            </div>
+            <div class="meta-item" v-if="latestUnlockResult.editableStageCode">
+              <span>重新开放阶段</span>
+              <strong>{{ formatStageCode(latestUnlockResult.editableStageCode) }}</strong>
             </div>
             <div class="meta-item wide-item">
               <span>解锁原因</span>
@@ -205,7 +217,7 @@
         <div class="dialog-head">
           <div>
             <strong>异常解锁确认</strong>
-            <span>提交前请再次确认目标组、年份和原因。</span>
+            <span>提交前请再次确认目标组、年份、解锁目标和影响范围。</span>
           </div>
         </div>
         <div class="dialog-body">
@@ -215,8 +227,30 @@
             <div><span>当前页面</span><strong>{{ selectedPageType === 'operating' ? '经营页' : '财报页' }}</strong></div>
           </div>
           <label class="field">
+            <span>解锁目标</span>
+            <select :value="unlockTargetType" :disabled="unlocking" @change="handleUnlockTargetTypeChange">
+              <option value="OPERATING">{{ formatUnlockTargetType('OPERATING') }}</option>
+              <option value="REPORT">{{ formatUnlockTargetType('REPORT') }}</option>
+            </select>
+          </label>
+          <label v-if="unlockTargetType === 'OPERATING'" class="field">
+            <span>回退阶段</span>
+            <select :value="unlockTargetStageCode ?? ''" :disabled="unlocking" @change="handleUnlockTargetStageChange">
+              <option v-for="item in unlockStageOptions" :key="item" :value="item">{{ formatStageCode(item) }}</option>
+            </select>
+          </label>
+          <div class="field impact-field">
+            <span>影响说明</span>
+            <p>{{ unlockImpactText }}</p>
+          </div>
+          <label class="field">
             <span>解锁原因</span>
-            <textarea :value="unlockReason" rows="5" placeholder="请输入管理员现场确认后的解锁原因" @input="handleUnlockReasonInput" />
+            <textarea
+              :value="unlockReason"
+              rows="5"
+              placeholder="请输入管理员现场确认后的解锁原因"
+              @input="handleUnlockReasonInput"
+            ></textarea>
           </label>
         </div>
         <div class="dialog-actions">
@@ -239,7 +273,7 @@ import ReportSheet from '@/components/sandbox-game/player/ReportSheet.vue'
 import { useAdminGroupDataStore } from '@/stores/admin-group-data'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { reportBalanceGap, type OperatingPayload, type ReportManualPayload } from '@/types/sandbox-game'
-import type { AdminGroupDataPageType } from '@/types/sandbox-game-admin'
+import type { AdminGroupDataPageType, UnlockStageCode, UnlockTargetType } from '@/types/sandbox-game-admin'
 import {
   formatBusinessStatus,
   formatReportStatus,
@@ -263,6 +297,8 @@ const {
   pageMessage,
   unlockDialogVisible,
   unlockReason,
+  unlockTargetType,
+  unlockTargetStageCode,
   latestUnlockResult,
   latestUnlockReason,
   selectedGroup,
@@ -284,6 +320,16 @@ const activeBusinessStatusText = computed(() => {
 const activeYearStatusText = computed(() => {
   const status = selectedPageType.value === 'operating' ? operatingView.value?.yearStatus : reportView.value?.yearStatus
   return formatYearStatus(status)
+})
+
+const unlockStageOptions: UnlockStageCode[] = ['Q1', 'Q2', 'Q3', 'Q4', 'YEAR_END']
+
+const unlockImpactText = computed(() => {
+  if (unlockTargetType.value === 'OPERATING') {
+    const stageText = formatStageCode(unlockTargetStageCode.value)
+    return `经营页将回退到${stageText}，后续经营结果与财报结果会失效，玩家需要重新提交。`
+  }
+  return '经营结果保持不变，财报结果会失效并重新开放填写。'
 })
 
 onMounted(async () => {
@@ -342,6 +388,16 @@ function closeUnlockDialog() {
   groupDataStore.closeUnlockDialog()
 }
 
+function handleUnlockTargetTypeChange(event: Event) {
+  const target = event.target as HTMLSelectElement
+  groupDataStore.setUnlockTargetType(target.value as UnlockTargetType)
+}
+
+function handleUnlockTargetStageChange(event: Event) {
+  const target = event.target as HTMLSelectElement
+  groupDataStore.setUnlockTargetStageCode(target.value as UnlockStageCode)
+}
+
 function handleUnlockReasonInput(event: Event) {
   const target = event.target as HTMLTextAreaElement
   groupDataStore.setUnlockReason(target.value)
@@ -383,6 +439,16 @@ function formatDateTime(value?: string | null) {
     return value
   }
   return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatUnlockTargetType(value?: UnlockTargetType | null) {
+  if (value === 'OPERATING') {
+    return '经营页'
+  }
+  if (value === 'REPORT') {
+    return '财报页'
+  }
+  return '--'
 }
 </script>
 
@@ -509,6 +575,16 @@ function formatDateTime(value?: string | null) {
   background: #ffffff;
   padding: 10px 12px;
   font: inherit;
+}
+
+.impact-field p {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #d8e4ff;
+  border-radius: 12px;
+  background: #f6f9ff;
+  color: var(--muted);
+  line-height: 1.7;
 }
 
 .mode-switch {
@@ -677,6 +753,3 @@ function formatDateTime(value?: string | null) {
   }
 }
 </style>
-
-
-

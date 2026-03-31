@@ -22,6 +22,8 @@ const (
 	adminActionCodeOpenNextYear          = "OPEN_NEXT_YEAR"
 	adminActionCodeSubmitInitialBaseline = "SUBMIT_INITIAL_BASELINE"
 	adminActionCodeUnlockYear            = "UNLOCK_YEAR"
+	unlockTargetTypeOperating            = "OPERATING"
+	unlockTargetTypeReport               = "REPORT"
 )
 
 var (
@@ -32,13 +34,19 @@ var (
 	ErrAdminControlInitialBaselineSubmitted = errors.New("admin control initial baseline already submitted")
 	ErrAdminControlInitialBaselineInvalid   = errors.New("admin control initial baseline invalid")
 	ErrAdminControlUnlockReasonRequired     = errors.New("admin control unlock reason required")
+	ErrAdminControlUnlockTargetTypeRequired = errors.New("admin control unlock target type required")
+	ErrAdminControlUnlockTargetTypeInvalid  = errors.New("admin control unlock target type invalid")
+	ErrAdminControlUnlockStageRequired      = errors.New("admin control unlock stage required")
+	ErrAdminControlUnlockStageInvalid       = errors.New("admin control unlock stage invalid")
 	ErrAdminControlUnlockNotAllowed         = errors.New("admin control unlock not allowed")
 )
 
 const (
-	unlockYearBlockedReasonNextYearOpened = "\u4e0b\u4e00\u5e74\u5df2\u5f00\u653e\uff0c\u4e0d\u80fd\u518d\u89e3\u9501\u672c\u5e74"
-	unlockYearBlockedReasonAlreadyEditing = "\u5f53\u524d\u5e74\u4efd\u4ecd\u5904\u4e8e\u53ef\u7f16\u8f91\u72b6\u6001\uff0c\u65e0\u9700\u89e3\u9501"
-	unlockYearBlockedReasonInvalidState   = "\u5f53\u524d\u5e74\u4efd\u4e0d\u6ee1\u8db3\u5f02\u5e38\u89e3\u9501\u6761\u4ef6"
+	unlockYearBlockedReasonNextYearOpened     = "下一年已开放，不能再解锁本年"
+	unlockYearBlockedReasonOperatingEditable  = "经营页当前无需解锁"
+	unlockYearBlockedReasonReportEditable     = "财报页当前无需解锁"
+	unlockYearBlockedReasonTargetNotSubmitted = "目标尚未正式提交，不能解锁"
+	unlockYearBlockedReasonInvalidState       = "当前目标不满足异常解锁条件"
 )
 
 type OpenNextYearBlockedError struct {
@@ -123,22 +131,27 @@ type SubmitInitialBaselineResult struct {
 }
 
 type UnlockYearCommand struct {
-	GroupID      int64
-	YearNo       int
-	Reason       string
-	OperatorID   int64
-	OperatorName string
+	GroupID          int64
+	YearNo           int
+	UnlockTargetType string
+	TargetStageCode  string
+	Reason           string
+	OperatorID       int64
+	OperatorName     string
 }
 
 type UnlockYearResult struct {
-	GroupID          int64  `json:"groupId"`
-	YearNo           int    `json:"yearNo"`
-	YearStatus       string `json:"yearStatus"`
-	StageStatus      string `json:"stageStatus"`
-	ReportStatus     string `json:"reportStatus"`
-	SummaryEffective bool   `json:"summaryEffective"`
-	BusinessStatus   string `json:"businessStatus"`
-	UnlockLogID      int64  `json:"unlockLogId"`
+	GroupID           int64   `json:"groupId"`
+	YearNo            int     `json:"yearNo"`
+	UnlockTargetType  string  `json:"unlockTargetType"`
+	TargetStageCode   *string `json:"targetStageCode"`
+	EditableStageCode *string `json:"editableStageCode"`
+	YearStatus        string  `json:"yearStatus"`
+	StageStatus       string  `json:"stageStatus"`
+	ReportStatus      string  `json:"reportStatus"`
+	SummaryEffective  bool    `json:"summaryEffective"`
+	BusinessStatus    string  `json:"businessStatus"`
+	UnlockLogID       int64   `json:"unlockLogId"`
 }
 
 type AdminControlCommandService struct {
@@ -466,6 +479,8 @@ func (s *AdminControlCommandService) SubmitInitialBaseline(ctx context.Context, 
 func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockYearCommand) (*UnlockYearResult, error) {
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	reason := strings.TrimSpace(cmd.Reason)
+	targetType := normalizeUnlockTargetType(cmd.UnlockTargetType)
+	targetStageCode := normalizeUnlockTargetStageCode(cmd.TargetStageCode)
 
 	var result *UnlockYearResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -491,7 +506,7 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		}
 
 		currentState := state.NewRuntimeStateFromEntities(*group, *yearState)
-		nextState, err := ensureUnlockYearAllowed(currentState, reason, gameConfig.CurrentOpenYear > cmd.YearNo)
+		nextState, err := ensureUnlockYearAllowed(currentState, reason, targetType, targetStageCode, gameConfig.CurrentOpenYear > cmd.YearNo)
 		if err != nil {
 			return err
 		}
@@ -550,6 +565,8 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		actionPayload, err := json.Marshal(map[string]any{
 			"groupId":           cmd.GroupID,
 			"yearNo":            cmd.YearNo,
+			"unlockTargetType":  targetType,
+			"targetStageCode":   nullableString(targetStageCode),
 			"reason":            reason,
 			"reportInvalidated": reportInvalidated,
 			"summaryWithdrawn":  summaryWithdrawn,
@@ -575,14 +592,17 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		}
 
 		result = &UnlockYearResult{
-			GroupID:          cmd.GroupID,
-			YearNo:           cmd.YearNo,
-			YearStatus:       nextState.YearStatus,
-			StageStatus:      nextState.StageStatus,
-			ReportStatus:     nextState.ReportStatus,
-			SummaryEffective: nextState.SummaryEffective,
-			BusinessStatus:   nextState.BusinessStatus,
-			UnlockLogID:      unlockLogItem.ID,
+			GroupID:           cmd.GroupID,
+			YearNo:            cmd.YearNo,
+			UnlockTargetType:  targetType,
+			TargetStageCode:   nullableString(targetStageCode),
+			EditableStageCode: buildEditableStageCode(targetType, nextState),
+			YearStatus:        nextState.YearStatus,
+			StageStatus:       nextState.StageStatus,
+			ReportStatus:      nextState.ReportStatus,
+			SummaryEffective:  nextState.SummaryEffective,
+			BusinessStatus:    nextState.BusinessStatus,
+			UnlockLogID:       unlockLogItem.ID,
 		}
 		return nil
 	}); err != nil {
@@ -650,25 +670,58 @@ func validateInitialBaselineSubmission(alreadySubmitted bool, baselinePayload *p
 	return nil
 }
 
-func ensureUnlockYearAllowed(current state.RuntimeState, reason string, nextYearAlreadyOpened bool) (state.RuntimeState, error) {
+func ensureUnlockYearAllowed(current state.RuntimeState, reason string, unlockTargetType string, targetStageCode string, nextYearAlreadyOpened bool) (state.RuntimeState, error) {
 	if strings.TrimSpace(reason) == "" {
 		return current, ErrAdminControlUnlockReasonRequired
 	}
 	if nextYearAlreadyOpened {
 		return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonNextYearOpened}
 	}
-	if isUnlockAlreadyEditable(current) {
-		return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonAlreadyEditing}
-	}
 
-	nextState, err := state.NewStateMachine().UnlockYear(current, false)
-	if err != nil {
-		if errors.Is(err, state.ErrYearCannotUnlock) {
-			return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonInvalidState}
+	switch unlockTargetType {
+	case "":
+		return current, ErrAdminControlUnlockTargetTypeRequired
+	case unlockTargetTypeOperating:
+		if targetStageCode == "" {
+			return current, ErrAdminControlUnlockStageRequired
 		}
-		return current, err
+		if !state.IsValidStageCode(targetStageCode) {
+			return current, ErrAdminControlUnlockStageInvalid
+		}
+		if isOperatingTargetAlreadyEditable(current, targetStageCode) {
+			return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonOperatingEditable}
+		}
+		if !hasSubmittedOperatingTarget(current, targetStageCode) {
+			return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonTargetNotSubmitted}
+		}
+
+		nextState, err := state.NewStateMachine().UnlockOperatingYear(current, targetStageCode, false)
+		if err != nil {
+			if errors.Is(err, state.ErrYearCannotUnlock) || errors.Is(err, state.ErrInvalidStageCode) {
+				return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonInvalidState}
+			}
+			return current, err
+		}
+		return nextState, nil
+	case unlockTargetTypeReport:
+		if isReportTargetAlreadyEditable(current) {
+			return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonReportEditable}
+		}
+		if !isReportTargetSubmitted(current) {
+			return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonTargetNotSubmitted}
+		}
+
+		nextState, err := state.NewStateMachine().UnlockReportYear(current, false)
+		if err != nil {
+			if errors.Is(err, state.ErrYearCannotUnlock) {
+				return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonInvalidState}
+			}
+			return current, err
+		}
+		return nextState, nil
+	default:
+		return current, ErrAdminControlUnlockTargetTypeInvalid
 	}
-	return nextState, nil
 }
 
 func buildFinalYearStateSnapshot(finalYear int, currentOpenYear int) ([]byte, error) {
@@ -702,10 +755,94 @@ func normalizeAdminOperatorName(operatorName string) string {
 	}
 	return operatorName
 }
+func normalizeUnlockTargetType(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
+}
 
-func isUnlockAlreadyEditable(current state.RuntimeState) bool {
+func normalizeUnlockTargetStageCode(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
+}
+
+func buildEditableStageCode(unlockTargetType string, nextState state.RuntimeState) *string {
+	if unlockTargetType != unlockTargetTypeOperating {
+		return nil
+	}
+	stageCode := state.CurrentStageCode(nextState.StageStatus)
+	if stageCode == "" {
+		return nil
+	}
+	return &stageCode
+}
+
+func nullableString(value string) *string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return &value
+}
+
+func isOperatingTargetAlreadyEditable(current state.RuntimeState, targetStageCode string) bool {
 	guard := state.NewTransitionGuard()
-	return guard.BuildOperatingPermission(current).CanEdit || guard.BuildReportPermission(current).CanEdit
+	permission := guard.BuildOperatingPermission(current)
+	return permission.CanEdit && permission.CurrentStageCode == targetStageCode
+}
+
+func isReportTargetAlreadyEditable(current state.RuntimeState) bool {
+	guard := state.NewTransitionGuard()
+	return guard.BuildReportPermission(current).CanEdit
+}
+
+func hasSubmittedOperatingTarget(current state.RuntimeState, targetStageCode string) bool {
+	targetRank, ok := stageCodeRank(targetStageCode)
+	if !ok {
+		return false
+	}
+	return targetRank <= maxSubmittedOperatingStageRank(current)
+}
+
+func isReportTargetSubmitted(current state.RuntimeState) bool {
+	return current.ReportStatus == enum.ReportStatusSubmitted || current.YearStatus == enum.YearStatusCompleted
+}
+
+func maxSubmittedOperatingStageRank(current state.RuntimeState) int {
+	switch current.YearStatus {
+	case enum.YearStatusReportPending, enum.YearStatusReporting, enum.YearStatusCompleted:
+		return 5
+	case enum.YearStatusOperating:
+		switch current.StageStatus {
+		case enum.StageStatusQ1Open:
+			return 0
+		case enum.StageStatusQ2Open:
+			return 1
+		case enum.StageStatusQ3Open:
+			return 2
+		case enum.StageStatusQ4Open:
+			return 3
+		case enum.StageStatusYearEndOpen:
+			return 4
+		default:
+			return 0
+		}
+	default:
+		return 0
+	}
+}
+
+func stageCodeRank(stageCode string) (int, bool) {
+	switch stageCode {
+	case state.StageCodeQ1:
+		return 1, true
+	case state.StageCodeQ2:
+		return 2, true
+	case state.StageCodeQ3:
+		return 3, true
+	case state.StageCodeQ4:
+		return 4, true
+	case state.StageCodeYearEnd:
+		return 5, true
+	default:
+		return 0, false
+	}
 }
 
 func shouldRecoverFromBankrupt(group *entity.Group, yearNo int) bool {
