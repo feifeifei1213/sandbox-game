@@ -32,6 +32,17 @@ func (r *ReportRepository) FindByGroupIDAndYear(ctx context.Context, groupID int
 	return &item, nil
 }
 
+func (r *ReportRepository) FindEffectiveByGroupIDAndYear(ctx context.Context, groupID int64, yearNo int) (*entity.GroupReport, error) {
+	var item entity.GroupReport
+	err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no = ? AND submitted_at IS NOT NULL AND balance_check_passed = ?", groupID, yearNo, true).
+		First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 type UpsertReportDraftCommand struct {
 	GroupID             int64
 	YearNo              int

@@ -279,7 +279,7 @@ func (s *AdminGroupDataQueryService) attachCarrySource(ctx context.Context, calc
 		return calculationContext, nil
 	}
 
-	previousReport, previousReportErr := s.reportRepo.FindByGroupIDAndYear(ctx, groupID, yearNo-1)
+	previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, groupID, yearNo-1)
 	switch {
 	case previousReportErr == nil:
 		if len(previousReport.ReportComputedPayload) > 0 {

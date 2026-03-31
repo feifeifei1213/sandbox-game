@@ -26,6 +26,12 @@
       </dl>
     </section>
 
+    <section v-if="view?.hasInvalidDraft" class="panel warning-panel">
+      <h3>失效草稿</h3>
+      <p>当前保留的是上次已失效的财报草稿，需要玩家重新核对并再次提交。</p>
+      <p class="hint warning-hint">经营页重新提交后，请回到本页确认绿色手工项，再完成财报提交。</p>
+    </section>
+
     <section class="panel">
       <h3>平衡校验</h3>
       <div class="balance-card" :class="{ pass: balancePassed, fail: !balancePassed }">
@@ -55,6 +61,7 @@
         </button>
       </div>
       <p class="hint">绿色单元格为手工项，黄色单元格为系统计算结果。</p>
+      <p v-if="view?.hasInvalidDraft" class="warning">当前为失效草稿状态，必须重新提交后才会恢复正式结果。</p>
       <p v-if="missingFields.length" class="warning">待填写：{{ missingFields.join('、') }}</p>
       <p v-else-if="!balancePassed" class="warning">当前资产负债尚未平衡，不能提交。</p>
       <p v-else-if="!view?.canEdit" class="hint">当前年份财报未开放或已提交，页面为只读状态。</p>
@@ -137,6 +144,11 @@ function formatTaxRate(value: number) {
   background: #ffffff;
   padding: 16px;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.warning-panel {
+  border-color: #efd4aa;
+  background: #fffaf2;
 }
 
 .panel h3 {
@@ -229,5 +241,9 @@ function formatTaxRate(value: number) {
   color: #b24040;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.warning-hint {
+  color: #8a5a17;
 }
 </style>

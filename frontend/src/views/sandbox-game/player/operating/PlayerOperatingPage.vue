@@ -55,6 +55,7 @@
             v-else-if="activeView"
             :model-value="activeDraftPayload"
             :editable-scopes="activeView.editableScopes"
+            :invalid-scopes="activeView.invalidScopes"
             :quarter-cash-checks="activeView.quarterCashChecks"
             :current-stage-code="activeView.currentStageCode"
             :derived-values="activeView.derivedValues"
@@ -330,6 +331,9 @@ function buildPreviewView(yearNo: number, lastDraftSavedAt: string | null): Play
     canView: true,
     canEdit: true,
     canSubmit: true,
+    hasInvalidDraft: false,
+    invalidScopes: [],
+    hasRetainedReportDraft: false,
     operatingPayload: cloneOperatingPayload(previewDraftPayload.value),
     editableScopes: ['YEAR_START', 'Q1', 'Q2', 'Q3', 'Q4', 'YEAR_END'],
     readonlyScopes: [],
@@ -671,6 +675,8 @@ function buildPreviewDerivedValues(yearNo: number) {
   }
 }
 </style>
+
+
 
 
 

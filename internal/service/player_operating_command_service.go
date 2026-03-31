@@ -131,7 +131,7 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 		}
 	}
 	if cmd.YearNo > 0 {
-		previousReport, previousReportErr := s.reportRepo.FindByGroupIDAndYear(ctx, cmd.GroupID, cmd.YearNo-1)
+		previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, cmd.GroupID, cmd.YearNo-1)
 		if previousReportErr == nil && len(previousReport.ReportComputedPayload) > 0 {
 			var previous payload.ReportComputedPayload
 			if unmarshalErr := json.Unmarshal(previousReport.ReportComputedPayload, &previous); unmarshalErr != nil {
@@ -215,7 +215,7 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 		}
 	}
 	if cmd.YearNo > 0 {
-		previousReport, previousReportErr := s.reportRepo.FindByGroupIDAndYear(ctx, cmd.GroupID, cmd.YearNo-1)
+		previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, cmd.GroupID, cmd.YearNo-1)
 		if previousReportErr == nil && len(previousReport.ReportComputedPayload) > 0 {
 			var previous payload.ReportComputedPayload
 			if unmarshalErr := json.Unmarshal(previousReport.ReportComputedPayload, &previous); unmarshalErr != nil {

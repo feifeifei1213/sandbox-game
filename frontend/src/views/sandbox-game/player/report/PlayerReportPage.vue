@@ -60,6 +60,7 @@
             :model-value="activeDraftManualPayload"
             :computed-payload="activeComputedPayload"
             :can-edit="activeView.canEdit"
+            :has-invalid-draft="activeView.hasInvalidDraft"
             :tax-rate-options="activeView.manualFieldOptions.incomeTaxRateOptions"
             @update:model-value="updatePayload"
           />
@@ -251,6 +252,7 @@ const previewView = computed<PlayerReportView>(() => ({
   canView: true,
   canEdit: true,
   canSubmit: true,
+  hasInvalidDraft: false,
   reportComputedPayload: previewBaseComputedPayload.value,
   reportManualPayload: cloneReportManualPayload(previewDraftManualPayload.value),
   manualFieldOptions: {
@@ -620,6 +622,8 @@ async function handleLogout() {
   }
 }
 </style>
+
+
 
 
 

@@ -353,7 +353,7 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 			return calcctx.CalculationContext{}, fmt.Errorf("load initial baseline: %w", baselineErr)
 		}
 	} else {
-		previousReport, previousReportErr := s.reportRepo.FindByGroupIDAndYear(ctx, group.ID, yearState.YearNo-1)
+		previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, group.ID, yearState.YearNo-1)
 		switch {
 		case previousReportErr == nil:
 			if len(previousReport.ReportComputedPayload) > 0 {

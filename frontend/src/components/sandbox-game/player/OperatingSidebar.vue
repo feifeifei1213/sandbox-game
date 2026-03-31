@@ -30,6 +30,13 @@
       </dl>
     </section>
 
+    <section v-if="view?.hasInvalidDraft" class="panel warning-panel">
+      <h3>失效草稿</h3>
+      <p v-if="invalidScopeText">以下区域保留旧值，但当前不计入正式结果：{{ invalidScopeText }}</p>
+      <p v-if="view?.hasRetainedReportDraft">本年财报保留了上次已失效的填写结果，经营重新完成后还需要重新提交财报。</p>
+      <p class="hint warning-hint">重新提交后，新的正式结果会覆盖当前失效草稿。</p>
+    </section>
+
     <section class="panel">
       <h3>提交控制</h3>
       <div class="action-list">
@@ -90,6 +97,13 @@ const lastDraftSavedAt = computed(() => {
   return formatTime(value)
 })
 
+const invalidScopeText = computed(() => {
+  if (!props.view?.invalidScopes?.length) {
+    return ''
+  }
+  return props.view.invalidScopes.map((item) => formatStageCode(item)).join('、')
+})
+
 function formatTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
@@ -111,6 +125,11 @@ function formatTime(value: string) {
   background: #ffffff;
   padding: 16px;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.warning-panel {
+  border-color: #efd4aa;
+  background: #fffaf2;
 }
 
 .panel h3 {
@@ -167,6 +186,10 @@ function formatTime(value: string) {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.warning-hint {
+  color: #8a5a17;
 }
 
 .history-list {

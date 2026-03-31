@@ -1,4 +1,4 @@
-export type NumericCellValue = number | ''
+﻿export type NumericCellValue = number | ''
 export type QuarterValueMap = Record<string, Record<string, NumericCellValue>>
 
 export interface CurrentGameConfigResult {
@@ -70,6 +70,9 @@ export interface PlayerOperatingView {
   canView: boolean
   canEdit: boolean
   canSubmit: boolean
+  hasInvalidDraft: boolean
+  invalidScopes: string[]
+  hasRetainedReportDraft: boolean
   operatingPayload: OperatingPayload
   editableScopes: string[]
   readonlyScopes: string[]
@@ -202,6 +205,7 @@ export interface PlayerReportView {
   canView: boolean
   canEdit: boolean
   canSubmit: boolean
+  hasInvalidDraft: boolean
   reportComputedPayload: ReportComputedPayload
   reportManualPayload: ReportManualPayload
   manualFieldOptions: PlayerReportManualFieldOptions
@@ -340,3 +344,6 @@ function normalizeNullableNumber(value: number | null | undefined) {
   }
   return value
 }
+
+
+

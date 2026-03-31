@@ -560,6 +560,7 @@ type MarketBidRow = Record<MarketBidKey | 'orderAmount', NumericCellValue>
 const props = defineProps<{
   modelValue: OperatingPayload
   editableScopes: string[]
+  invalidScopes: string[]
   quarterCashChecks: Record<string, number>
   currentStageCode: string
   derivedValues: Record<string, number>
@@ -723,8 +724,18 @@ function isScopeEditable(scope: string) {
   return props.editableScopes.includes(scope)
 }
 
+function isScopeInvalidDraft(scope: string) {
+  return props.invalidScopes.includes(scope)
+}
+
 function editableCellClass(scope: string) {
-  return isScopeEditable(scope) ? 'input-cell' : 'locked-cell'
+  if (isScopeEditable(scope)) {
+    return 'input-cell'
+  }
+  if (isScopeInvalidDraft(scope)) {
+    return 'invalid-draft-cell'
+  }
+  return 'locked-cell'
 }
 
 function displayCell(value: string | number | undefined | null) {
@@ -1091,6 +1102,7 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 
 .input-cell,
 .locked-cell,
+.invalid-draft-cell,
 .result-cell,
 .orange-cell,
 .quarter-cash-cell {
@@ -1098,7 +1110,8 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 }
 
 .input-cell,
-.locked-cell {
+.locked-cell,
+.invalid-draft-cell {
   background: var(--input-bg);
 }
 
@@ -1106,8 +1119,13 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   background: var(--readonly-bg);
 }
 
+.invalid-draft-cell {
+  background: #fff1dc;
+}
+
 .input-cell input,
-.locked-cell input {
+.locked-cell input,
+.invalid-draft-cell input {
   width: 100%;
   border: none;
   background: transparent;
@@ -1120,6 +1138,10 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 
 .locked-cell input {
   color: #8491a6;
+}
+
+.invalid-draft-cell input {
+  color: #8a5a17;
 }
 
 .result-cell,
@@ -1147,5 +1169,6 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   }
 }
 </style>
+
 
 

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="sheet-frame">
     <div class="sheet-scroll">
       <table class="sheet-table">
@@ -145,6 +145,7 @@ const props = defineProps<{
   modelValue: ReportManualPayload
   computedPayload: ReportComputedPayload
   canEdit: boolean
+  hasInvalidDraft: boolean
   taxRateOptions: number[]
 }>()
 
@@ -200,10 +201,12 @@ function labelCellClass(cell: SheetCell) {
 }
 
 function valueCellClass(cell: SheetCell) {
+  const isManualCell = cell.kind === 'manual-number' || cell.kind === 'manual-select'
   return {
     'value-cell': true,
     'auto-cell': cell.kind === 'computed',
-    'manual-cell': cell.kind === 'manual-number' || cell.kind === 'manual-select',
+    'manual-cell': isManualCell,
+    'manual-invalid-cell': isManualCell && props.hasInvalidDraft,
     'blank-cell': cell.kind === 'blank',
   }
 }
@@ -379,6 +382,10 @@ function formatTaxRate(value: number) {
   background: #d7efc3;
 }
 
+.manual-invalid-cell {
+  background: #f7e3c1;
+}
+
 .blank-cell {
   background: #ffffff;
 }
@@ -414,7 +421,9 @@ function formatTaxRate(value: number) {
 }
 
 .manual-cell input,
-.manual-cell select {
+.manual-cell select,
+.manual-invalid-cell input,
+.manual-invalid-cell select {
   width: 100%;
   border: none;
   background: transparent;
@@ -426,9 +435,18 @@ function formatTaxRate(value: number) {
 }
 
 .manual-cell input:disabled,
-.manual-cell select:disabled {
+.manual-cell select:disabled,
+.manual-invalid-cell input:disabled,
+.manual-invalid-cell select:disabled {
   color: #3f5d49;
   opacity: 1;
+}
+
+.manual-invalid-cell input,
+.manual-invalid-cell select,
+.manual-invalid-cell input:disabled,
+.manual-invalid-cell select:disabled {
+  color: #7a5419;
 }
 
 @media (max-width: 1024px) {
@@ -443,3 +461,4 @@ function formatTaxRate(value: number) {
   }
 }
 </style>
+

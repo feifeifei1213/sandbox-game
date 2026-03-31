@@ -104,7 +104,7 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 			return nil, fmt.Errorf("load initial baseline: %w", baselineErr)
 		}
 	} else {
-		previousReport, previousReportErr := s.reportRepo.FindByGroupIDAndYear(ctx, groupID, yearNo-1)
+		previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, groupID, yearNo-1)
 		switch {
 		case previousReportErr == nil:
 			if len(previousReport.ReportComputedPayload) > 0 {

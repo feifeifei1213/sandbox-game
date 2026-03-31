@@ -21,6 +21,7 @@ type PlayerReportView struct {
 	CanView               bool                           `json:"canView"`
 	CanEdit               bool                           `json:"canEdit"`
 	CanSubmit             bool                           `json:"canSubmit"`
+	HasInvalidDraft       bool                           `json:"hasInvalidDraft"`
 	ReportComputedPayload payload.ReportComputedPayload  `json:"reportComputedPayload"`
 	ReportManualPayload   payload.ReportManualPayload    `json:"reportManualPayload"`
 	ManualFieldOptions    PlayerReportManualFieldOptions `json:"manualFieldOptions"`
@@ -49,6 +50,7 @@ func (a *PlayerReportAssembler) Build(
 		CanView:               permission.CanView,
 		CanEdit:               permission.CanEdit,
 		CanSubmit:             permission.CanSubmit,
+		HasInvalidDraft:       hasRetainedEditableReportDraft(ctx.State),
 		ReportComputedPayload: computed,
 		ReportManualPayload:   manual,
 		ManualFieldOptions: PlayerReportManualFieldOptions{

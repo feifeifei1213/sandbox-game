@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <section class="page-content">
     <header class="hero">
       <div>
@@ -76,6 +76,7 @@
           v-else-if="selectedPageType === 'operating' && operatingView"
           :model-value="operatingView.operatingPayload"
           :editable-scopes="[]"
+          :invalid-scopes="operatingView.invalidScopes"
           :quarter-cash-checks="operatingView.quarterCashChecks"
           :current-stage-code="operatingView.currentStageCode"
           :derived-values="operatingView.derivedValues"
@@ -87,6 +88,7 @@
           :model-value="reportView.reportManualPayload"
           :computed-payload="reportView.reportComputedPayload"
           :can-edit="false"
+          :has-invalid-draft="reportView.hasInvalidDraft"
           :tax-rate-options="reportView.manualFieldOptions.incomeTaxRateOptions"
           @update:model-value="noopReportUpdate"
         />
@@ -141,6 +143,10 @@
               <span>财报状态</span>
               <strong>{{ formatReportStatus(operatingView.reportStatus) }}</strong>
             </div>
+            <div class="status-item" v-if="selectedPageType === 'operating' && operatingView?.hasInvalidDraft">
+              <span>失效草稿</span>
+              <strong>{{ operatingView.hasRetainedReportDraft ? '经营待重提，且含财报失效草稿' : '经营结果待重新提交' }}</strong>
+            </div>
             <div class="status-item" v-if="selectedPageType === 'report' && reportView">
               <span>财报状态</span>
               <strong>{{ formatReportStatus(reportView.reportStatus) }}</strong>
@@ -152,6 +158,10 @@
             <div class="status-item" v-if="selectedPageType === 'report' && reportView">
               <span>草稿保存</span>
               <strong>{{ formatDateTime(reportView.lastDraftSavedAt) }}</strong>
+            </div>
+            <div class="status-item" v-if="selectedPageType === 'report' && reportView?.hasInvalidDraft">
+              <span>失效草稿</span>
+              <strong>财报草稿待重新提交</strong>
             </div>
           </div>
         </section>
@@ -753,3 +763,6 @@ function formatUnlockTargetType(value?: UnlockTargetType | null) {
   }
 }
 </style>
+
+
+

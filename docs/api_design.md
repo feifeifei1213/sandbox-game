@@ -346,6 +346,9 @@
 | `stageStatus` | 当前经营阶段状态 |
 | `reportStatus` | 当前财报状态 |
 | `businessStatus` | 正常 / 已破产 |
+| `hasInvalidDraft` | 当前经营页是否存在失效草稿 |
+| `invalidScopes` | 已保留但失效的经营区域列表 |
+| `hasRetainedReportDraft` | 本年是否仍保留失效的财报草稿 |
 | `operatingPayload` | 当前经营页完整业务数据 |
 | `editableScopes` | 当前允许编辑的区域列表 |
 | `readonlyScopes` | 当前只读区域列表 |
@@ -428,6 +431,7 @@
 | `yearStatus` | 年份主状态 |
 | `reportStatus` | 财报状态 |
 | `businessStatus` | 正常 / 已破产 |
+| `hasInvalidDraft` | 当前财报页是否为失效草稿待重提状态 |
 | `reportComputedPayload` | 自动计算结果 |
 | `reportManualPayload` | 手工项当前值 |
 | `manualFieldOptions` | 如税率下拉选项 |
@@ -1100,4 +1104,6 @@ type AdminActionSummaryResp struct {
 - 详细接口示例 JSON 样例库
 - `.http` 用例文件
 - 异常解锁日志的高级筛选条件与导出策略
+
+
 

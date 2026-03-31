@@ -1,4 +1,4 @@
-# 沙盘经营系统需求驱动实施计划（首版）
+﻿# 沙盘经营系统需求驱动实施计划（首版）
 
 > 更新日期：2026-03-30  
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
@@ -454,8 +454,8 @@
 | Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
 |---|---|---|---|---|---|---|---|
 | I1-01 | 管理员异常解锁支持目标类型 `OPERATING / REPORT` 与 `targetStageCode` | P0 | ✅ 已完成 | `M2-06`、`docs/requirements_spec.md`、`docs/api_design.md`、`docs/minimal_state_machine.md` | `internal/http/dto/admin_control_dto.go`、`internal/http/handler/admin_control_handler.go`、`internal/service/admin_control_command_service.go`、`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`frontend/src/stores/admin-group-data.ts` | 管理员可明确选择“经营页 / 财报页”；当目标为 `OPERATING` 时可选择 `Q1 / Q2 / Q3 / Q4 / YEAR_END`，且服务端按目标阶段回退 | 后端已支持目标类型与目标阶段解锁，管理端弹窗已切到新请求结构，并通过 `go test ./...` 与 `npm run build` 验证 |
-| I1-02 | 实现“有效结果 / 失效草稿”分离规则 | P0 | ⏳ 未开始 | `I1-01` | `internal/service` 状态机与解锁逻辑、`internal/repository` 草稿/状态字段落库方案、玩家端状态映射 | 回退到 `Q2` 时，`Q3 / Q4 / 年末 / 财报` 原值保留但不再计入正式结果；重新提交后重新生效 | 依赖 `I1-01` 明确目标类型与目标阶段 |
-| I1-03 | 前端页面与交互收口：异常解锁弹窗、玩家页失效草稿展示、目标化文案 | P1 | ⏳ 未开始 | `I1-01`、`I1-02` | 管理端解锁弹窗、玩家经营页 / 财报页状态展示、错误提示映射、交互文案说明 | 管理员端支持目标类型 + 阶段选择；玩家端能区分“已生效只读 / 当前可编辑 / 失效草稿待重提” | 依赖前后端状态字段正式落地 |
+| I1-02 | 实现“有效结果 / 失效草稿”分离规则 | P0 | ✅ 已完成 | `I1-01` | `internal/assembler/draft_view_state.go`、`internal/repository/report_repository.go`、`internal/service/player_*_service.go`、`internal/service/admin_group_data_query_service.go` | 回退到 `Q2` 时，`Q3 / Q4 / 年末 / 财报` 原值保留但不再计入正式结果；重新提交后重新生效 | 已按“推断式失效草稿”落地：上一年承接仅读取有效财报，经营页可返回 `invalidScopes` / `hasRetainedReportDraft`，财报页可返回 `hasInvalidDraft`，并通过 `go test ./...` 验证 |
+| I1-03 | 前端页面与交互收口：异常解锁弹窗、玩家页失效草稿展示、目标化文案 | P1 | ✅ 已完成 | `I1-01`、`I1-02` | `frontend/src/components/sandbox-game/player/*`、`frontend/src/views/sandbox-game/player/*`、`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`frontend/src/types/sandbox-game.ts` | 管理员端支持目标类型 + 阶段选择；玩家端能区分“已生效只读 / 当前可编辑 / 失效草稿待重提” | 玩家经营页、财报页与管理端组数据页已补齐失效草稿状态展示、单元格样式与提示文案，并通过 `npm run build` 验证 |
 
 ### 12.1 本轮新增记录
 
@@ -464,4 +464,6 @@
 | 2026-03-31 | 正式确认异常解锁采用“方案 2”：管理员必须选择 `OPERATING / REPORT`；当目标为 `OPERATING` 时，还需选择 `Q1 / Q2 / Q3 / Q4 / YEAR_END`。 |
 | 2026-03-31 | 正式确认经营页回退后的规则：后续经营阶段与财报结果失效，但原值不清空，统一保留为 `失效草稿`，并在重新提交后重新生效。 |
 | 2026-03-31 | `I1-01` 已落地：后端异常解锁接口已支持 `OPERATING / REPORT` 与 `targetStageCode`，管理端组数据页已接入目标类型 / 阶段选择，并完成 `go test ./...` 与 `npm run build` 验证。 |
+| 2026-03-31 | `I1-02` / `I1-03` 已落地：后端按当前状态推断“有效结果 / 失效草稿”，上一年承接仅读取有效财报；前端已在玩家经营页、财报页和管理端组数据页展示失效草稿状态，并完成 `go test ./...` 与 `npm run build` 验证。 |
+
 
