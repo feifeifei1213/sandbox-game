@@ -15,7 +15,6 @@ import (
 	"sandbox-game/internal/service"
 )
 
-// NewRouter 注册当前阶段最小可运行的基础路由。
 func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engine {
 	gin.SetMode(resolveGinMode(cfg.Server.Mode))
 
@@ -41,9 +40,12 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	summaryRepo := repository.NewSummarySnapshotRepository(db)
 	accountRepo := repository.NewAccountRepository(db)
 	adminActionLogRepo := repository.NewAdminActionLogRepository(db)
+	noticeRepo := repository.NewNoticeRepository(db)
+	adjustmentRepo := repository.NewGroupAdjustmentRepository(db)
 
 	authService := service.NewAuthService(accountRepo, cfg.Auth)
 	authHandler := handler.NewAuthHandler(authService)
+	playerNoticeService := service.NewPlayerNoticeService(noticeRepo, adjustmentRepo)
 	gameConfigQueryService := service.NewGameConfigQueryService(gameConfigRepo, groupRepo, groupYearRepo)
 	gameConfigHandler := handler.NewGameConfigHandler(gameConfigQueryService)
 	playerOperatingQueryService := service.NewPlayerOperatingQueryService(
@@ -54,6 +56,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		initialBaseRepo,
 		reportRepo,
 		playerOperatingAssembler,
+		playerNoticeService,
 	)
 	playerOperatingCommandService := service.NewPlayerOperatingCommandService(
 		db,
@@ -63,6 +66,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		operatingRepo,
 		initialBaseRepo,
 		reportRepo,
+		playerNoticeService,
 	)
 	playerOperatingHandler := handler.NewPlayerOperatingHandler(
 		playerOperatingQueryService,
@@ -76,6 +80,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		initialBaseRepo,
 		reportRepo,
 		playerReportAssembler,
+		playerNoticeService,
 	)
 	playerReportCommandService := service.NewPlayerReportCommandService(
 		db,
@@ -85,6 +90,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		operatingRepo,
 		initialBaseRepo,
 		reportRepo,
+		playerNoticeService,
 	)
 	playerReportHandler := handler.NewPlayerReportHandler(
 		playerReportQueryService,
@@ -106,6 +112,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		reportRepo,
 		playerOperatingAssembler,
 		playerReportAssembler,
+		playerNoticeService,
 	)
 	adminGroupDataHandler := handler.NewAdminGroupDataHandler(adminGroupDataQueryService)
 	adminControlQueryService := service.NewAdminControlQueryService(
@@ -120,6 +127,16 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	adminControlHandler := handler.NewAdminControlHandler(
 		adminControlQueryService,
 		adminControlCommandService,
+	)
+	adminNoticeQueryService := service.NewAdminNoticeQueryService(
+		noticeRepo,
+		adjustmentRepo,
+		groupRepo,
+	)
+	adminNoticeCommandService := service.NewAdminNoticeCommandService(db)
+	adminNoticeHandler := handler.NewAdminNoticeHandler(
+		adminNoticeQueryService,
+		adminNoticeCommandService,
 	)
 
 	engine.GET("/healthz", healthHandler.GetHealth)
@@ -165,6 +182,11 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminControl.GET("/get-initial-baseline", adminControlHandler.GetInitialBaseline)
 		adminControl.POST("/submit-initial-baseline", adminControlHandler.SubmitInitialBaseline)
 		adminControl.POST("/unlock-year", adminControlHandler.UnlockYear)
+
+		adminNotice := protected.Group("/admin-notice")
+		adminNotice.GET("/get-records", adminNoticeHandler.GetRecords)
+		adminNotice.POST("/send-general", adminNoticeHandler.SendGeneral)
+		adminNotice.POST("/send-adjustment", adminNoticeHandler.SendAdjustment)
 	}
 
 	return engine

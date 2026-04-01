@@ -21,15 +21,16 @@ import (
 var ErrPlayerReportNotOpen = errors.New("player report not open")
 
 type PlayerReportQueryService struct {
-	gameConfigRepo  *repository.GameConfigRepository
-	groupRepo       *repository.GroupRepository
-	groupYearRepo   *repository.GroupYearStateRepository
-	operatingRepo   *repository.OperatingRepository
-	initialBaseRepo *repository.InitialBaselineRepository
-	reportRepo      *repository.ReportRepository
-	assembler       *assembler.PlayerReportAssembler
-	calculator      *reportrules.Calculator
-	transitionGuard *state.TransitionGuard
+	gameConfigRepo      *repository.GameConfigRepository
+	groupRepo           *repository.GroupRepository
+	groupYearRepo       *repository.GroupYearStateRepository
+	operatingRepo       *repository.OperatingRepository
+	initialBaseRepo     *repository.InitialBaselineRepository
+	reportRepo          *repository.ReportRepository
+	assembler           *assembler.PlayerReportAssembler
+	calculator          *reportrules.Calculator
+	transitionGuard     *state.TransitionGuard
+	playerNoticeService *PlayerNoticeService
 }
 
 func NewPlayerReportQueryService(
@@ -40,17 +41,19 @@ func NewPlayerReportQueryService(
 	initialBaseRepo *repository.InitialBaselineRepository,
 	reportRepo *repository.ReportRepository,
 	assembler *assembler.PlayerReportAssembler,
+	playerNoticeService *PlayerNoticeService,
 ) *PlayerReportQueryService {
 	return &PlayerReportQueryService{
-		gameConfigRepo:  gameConfigRepo,
-		groupRepo:       groupRepo,
-		groupYearRepo:   groupYearRepo,
-		operatingRepo:   operatingRepo,
-		initialBaseRepo: initialBaseRepo,
-		reportRepo:      reportRepo,
-		assembler:       assembler,
-		calculator:      reportrules.NewCalculator(),
-		transitionGuard: state.NewTransitionGuard(),
+		gameConfigRepo:      gameConfigRepo,
+		groupRepo:           groupRepo,
+		groupYearRepo:       groupYearRepo,
+		operatingRepo:       operatingRepo,
+		initialBaseRepo:     initialBaseRepo,
+		reportRepo:          reportRepo,
+		assembler:           assembler,
+		calculator:          reportrules.NewCalculator(),
+		transitionGuard:     state.NewTransitionGuard(),
+		playerNoticeService: playerNoticeService,
 	}
 }
 
@@ -90,6 +93,10 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 		return nil, fmt.Errorf("load operating draft: %w", draftErr)
 	}
 	operatingPayload = operatingPayload.Normalize()
+	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
+	if err != nil {
+		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
 	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	if yearNo == 0 {
@@ -156,7 +163,12 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 		computedPayload = calculatedPayload
 	}
 
-	return s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission), nil
+	noticeBoard, err := s.playerNoticeService.BuildBoard(ctx, groupID, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("build report notice board: %w", err)
+	}
+
+	return s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission, noticeBoard), nil
 }
 
 func isZeroReportComputedPayload(value payload.ReportComputedPayload) bool {

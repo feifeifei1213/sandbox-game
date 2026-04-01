@@ -129,7 +129,58 @@ func openIntegrationMySQL(t *testing.T) *gorm.DB {
 		t.Skipf("skip integration test: ping mysql failed: %v", err)
 	}
 
+	ensureIntegrationNoticeTables(t, db)
 	return db
+}
+
+func ensureIntegrationNoticeTables(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS sg_notice (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			target_scope VARCHAR(16) NOT NULL,
+			target_group_id BIGINT NULL,
+			content VARCHAR(1000) NOT NULL,
+			pinned TINYINT(1) NOT NULL DEFAULT 0,
+			published_at DATETIME NOT NULL,
+			operator_id BIGINT NOT NULL,
+			operator_name VARCHAR(64) NOT NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY idx_target_scope_group (target_scope, target_group_id),
+			KEY idx_published_at (published_at),
+			KEY idx_pinned (pinned)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_group_adjustment (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			group_id BIGINT NOT NULL,
+			year_no INT NOT NULL,
+			stage_code VARCHAR(16) NOT NULL,
+			adjustment_type VARCHAR(16) NOT NULL,
+			amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+			reason VARCHAR(500) NOT NULL,
+			published_at DATETIME NOT NULL,
+			operator_id BIGINT NOT NULL,
+			operator_name VARCHAR(64) NOT NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY idx_group_year_stage (group_id, year_no, stage_code),
+			KEY idx_published_at (published_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+	}
+
+	for _, statement := range statements {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatalf("ensure I2 tables: %v", err)
+		}
+	}
 }
 
 func buildPlayerOperatingServices(db *gorm.DB) (*PlayerOperatingCommandService, *PlayerOperatingQueryService) {
@@ -139,6 +190,9 @@ func buildPlayerOperatingServices(db *gorm.DB) (*PlayerOperatingCommandService, 
 	operatingRepo := repository.NewOperatingRepository(db)
 	initialBaselineRepo := repository.NewInitialBaselineRepository(db)
 	reportRepo := repository.NewReportRepository(db)
+	noticeRepo := repository.NewNoticeRepository(db)
+	adjustmentRepo := repository.NewGroupAdjustmentRepository(db)
+	playerNoticeService := NewPlayerNoticeService(noticeRepo, adjustmentRepo)
 
 	commandService := NewPlayerOperatingCommandService(
 		db,
@@ -148,6 +202,7 @@ func buildPlayerOperatingServices(db *gorm.DB) (*PlayerOperatingCommandService, 
 		operatingRepo,
 		initialBaselineRepo,
 		reportRepo,
+		playerNoticeService,
 	)
 	queryService := NewPlayerOperatingQueryService(
 		gameConfigRepo,
@@ -157,6 +212,7 @@ func buildPlayerOperatingServices(db *gorm.DB) (*PlayerOperatingCommandService, 
 		initialBaselineRepo,
 		reportRepo,
 		assembler.NewPlayerOperatingAssembler(),
+		playerNoticeService,
 	)
 
 	return commandService, queryService
@@ -200,7 +256,7 @@ func createIntegrationOperatingFixtures(t *testing.T, ctx context.Context, tx *g
 	group := entity.Group{
 		GroupNo:        integrationGroupNoFromSeed(uniqueSeed),
 		GroupCode:      fmt.Sprintf("IT_OPERATING_%d", uniqueSeed),
-		GroupName:      "经营提交流程集成测试组",
+		GroupName:      "integration operating fixture group",
 		BusinessStatus: enum.BusinessStatusNormal,
 		BaseEntity: entity.BaseEntity{
 			Creator:    "integration-test",

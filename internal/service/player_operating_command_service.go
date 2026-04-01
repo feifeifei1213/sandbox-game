@@ -64,17 +64,18 @@ type SubmitOperatingStageResult struct {
 }
 
 type PlayerOperatingCommandService struct {
-	db              *gorm.DB
-	gameConfigRepo  *repository.GameConfigRepository
-	groupRepo       *repository.GroupRepository
-	groupYearRepo   *repository.GroupYearStateRepository
-	operatingRepo   *repository.OperatingRepository
-	initialBaseRepo *repository.InitialBaselineRepository
-	reportRepo      *repository.ReportRepository
-	transitionGuard *state.TransitionGuard
-	carryForward    *carryforwardrules.Builder
-	validator       *operatingrules.Validator
-	calculator      *operatingrules.Calculator
+	db                  *gorm.DB
+	gameConfigRepo      *repository.GameConfigRepository
+	groupRepo           *repository.GroupRepository
+	groupYearRepo       *repository.GroupYearStateRepository
+	operatingRepo       *repository.OperatingRepository
+	initialBaseRepo     *repository.InitialBaselineRepository
+	reportRepo          *repository.ReportRepository
+	transitionGuard     *state.TransitionGuard
+	carryForward        *carryforwardrules.Builder
+	validator           *operatingrules.Validator
+	calculator          *operatingrules.Calculator
+	playerNoticeService *PlayerNoticeService
 }
 
 func NewPlayerOperatingCommandService(
@@ -85,19 +86,21 @@ func NewPlayerOperatingCommandService(
 	operatingRepo *repository.OperatingRepository,
 	initialBaseRepo *repository.InitialBaselineRepository,
 	reportRepo *repository.ReportRepository,
+	playerNoticeService *PlayerNoticeService,
 ) *PlayerOperatingCommandService {
 	return &PlayerOperatingCommandService{
-		db:              db,
-		gameConfigRepo:  gameConfigRepo,
-		groupRepo:       groupRepo,
-		groupYearRepo:   groupYearRepo,
-		operatingRepo:   operatingRepo,
-		initialBaseRepo: initialBaseRepo,
-		reportRepo:      reportRepo,
-		transitionGuard: state.NewTransitionGuard(),
-		carryForward:    carryforwardrules.NewBuilder(),
-		validator:       operatingrules.NewValidator(),
-		calculator:      operatingrules.NewCalculator(),
+		db:                  db,
+		gameConfigRepo:      gameConfigRepo,
+		groupRepo:           groupRepo,
+		groupYearRepo:       groupYearRepo,
+		operatingRepo:       operatingRepo,
+		initialBaseRepo:     initialBaseRepo,
+		reportRepo:          reportRepo,
+		transitionGuard:     state.NewTransitionGuard(),
+		carryForward:        carryforwardrules.NewBuilder(),
+		validator:           operatingrules.NewValidator(),
+		calculator:          operatingrules.NewCalculator(),
+		playerNoticeService: playerNoticeService,
 	}
 }
 
@@ -162,6 +165,11 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 	}
 
 	normalizedPayload := cmd.OperatingPayload.Normalize()
+	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
+	if err != nil {
+		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
+
 	now := time.Now()
 	if err := s.operatingRepo.UpsertDraft(ctx, repository.UpsertOperatingDraftCommand{
 		GroupID:          cmd.GroupID,
@@ -199,6 +207,10 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	}
 
 	normalizedPayload := cmd.OperatingPayload.Normalize()
+	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
+	if err != nil {
+		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
 	calcContext := calcctx.NewCalculationContext(*group, *yearState, *gameConfig).
 		WithOperatingPayload(&normalizedPayload)
 
@@ -258,7 +270,7 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	bankruptReason := ""
 	if bankruptTriggered {
 		nextState.BusinessStatus = enum.BusinessStatusBankrupt
-		bankruptReason = "现金流断裂"
+		bankruptReason = "quarter period-end cash below zero"
 	}
 	stateAfter := state.BuildSnapshot(nextState)
 

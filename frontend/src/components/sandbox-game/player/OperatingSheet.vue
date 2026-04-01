@@ -495,13 +495,18 @@
           <tr v-for="(field, index) in extraFields" :key="`extra-${field.key}`">
             <th class="row-head">{{ 55 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
-            <td v-for="quarter in quarterList" :key="`extra-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
-              <input
-                :value="displayCell(getQuarterFieldValue('incomeAndPenalty', quarter.key, field.key))"
-                :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
-                @input="updateQuarterField('incomeAndPenalty', quarter.key, field.key, $event)"
-              />
+            <td v-for="quarter in quarterList" :key="`extra-${field.key}-${quarter.key}`" :class="extraCellClass(field.key, quarter.scope)">
+              <template v-if="isAdminIssuedExtraField(field.key)">
+                <span class="cell-readonly-value">{{ displayExtraReadonlyCell(quarter.key, field.key) }}</span>
+              </template>
+              <template v-else>
+                <input
+                  :value="displayCell(getQuarterFieldValue('incomeAndPenalty', quarter.key, field.key))"
+                  :disabled="!isScopeEditable(quarter.scope)"
+                  inputmode="decimal"
+                  @input="updateQuarterField('incomeAndPenalty', quarter.key, field.key, $event)"
+                />
+              </template>
             </td>
             <td class="result-cell">{{ formatNumber(getQuarterRowTotal('incomeAndPenalty', field.key)) }}</td>
             <td class="empty-cell" colspan="2"></td>
@@ -736,6 +741,21 @@ function editableCellClass(scope: string) {
     return 'invalid-draft-cell'
   }
   return 'locked-cell'
+}
+
+function isAdminIssuedExtraField(fieldKey: string) {
+  return fieldKey === 'extraExpensePenalty' || fieldKey === 'extraIncomeReward'
+}
+
+function extraCellClass(fieldKey: string, scope: string) {
+  if (isAdminIssuedExtraField(fieldKey)) {
+    return 'admin-issued-cell'
+  }
+  return editableCellClass(scope)
+}
+
+function displayExtraReadonlyCell(quarterKey: string, fieldKey: string) {
+  return formatNumber(getQuarterFieldValue('incomeAndPenalty', quarterKey, fieldKey))
 }
 
 function displayCell(value: string | number | undefined | null) {
@@ -1136,6 +1156,17 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   text-align: center;
 }
 
+.admin-issued-cell {
+  background: #eef3fb;
+  color: #526175;
+  font-weight: 700;
+  padding: 8px 10px;
+}
+
+.cell-readonly-value {
+  display: block;
+  min-height: 20px;
+}
 .locked-cell input {
   color: #8491a6;
 }
@@ -1169,6 +1200,10 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   }
 }
 </style>
+
+
+
+
 
 
 

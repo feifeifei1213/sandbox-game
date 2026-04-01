@@ -221,6 +221,9 @@ func buildPlayerReportServices(db *gorm.DB) (*PlayerReportCommandService, *Playe
 	operatingRepo := repository.NewOperatingRepository(db)
 	initialBaselineRepo := repository.NewInitialBaselineRepository(db)
 	reportRepo := repository.NewReportRepository(db)
+	noticeRepo := repository.NewNoticeRepository(db)
+	adjustmentRepo := repository.NewGroupAdjustmentRepository(db)
+	playerNoticeService := NewPlayerNoticeService(noticeRepo, adjustmentRepo)
 
 	commandService := NewPlayerReportCommandService(
 		db,
@@ -230,6 +233,7 @@ func buildPlayerReportServices(db *gorm.DB) (*PlayerReportCommandService, *Playe
 		operatingRepo,
 		initialBaselineRepo,
 		reportRepo,
+		playerNoticeService,
 	)
 	queryService := NewPlayerReportQueryService(
 		gameConfigRepo,
@@ -239,6 +243,7 @@ func buildPlayerReportServices(db *gorm.DB) (*PlayerReportCommandService, *Playe
 		initialBaselineRepo,
 		reportRepo,
 		assembler.NewPlayerReportAssembler(),
+		playerNoticeService,
 	)
 
 	return commandService, queryService

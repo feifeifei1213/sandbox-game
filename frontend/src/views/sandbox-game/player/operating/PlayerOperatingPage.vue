@@ -351,9 +351,49 @@ function buildPreviewView(yearNo: number, lastDraftSavedAt: string | null): Play
     },
     derivedValues: buildPreviewDerivedValues(yearNo),
     periodEndCash: 47 + yearNo,
+    noticeBoard: buildPreviewNoticeBoard(yearNo),
   }
 }
 
+function buildPreviewNoticeBoard(yearNo: number) {
+  return {
+    pinnedNotice: {
+      id: 1,
+      kind: 'GENERAL',
+      title: '系统通知',
+      content: '主持人提示：请各小组按现场节奏推进经营，季度提交后关注贷款更新。',
+      pinned: true,
+      publishedAt: new Date(2026, 2, 21, 8, 45).toISOString(),
+      yearNo,
+      stageCode: null,
+      amount: null,
+    },
+    recentList: [
+      {
+        id: 2,
+        kind: 'REWARD',
+        title: `${yearNo}年 Q2 奖励`,
+        content: '示例：本季度经营表现优秀，奖励 3。',
+        pinned: false,
+        publishedAt: new Date(2026, 2, 21, 10, 0).toISOString(),
+        yearNo,
+        stageCode: 'Q2',
+        amount: 3,
+      },
+      {
+        id: 3,
+        kind: 'GENERAL',
+        title: '系统通知',
+        content: '示例：准备进入下一阶段前，请再次核对经营数据。',
+        pinned: false,
+        publishedAt: new Date(2026, 2, 21, 9, 20).toISOString(),
+        yearNo,
+        stageCode: null,
+        amount: null,
+      },
+    ],
+  }
+}
 function buildPreviewOperatingPayload(yearNo: number): OperatingPayload {
   const payload = createEmptyOperatingPayload()
   payload.beginning.taxAndPlanning = {
@@ -675,6 +715,8 @@ function buildPreviewDerivedValues(yearNo: number) {
   }
 }
 </style>
+
+
 
 
 

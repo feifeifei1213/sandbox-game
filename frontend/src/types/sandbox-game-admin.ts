@@ -2,6 +2,8 @@
 
 export type UnlockTargetType = 'OPERATING' | 'REPORT'
 export type UnlockStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEAR_END'
+export type NoticeTargetScope = 'ALL' | 'GROUP'
+export type AdjustmentType = 'REWARD' | 'PENALTY'
 
 export interface AdminActionSummary {
   actionCode: string
@@ -150,6 +152,72 @@ export interface AdminGroupOption {
 
 export interface ListAdminGroupsResult {
   list: AdminGroupOption[]
+}
+
+export interface AdminGeneralNoticeRecord {
+  id: number
+  targetScope: NoticeTargetScope
+  targetGroupId: number | null
+  targetGroupName: string | null
+  content: string
+  pinned: boolean
+  publishedAt: string
+  operatorName: string
+}
+
+export interface AdminAdjustmentRecord {
+  id: number
+  groupId: number
+  groupNo: number
+  groupName: string
+  yearNo: number
+  stageCode: 'Q1' | 'Q2' | 'Q3' | 'Q4'
+  adjustmentType: AdjustmentType
+  amount: number
+  reason: string
+  publishedAt: string
+  operatorName: string
+}
+
+export interface AdminNoticeRecordsResult {
+  generalNotices: AdminGeneralNoticeRecord[]
+  adjustments: AdminAdjustmentRecord[]
+}
+
+export interface SendAdminGeneralNoticeRequest {
+  targetScope: NoticeTargetScope
+  targetGroupId?: number | null
+  content: string
+  pinned: boolean
+}
+
+export interface SendAdminGeneralNoticeResult {
+  noticeId: number
+  targetScope: NoticeTargetScope
+  targetGroupId: number | null
+  content: string
+  pinned: boolean
+  publishedAt: string
+}
+
+export interface SendAdminAdjustmentRequest {
+  groupId: number
+  yearNo: number
+  stageCode: 'Q1' | 'Q2' | 'Q3' | 'Q4'
+  adjustmentType: AdjustmentType
+  amount: number
+  reason: string
+}
+
+export interface SendAdminAdjustmentResult {
+  adjustmentId: number
+  groupId: number
+  yearNo: number
+  stageCode: 'Q1' | 'Q2' | 'Q3' | 'Q4'
+  adjustmentType: AdjustmentType
+  amount: number
+  reason: string
+  publishedAt: string
 }
 
 export function createEmptyBaselinePayload(): BaselinePayload {

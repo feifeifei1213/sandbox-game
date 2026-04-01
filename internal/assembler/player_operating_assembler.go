@@ -34,6 +34,7 @@ type PlayerOperatingView struct {
 	DerivedValues          map[string]float64                    `json:"derivedValues"`
 	PeriodEndCash          float64                               `json:"periodEndCash"`
 	CarryForward           *carryforwardrules.CarryForwardResult `json:"carryForward,omitempty"`
+	NoticeBoard            *PlayerNoticeBoard                    `json:"noticeBoard"`
 }
 
 type PlayerOperatingStageSubmitHistory struct {
@@ -56,6 +57,7 @@ func (a *PlayerOperatingAssembler) Build(
 	result operatingrules.CalculationResult,
 	permission state.OperatingPermission,
 	carryForward *carryforwardrules.CarryForwardResult,
+	noticeBoard *PlayerNoticeBoard,
 ) *PlayerOperatingView {
 	history := make([]PlayerOperatingStageSubmitHistory, 0, len(stageSubmissions))
 	for _, item := range stageSubmissions {
@@ -97,5 +99,6 @@ func (a *PlayerOperatingAssembler) Build(
 		DerivedValues:          result.DerivedValues,
 		PeriodEndCash:          result.PeriodEndCash,
 		CarryForward:           carryForward,
+		NoticeBoard:            noticeBoard,
 	}
 }

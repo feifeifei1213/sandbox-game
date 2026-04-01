@@ -1,4 +1,4 @@
-﻿# 沙盘经营系统数据库设计文档（正式版）
+# 沙盘经营系统数据库设计文档（正式版）
 
 > 更新日期：2026-03-26  
 > 适用方式：基于《正式需求文档（首版）》《最小状态机 v0.1》《技术选型细化文档（Go 方向） v0.1》，定义首版正式数据库设计方向，作为后续 MySQL 建表、迁移脚本、Repository 实现和状态机落库的统一依据。  
@@ -349,9 +349,73 @@
 
 ---
 
-### 4.5 管理动作与审计日志
+### 4.5 通知与奖惩
 
-#### 4.5.1 `sg_initial_baseline`
+#### 4.5.1 `sg_notice`
+
+用途：管理员普通通知表。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `target_scope` | VARCHAR(16) | `ALL` / `GROUP` |
+| `target_group_id` | BIGINT NULL | 目标组，发全体时为空 |
+| `content` | VARCHAR(1000) | 通知内容 |
+| `pinned` | TINYINT(1) | 是否置顶 |
+| `published_at` | DATETIME | 发布时间 |
+| `operator_id` | BIGINT | 操作管理员 |
+| `operator_name` | VARCHAR(64) | 操作管理员名称 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `idx_target_scope_group(target_scope, target_group_id)`
+- `idx_published_at(published_at)`
+- `idx_pinned(pinned)`
+
+说明：
+
+- 普通通知只参与展示，不参与经营、财报、汇总计算。
+- 同一组读取通知时，应同时看到 `ALL` 与自身 `GROUP` 通知。
+
+#### 4.5.2 `sg_group_adjustment`
+
+用途：按 `组 + 年 + 季` 存储奖励 / 罚款记录。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `group_id` | BIGINT | 目标组 |
+| `year_no` | INT | 目标年份 |
+| `stage_code` | VARCHAR(16) | `Q1 / Q2 / Q3 / Q4` |
+| `adjustment_type` | VARCHAR(16) | `REWARD` / `PENALTY` |
+| `amount` | DECIMAL(18,2) | 金额 |
+| `reason` | VARCHAR(500) | 奖惩原因 |
+| `published_at` | DATETIME | 发布时间 |
+| `operator_id` | BIGINT | 操作管理员 |
+| `operator_name` | VARCHAR(64) | 操作管理员名称 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `idx_group_year_stage(group_id, year_no, stage_code)`
+- `idx_published_at(published_at)`
+
+说明：
+
+- 首版允许同一季度存在多条奖惩记录，查询层按季度聚合展示。
+- 奖惩只允许作用于尚未锁定的季度；锁定后如需修正，应走异常解锁。
+- 经营页、财报页和汇总口径只读取当前有效年份状态对应的奖惩聚合结果。
+
+---
+
+### 4.6 管理动作与审计日志
+
+#### 4.6.1 `sg_initial_baseline`
 
 用途：管理员提交的初始基线数据。
 
@@ -376,7 +440,7 @@
 
 - `uk_group_baseline(group_id)`
 
-#### 4.5.2 `sg_admin_unlock_log`
+#### 4.6.2 `sg_admin_unlock_log`
 
 用途：异常解锁日志。
 
@@ -394,7 +458,7 @@
 | `operator_name` | VARCHAR(64) | 操作管理员名称 |
 | `operate_time` | DATETIME | 操作时间 |
 
-#### 4.5.3 `sg_admin_action_log`
+#### 4.6.3 `sg_admin_action_log`
 
 用途：管理员关键动作日志。`action_code` 建议至少固定为：`UPDATE_FINAL_YEAR`、`OPEN_NEXT_YEAR`、`SUBMIT_INITIAL_BASELINE`。
 
@@ -430,6 +494,8 @@
 - `sg_group` 1:N `sg_group_report`
 - `sg_group` 1:N `sg_group_report_submission`
 - `sg_group` 1:N `sg_group_summary_snapshot`
+- `sg_group` 1:N `sg_notice`（按目标范围读取）
+- `sg_group` 1:N `sg_group_adjustment`
 - `sg_group` 1:N `sg_admin_unlock_log`
 - `sg_account` N:1 `sg_group`（玩家账号场景）
 - `sg_game_config` 为单实例全局配置表
@@ -446,6 +512,8 @@
 - `sg_group_stage_submission`：`uk_group_year_stage_version`、`idx_group_year`
 - `sg_group_report_submission`：`uk_group_year_report_version`
 - `sg_group_summary_snapshot`：`uk_group_year_summary`、`idx_year_no`
+- `sg_notice`：`idx_target_scope_group`、`idx_published_at`、`idx_pinned`
+- `sg_group_adjustment`：`idx_group_year_stage`、`idx_published_at`
 - `sg_admin_unlock_log`：`idx_group_year`（可加）
 - `sg_admin_action_log`：`idx_operate_time`
 

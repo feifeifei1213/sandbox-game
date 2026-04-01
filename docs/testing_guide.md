@@ -1,4 +1,4 @@
-﻿# 沙盘经营系统测试指南（正式版）
+# 沙盘经营系统测试指南（正式版）
 
 > 更新日期：2026-03-25  
 > 适用方式：基于《正式需求文档（首版）》《接口设计文档（正式版）》《数据库设计文档（正式版）》《开发执行拆解》，定义首版测试分层、关键场景与质量门禁。  
@@ -20,6 +20,7 @@
 - 异常解锁
 - 破产判定
 - 汇总与排名口径
+- 通知与奖惩展示及锁定拦截
 
 ---
 
@@ -61,6 +62,8 @@
   - 提交前错误提示
   - 提交成功/失败提示
   - 管理员异常解锁交互
+  - 玩家通知区渲染与奖惩只读展示
+  - 管理端通知与奖惩页表单提交流程
 
 ### 2.4 数据库结构冒烟（必做）
 
@@ -157,6 +160,17 @@
 - 破产后后续年份不可编辑
 - 破产后历史年份可查看
 
+### 4.6 通知与奖惩
+
+必须覆盖：
+
+- 管理员可发送全体普通通知与单组普通通知
+- 管理员可查看最近普通通知与最近奖惩记录
+- 目标年份未开放时，下发奖惩返回 `422`
+- 目标季度已锁定时，下发奖惩返回 `422`
+- 奖励 / 罚款会叠加到玩家经营页的只读值中
+- 玩家经营页与财报页右侧通知区都能看到对应通知
+
 ---
 
 ## 5. `.http` 用例建议清单
@@ -169,6 +183,7 @@
 - `tests/http/sandbox-game/AdminControl.http`
 - `tests/http/sandbox-game/AdminSummary.http`
 - `tests/http/sandbox-game/AdminGroupData.http`
+- `tests/http/sandbox-game/AdminNotice.http`
 - `tests/http/sandbox-game/AuditLog.http`
 
 首版当前已落的联调用例入口：
@@ -210,12 +225,16 @@ SHOW TABLES LIKE 'sg_group_year_state';
 SHOW TABLES LIKE 'sg_group_stage_submission';
 SHOW TABLES LIKE 'sg_group_report_submission';
 SHOW TABLES LIKE 'sg_group_summary_snapshot';
+SHOW TABLES LIKE 'sg_notice';
+SHOW TABLES LIKE 'sg_group_adjustment';
 SHOW TABLES LIKE 'sg_admin_unlock_log';
 
 DESC sg_group_year_state;
 DESC sg_group_stage_submission;
 DESC sg_group_report_submission;
 DESC sg_group_summary_snapshot;
+DESC sg_notice;
+DESC sg_group_adjustment;
 ```
 
 判定标准：

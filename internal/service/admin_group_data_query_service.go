@@ -33,6 +33,7 @@ type AdminGroupDataQueryService struct {
 	operatingCalculator *operatingrules.Calculator
 	reportCalculator    *reportrules.Calculator
 	carryForward        *carryforwardrules.Builder
+	playerNoticeService *PlayerNoticeService
 }
 
 type AdminGroupOption struct {
@@ -55,6 +56,7 @@ func NewAdminGroupDataQueryService(
 	reportRepo *repository.ReportRepository,
 	operatingAssembler *assembler.PlayerOperatingAssembler,
 	reportAssembler *assembler.PlayerReportAssembler,
+	playerNoticeService *PlayerNoticeService,
 ) *AdminGroupDataQueryService {
 	return &AdminGroupDataQueryService{
 		gameConfigRepo:      gameConfigRepo,
@@ -68,6 +70,7 @@ func NewAdminGroupDataQueryService(
 		operatingCalculator: operatingrules.NewCalculator(),
 		reportCalculator:    reportrules.NewCalculator(),
 		carryForward:        carryforwardrules.NewBuilder(),
+		playerNoticeService: playerNoticeService,
 	}
 }
 
@@ -122,6 +125,7 @@ func (s *AdminGroupDataQueryService) GetOperatingView(ctx context.Context, group
 		operatingResult,
 		buildAdminReadonlyOperatingPermission(calculationContext.State),
 		carryForward,
+		nil,
 	), nil
 }
 
@@ -170,6 +174,7 @@ func (s *AdminGroupDataQueryService) GetReportView(ctx context.Context, groupID 
 		manualPayload,
 		lastDraftSavedAt,
 		buildAdminReadonlyReportPermission(),
+		nil,
 	), nil
 }
 
@@ -207,6 +212,10 @@ func (s *AdminGroupDataQueryService) loadOperatingCalculationContext(ctx context
 	}
 
 	operatingPayload = operatingPayload.Normalize()
+	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
+	if err != nil {
+		return calcctx.CalculationContext{}, nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
 	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	calculationContext, err = s.attachCarrySource(ctx, calculationContext, groupID, yearNo)
@@ -250,6 +259,10 @@ func (s *AdminGroupDataQueryService) loadReportCalculationContext(ctx context.Co
 	}
 
 	operatingPayload = operatingPayload.Normalize()
+	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
+	if err != nil {
+		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
 	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	calculationContext, err = s.attachCarrySource(ctx, calculationContext, groupID, yearNo)

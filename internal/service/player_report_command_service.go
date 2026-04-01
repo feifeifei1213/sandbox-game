@@ -63,20 +63,20 @@ type SubmitPlayerReportResult struct {
 }
 
 type PlayerReportCommandService struct {
-	db              *gorm.DB
-	gameConfigRepo  *repository.GameConfigRepository
-	groupRepo       *repository.GroupRepository
-	groupYearRepo   *repository.GroupYearStateRepository
-	operatingRepo   *repository.OperatingRepository
-	initialBaseRepo *repository.InitialBaselineRepository
-	reportRepo      *repository.ReportRepository
-	transitionGuard *state.TransitionGuard
-	validator       *reportrules.Validator
-	calculator      *reportrules.Calculator
-	summaryBuilder  *summaryrules.Builder
+	db                  *gorm.DB
+	gameConfigRepo      *repository.GameConfigRepository
+	groupRepo           *repository.GroupRepository
+	groupYearRepo       *repository.GroupYearStateRepository
+	operatingRepo       *repository.OperatingRepository
+	initialBaseRepo     *repository.InitialBaselineRepository
+	reportRepo          *repository.ReportRepository
+	transitionGuard     *state.TransitionGuard
+	validator           *reportrules.Validator
+	calculator          *reportrules.Calculator
+	summaryBuilder      *summaryrules.Builder
+	playerNoticeService *PlayerNoticeService
 }
 
-// NewPlayerReportCommandService 创建玩家财报写操作服务。
 func NewPlayerReportCommandService(
 	db *gorm.DB,
 	gameConfigRepo *repository.GameConfigRepository,
@@ -85,23 +85,24 @@ func NewPlayerReportCommandService(
 	operatingRepo *repository.OperatingRepository,
 	initialBaseRepo *repository.InitialBaselineRepository,
 	reportRepo *repository.ReportRepository,
+	playerNoticeService *PlayerNoticeService,
 ) *PlayerReportCommandService {
 	return &PlayerReportCommandService{
-		db:              db,
-		gameConfigRepo:  gameConfigRepo,
-		groupRepo:       groupRepo,
-		groupYearRepo:   groupYearRepo,
-		operatingRepo:   operatingRepo,
-		initialBaseRepo: initialBaseRepo,
-		reportRepo:      reportRepo,
-		transitionGuard: state.NewTransitionGuard(),
-		validator:       reportrules.NewValidator(),
-		calculator:      reportrules.NewCalculator(),
-		summaryBuilder:  summaryrules.NewBuilder(),
+		db:                  db,
+		gameConfigRepo:      gameConfigRepo,
+		groupRepo:           groupRepo,
+		groupYearRepo:       groupYearRepo,
+		operatingRepo:       operatingRepo,
+		initialBaseRepo:     initialBaseRepo,
+		reportRepo:          reportRepo,
+		transitionGuard:     state.NewTransitionGuard(),
+		validator:           reportrules.NewValidator(),
+		calculator:          reportrules.NewCalculator(),
+		summaryBuilder:      summaryrules.NewBuilder(),
+		playerNoticeService: playerNoticeService,
 	}
 }
 
-// SaveDraft 保存当前年份财报页的手工项草稿，不推进年度完成态。
 func (s *PlayerReportCommandService) SaveDraft(ctx context.Context, cmd SavePlayerReportDraftCommand) (*SavePlayerReportDraftResult, error) {
 	group, err := s.groupRepo.GetByID(ctx, cmd.GroupID)
 	if err != nil {
@@ -153,7 +154,6 @@ func (s *PlayerReportCommandService) SaveDraft(ctx context.Context, cmd SavePlay
 	}, nil
 }
 
-// Submit 提交当前年份财报，完成平衡校验、状态推进和正式年份汇总快照写入。
 func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlayerReportCommand) (*SubmitPlayerReportResult, error) {
 	group, err := s.groupRepo.GetByID(ctx, cmd.GroupID)
 	if err != nil {
@@ -202,12 +202,11 @@ func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlaye
 		return nil, err
 	}
 
-	// 业务约束：若在最终年度提交后所有者权益为负，则该组进入破产态。
 	bankruptTriggered := cmd.YearNo == gameConfig.FinalYear && computedPayload.ReportTotalEquity < 0
 	bankruptReason := ""
 	if bankruptTriggered {
 		nextState.BusinessStatus = enum.BusinessStatusBankrupt
-		bankruptReason = "最终年度所有者权益为负"
+		bankruptReason = "final year equity below zero"
 	}
 	stateAfter := state.BuildSnapshot(nextState)
 
@@ -225,7 +224,6 @@ func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlaye
 
 	var summaryResult summaryrules.SummaryResult
 	if !calcContext.IsDemoYear() {
-		// 业务约束：0 年为引导年，不写入正式汇总快照。
 		nextContext, buildErr := buildNextReportContext(calcContext, nextState)
 		if buildErr != nil {
 			return nil, buildErr
@@ -335,6 +333,10 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 		return calcctx.CalculationContext{}, fmt.Errorf("load operating draft: %w", draftErr)
 	}
 	operatingPayload = operatingPayload.Normalize()
+	operatingPayload, err := s.playerNoticeService.OverlayAdjustments(ctx, group.ID, yearState.YearNo, operatingPayload)
+	if err != nil {
+		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
 	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	if yearState.YearNo == 0 {

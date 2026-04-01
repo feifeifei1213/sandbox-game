@@ -1,5 +1,7 @@
 ﻿<template>
   <aside class="sidebar">
+    <PlayerNoticePanel :notice-board="view?.noticeBoard" />
+
     <section class="panel">
       <h3>页面状态</h3>
       <dl class="meta-list">
@@ -68,6 +70,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import PlayerNoticePanel from '@/components/sandbox-game/player/PlayerNoticePanel.vue'
 import type { PlayerOperatingView } from '@/types/sandbox-game'
 import {
   formatBusinessStatus,

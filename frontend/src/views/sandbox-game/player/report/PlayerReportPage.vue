@@ -259,6 +259,7 @@ const previewView = computed<PlayerReportView>(() => ({
     incomeTaxRateOptions: [0.25, 0.15, 0],
   },
   lastDraftSavedAt: previewLastDraftSavedAt.value,
+  noticeBoard: buildPreviewNoticeBoard(previewYear.value),
 }))
 
 const activeConfig = computed(() => (previewMode.value ? previewConfig.value : currentConfig.value))
@@ -396,6 +397,34 @@ async function handleSubmit() {
   await store.submitCurrentReport()
 }
 
+function buildPreviewNoticeBoard(yearNo: number) {
+  return {
+    pinnedNotice: {
+      id: 11,
+      kind: 'GENERAL',
+      title: '系统通知',
+      content: '主持人提示：本年经营结束后，请尽快完成财报绿色手工项填写。',
+      pinned: true,
+      publishedAt: new Date(2026, 2, 21, 13, 30).toISOString(),
+      yearNo,
+      stageCode: null,
+      amount: null,
+    },
+    recentList: [
+      {
+        id: 12,
+        kind: 'PENALTY',
+        title: `${yearNo}年 Q4 罚款`,
+        content: '示例：因现场判罚扣减 2。',
+        pinned: false,
+        publishedAt: new Date(2026, 2, 21, 13, 45).toISOString(),
+        yearNo,
+        stageCode: 'Q4',
+        amount: 2,
+      },
+    ],
+  }
+}
 function goOperating() {
   router.push({
     path: '/sandbox-game/player/operating',
@@ -622,6 +651,8 @@ async function handleLogout() {
   }
 }
 </style>
+
+
 
 
 

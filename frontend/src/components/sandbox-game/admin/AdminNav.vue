@@ -22,7 +22,8 @@ const items = [
   { to: '/sandbox-game/admin/summary', label: '汇总', description: '年度汇总区 + 最终排名区' },
   { to: '/sandbox-game/admin/control', label: '年度控制', description: '最终年份、开放下一年、阻断摘要' },
   { to: '/sandbox-game/admin/baseline', label: '初始基线', description: '共享模板录入与提交锁定' },
-  { to: '/sandbox-game/admin/group-data', label: '组数据', description: '组与年份查看入口，解锁流在下一步接入' },
+  { to: '/sandbox-game/admin/group-data', label: '组数据', description: '组与年份查看入口，支持异常解锁' },
+  { to: '/sandbox-game/admin/notices', label: '通知与奖惩', description: '发送普通通知并按组下发奖励与罚款' },
 ]
 </script>
 

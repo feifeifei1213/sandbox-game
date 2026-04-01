@@ -1,4 +1,4 @@
-﻿# 沙盘经营系统接口设计文档（正式版）
+# 沙盘经营系统接口设计文档（正式版）
 
 > 更新日期：2026-03-30  
 > 适用方式：基于《正式需求文档（首版）》《最小状态机 v0.1》《技术选型细化文档（Go 方向） v0.1》，定义首版正式业务接口边界，作为后续 Go 后端开发、前端 API 客户端开发和接口测试的统一依据。  
@@ -78,6 +78,9 @@
 - `sandbox-game:player-report:submit`
 - `sandbox-game:admin-control:open-next-year`
 - `sandbox-game:admin-control:unlock-year`
+- `sandbox-game:admin-notice:query`
+- `sandbox-game:admin-notice:send-general`
+- `sandbox-game:admin-notice:send-adjustment`
 - `sandbox-game:admin-summary:query`
 
 ### 2.4 URL 与方法规范
@@ -828,6 +831,110 @@ Go DTO 建议：
 8. 测试覆盖
 - 单元测试覆盖：`OPERATING/Q1`、`OPERATING/Q2`、`OPERATING/YEAR_END`、`REPORT` 四类主场景。
 - 集成测试覆盖：失效草稿保留、汇总失效、破产恢复、重新提交后重新生效。
+
+### 6.5.8 `admin-notice`
+
+#### 6.5.8.1 查看通知与奖惩最近记录
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-notice/get-records?limit=20`
+- 权限：`sandbox-game:admin-notice:query`
+
+Go DTO 建议：
+
+- 响应：`AdminNoticeRecordsResp`
+
+查询参数建议：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `limit` | `int` | 否 | 最近记录条数，首版建议默认 `20`，并限制最大值 |
+
+规则：
+
+- 返回最近普通通知列表与最近奖惩列表。
+- 首版采用页面刷新 / 轮询口径，不做 WebSocket。
+- 管理端记录区只做查看，不承担撤回或编辑历史记录能力。
+
+#### 6.5.8.2 发送普通通知
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-notice/send-general`
+- 权限：`sandbox-game:admin-notice:send-general`
+
+Go DTO 建议：
+
+- 请求：`SendAdminGeneralNoticeReq`
+- 响应：`SendAdminGeneralNoticeResp`
+
+请求体建议：
+
+```json
+{
+  "targetScope": "GROUP",
+  "targetGroupId": 3,
+  "content": "第三组请核对本年经营数据。",
+  "pinned": true
+}
+```
+
+字段建议：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `targetScope` | `string` | 是 | `ALL` / `GROUP` |
+| `targetGroupId` | `int64` | 条件必填 | 当 `targetScope = GROUP` 时必填 |
+| `content` | `string` | 是 | 自由文本通知内容 |
+| `pinned` | `bool` | 否 | 是否置顶 |
+
+规则：
+
+- 普通通知支持发全体或单组。
+- 普通通知仅负责展示，不参与经营、财报、汇总计算。
+- 允许发送赛事播报类消息，例如 `第一小组已破产`。
+
+#### 6.5.8.3 下发奖惩
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-notice/send-adjustment`
+- 权限：`sandbox-game:admin-notice:send-adjustment`
+
+Go DTO 建议：
+
+- 请求：`SendAdminAdjustmentReq`
+- 响应：`SendAdminAdjustmentResp`
+
+请求体建议：
+
+```json
+{
+  "groupId": 3,
+  "yearNo": 0,
+  "stageCode": "Q1",
+  "adjustmentType": "REWARD",
+  "amount": 88,
+  "reason": "主持人现场奖励"
+}
+```
+
+字段建议：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `groupId` | `int64` | 是 | 目标组 |
+| `yearNo` | `int` | 是 | 目标年份 |
+| `stageCode` | `string` | 是 | 仅允许 `Q1 / Q2 / Q3 / Q4` |
+| `adjustmentType` | `string` | 是 | `REWARD` / `PENALTY` |
+| `amount` | `decimal` | 是 | 必须大于 `0` |
+| `reason` | `string` | 是 | 奖惩原因 |
+
+规则：
+
+- 奖惩属于计算型业务事件，必须进入经营页计算，并继续进入财报承接口径。
+- 玩家端经营页中的 `额外收入 / 奖励` 与 `额外支出 / 罚款` 改为只读展示，不允许玩家自行录入。
+- 若目标年份尚未开放，返回 `422`。
+- 若目标季度已经正式提交并锁定，返回 `422`；需先走异常解锁，再由玩家重新提交。
+- 若目标组已破产，返回 `422`。
 
 ---
 

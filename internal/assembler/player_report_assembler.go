@@ -26,6 +26,7 @@ type PlayerReportView struct {
 	ReportManualPayload   payload.ReportManualPayload    `json:"reportManualPayload"`
 	ManualFieldOptions    PlayerReportManualFieldOptions `json:"manualFieldOptions"`
 	LastDraftSavedAt      *time.Time                     `json:"lastDraftSavedAt"`
+	NoticeBoard           *PlayerNoticeBoard             `json:"noticeBoard"`
 }
 
 type PlayerReportAssembler struct{}
@@ -40,6 +41,7 @@ func (a *PlayerReportAssembler) Build(
 	manual payload.ReportManualPayload,
 	lastDraftSavedAt *time.Time,
 	permission state.ReportPermission,
+	noticeBoard *PlayerNoticeBoard,
 ) *PlayerReportView {
 	return &PlayerReportView{
 		GroupID:               ctx.Group.ID,
@@ -57,5 +59,6 @@ func (a *PlayerReportAssembler) Build(
 			IncomeTaxRateOptions: payload.AllowedIncomeTaxRates(),
 		},
 		LastDraftSavedAt: lastDraftSavedAt,
+		NoticeBoard:      noticeBoard,
 	}
 }

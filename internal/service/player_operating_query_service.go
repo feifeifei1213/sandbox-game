@@ -18,16 +18,17 @@ import (
 )
 
 type PlayerOperatingQueryService struct {
-	gameConfigRepo  *repository.GameConfigRepository
-	groupRepo       *repository.GroupRepository
-	groupYearRepo   *repository.GroupYearStateRepository
-	operatingRepo   *repository.OperatingRepository
-	initialBaseRepo *repository.InitialBaselineRepository
-	reportRepo      *repository.ReportRepository
-	assembler       *assembler.PlayerOperatingAssembler
-	calculator      *operatingrules.Calculator
-	carryForward    *carryforwardrules.Builder
-	transitionGuard *state.TransitionGuard
+	gameConfigRepo      *repository.GameConfigRepository
+	groupRepo           *repository.GroupRepository
+	groupYearRepo       *repository.GroupYearStateRepository
+	operatingRepo       *repository.OperatingRepository
+	initialBaseRepo     *repository.InitialBaselineRepository
+	reportRepo          *repository.ReportRepository
+	assembler           *assembler.PlayerOperatingAssembler
+	calculator          *operatingrules.Calculator
+	carryForward        *carryforwardrules.Builder
+	transitionGuard     *state.TransitionGuard
+	playerNoticeService *PlayerNoticeService
 }
 
 func NewPlayerOperatingQueryService(
@@ -38,18 +39,20 @@ func NewPlayerOperatingQueryService(
 	initialBaseRepo *repository.InitialBaselineRepository,
 	reportRepo *repository.ReportRepository,
 	assembler *assembler.PlayerOperatingAssembler,
+	playerNoticeService *PlayerNoticeService,
 ) *PlayerOperatingQueryService {
 	return &PlayerOperatingQueryService{
-		gameConfigRepo:  gameConfigRepo,
-		groupRepo:       groupRepo,
-		groupYearRepo:   groupYearRepo,
-		operatingRepo:   operatingRepo,
-		initialBaseRepo: initialBaseRepo,
-		reportRepo:      reportRepo,
-		assembler:       assembler,
-		calculator:      operatingrules.NewCalculator(),
-		carryForward:    carryforwardrules.NewBuilder(),
-		transitionGuard: state.NewTransitionGuard(),
+		gameConfigRepo:      gameConfigRepo,
+		groupRepo:           groupRepo,
+		groupYearRepo:       groupYearRepo,
+		operatingRepo:       operatingRepo,
+		initialBaseRepo:     initialBaseRepo,
+		reportRepo:          reportRepo,
+		assembler:           assembler,
+		calculator:          operatingrules.NewCalculator(),
+		carryForward:        carryforwardrules.NewBuilder(),
+		transitionGuard:     state.NewTransitionGuard(),
+		playerNoticeService: playerNoticeService,
 	}
 }
 
@@ -86,6 +89,10 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 	}
 
 	operatingPayload = operatingPayload.Normalize()
+	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
+	if err != nil {
+		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
 	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	if yearNo == 0 {
@@ -139,6 +146,11 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 		carryForward = &result
 	}
 
+	noticeBoard, err := s.playerNoticeService.BuildBoard(ctx, groupID, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("build notice board: %w", err)
+	}
+
 	permission := s.transitionGuard.BuildOperatingPermission(calculationContext.State)
 
 	return s.assembler.Build(
@@ -148,5 +160,6 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 		operatingResult,
 		permission,
 		carryForward,
+		noticeBoard,
 	), nil
 }

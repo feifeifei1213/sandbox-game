@@ -1,6 +1,23 @@
 ﻿export type NumericCellValue = number | ''
 export type QuarterValueMap = Record<string, Record<string, NumericCellValue>>
 
+export interface PlayerNoticeItem {
+  id: number
+  kind: string
+  title: string
+  content: string
+  pinned: boolean
+  publishedAt: string
+  yearNo?: number | null
+  stageCode?: string | null
+  amount?: number | null
+}
+
+export interface PlayerNoticeBoard {
+  pinnedNotice: PlayerNoticeItem | null
+  recentList: PlayerNoticeItem[]
+}
+
 export interface CurrentGameConfigResult {
   currentOpenYear: number
   finalYear: number
@@ -81,6 +98,7 @@ export interface PlayerOperatingView {
   quarterCashChecks: Record<string, number>
   derivedValues: Record<string, number>
   periodEndCash: number
+  noticeBoard: PlayerNoticeBoard | null
 }
 
 export interface SaveDraftRequest {
@@ -210,6 +228,7 @@ export interface PlayerReportView {
   reportManualPayload: ReportManualPayload
   manualFieldOptions: PlayerReportManualFieldOptions
   lastDraftSavedAt: string | null
+  noticeBoard: PlayerNoticeBoard | null
 }
 
 export interface SavePlayerReportDraftRequest {
@@ -344,6 +363,3 @@ function normalizeNullableNumber(value: number | null | undefined) {
   }
   return value
 }
-
-
-

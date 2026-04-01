@@ -5,7 +5,7 @@
         <div>
           <p class="eyebrow">Sandbox Game / Admin</p>
           <h1>管理员端</h1>
-          <p class="subtext">首版聚焦汇总、年度控制、初始基线与组数据四个入口，优先服务现场主持人操作。</p>
+          <p class="subtext">首版聚焦汇总、年度控制、初始基线、组数据与通知奖惩五个入口，优先服务现场主持人操作。</p>
         </div>
         <div class="header-pills">
           <span class="pill">最终年份：{{ config?.finalYear ?? '--' }}</span>
@@ -214,3 +214,4 @@ async function handleLogout() {
   }
 }
 </style>
+

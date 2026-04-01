@@ -1,0 +1,84 @@
+@host = http://127.0.0.1:8080
+@baseUrl = {{host}}/api/v1/sandbox-game
+@adminToken = <admin-token>
+@groupToken = <group-token>
+
+### 管理员：查看通知与奖惩最近记录
+GET {{baseUrl}}/admin-notice/get-records?limit=20
+Authorization: Bearer {{adminToken}}
+
+### 管理员：发送全体普通通知
+POST {{baseUrl}}/admin-notice/send-general
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "targetScope": "ALL",
+  "content": "主持人提醒：请各组尽快完成本年经营与财报提交。",
+  "pinned": true
+}
+
+### 管理员：向单组发送普通通知
+POST {{baseUrl}}/admin-notice/send-general
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "targetScope": "GROUP",
+  "targetGroupId": 3,
+  "content": "第三组请核对本年经营数据。",
+  "pinned": false
+}
+
+### 管理员：向单组下发奖励
+### 前提：目标年份已开放，目标季度尚未锁定
+POST {{baseUrl}}/admin-notice/send-adjustment
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "groupId": 3,
+  "yearNo": 0,
+  "stageCode": "Q1",
+  "adjustmentType": "REWARD",
+  "amount": 88,
+  "reason": "主持人现场奖励测试"
+}
+
+### 管理员：向单组下发罚款
+### 前提：目标年份已开放，目标季度尚未锁定
+POST {{baseUrl}}/admin-notice/send-adjustment
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "groupId": 3,
+  "yearNo": 0,
+  "stageCode": "Q1",
+  "adjustmentType": "PENALTY",
+  "amount": 66,
+  "reason": "主持人现场罚款测试"
+}
+
+### 管理员：验证锁定季度奖惩拦截
+### 预期：返回 422
+POST {{baseUrl}}/admin-notice/send-adjustment
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "groupId": 1,
+  "yearNo": 0,
+  "stageCode": "Q1",
+  "adjustmentType": "PENALTY",
+  "amount": 50,
+  "reason": "锁定季度不可直接改奖惩"
+}
+
+### 玩家：读取经营页，确认右侧通知区与奖惩只读值
+GET {{baseUrl}}/player-operating/get-year-view?yearNo=0
+Authorization: Bearer {{groupToken}}
+
+### 玩家：读取财报页，确认右侧通知区可见
+GET {{baseUrl}}/player-report/get-view?yearNo=0
+Authorization: Bearer {{groupToken}}

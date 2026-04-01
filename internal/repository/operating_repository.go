@@ -44,6 +44,18 @@ func (r *OperatingRepository) ListStageSubmissions(ctx context.Context, groupID 
 	return items, nil
 }
 
+func (r *OperatingRepository) HasStageSubmission(ctx context.Context, groupID int64, yearNo int, stageCode string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&entity.GroupStageSubmission{}).
+		Where("group_id = ? AND year_no = ? AND stage_code = ?", groupID, yearNo, stageCode).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 type UpsertOperatingDraftCommand struct {
 	GroupID          int64
 	YearNo           int
