@@ -1,8 +1,8 @@
 ﻿# 沙盘经营系统联调与人工验收运行手册（首版）
 
-> 更新日期：2026-03-30  
+> 更新日期：2026-04-01  
 > 适用方式：基于《正式需求文档（首版）》《接口设计文档（正式版）》《前端开发指南（正式版）》《测试指南（正式版）》与当前 `frontend/ + Go API` 实际实现，定义首版联调、演示与人工验收的最小可执行跑法。  
-> 文档定位：本文件回答“环境怎么起、页面怎么进、身份怎么切、主链怎么验”。
+> 文档定位：本文件回答“环境怎么起、页面怎么进、身份怎么切、主链怎么验”。正式比赛上线方案另见 `docs/competition_launch_runbook.md`。
 
 ## 1. 目标
 
@@ -64,6 +64,14 @@ npm run dev
 ```
 
 ---
+
+### 3.4 环境使用建议
+
+- `正式比赛库`：只用于正式比赛与现场正式演示，不用于开发态写入测试。
+- `多组演练库`：用于验证管理员控制、汇总、排名、开放下一年等多组联动链路。
+- `单组演练库 / 单组演练模式`：用于反复跑单组主链，尤其适合 `0年 -> 最终年` 的快速回归。
+- 单组演练不改变正式规则；它的实现方式应是“独立环境隔离”，不是“正式规则放宽”。
+- 若当前仓库尚未单独落 `configs/local-single.yaml`，临时做法也应是复制 `configs/local.yaml` 并改指向独立数据库，而不是直接复用正式比赛库。
 
 ## 4. 演示身份与访问方式
 
@@ -248,3 +256,45 @@ Authorization: Bearer <accessToken>
 
 - 若要把 `M3-03` 记为“现场可演示完成”，还需要按本手册在演练库实际走完一次完整主链，并回填结果记录。
 
+
+### 3.5 单组演练环境快速准备
+
+当联调目标是“从管理员提交初始基线开始，把 0年 -> 最终年 主链完整走一遍”，推荐直接使用单组演练环境。
+
+准备步骤：
+
+1. 重置单组演练库。
+
+```powershell
+Set-Location 'E:\project\sand box game'
+powershell -ExecutionPolicy Bypass -File '.\scripts\reset-single-rehearsal.ps1'
+```
+
+2. 用单组配置启动后端。
+
+```powershell
+Set-Location 'E:\project\sand box game'
+$env:GOCACHE='E:\project\sand box game\.gocache'
+$env:GOMODCACHE='E:\project\sand box game\.cache\gomod'
+go run .\cmd\server\main.go -config .\configs\local-single.yaml
+```
+
+3. 启动前端。
+
+```powershell
+Set-Location 'E:\project\sand box game\frontend'
+npm run dev
+```
+
+4. 按正式登录口径进入：
+
+- 管理员：`admin / 123456`
+- 玩家：`group01 / 123456`
+
+建议联调顺序：
+
+1. 管理员登录并提交初始基线。
+2. 玩家登录后完成 `0年` 经营与财报。
+3. 管理员开放 `1年`。
+4. 重复经营、财报、汇总与开放下一年流程。
+5. 若想重新测试，直接再次执行 `reset-single-rehearsal.ps1`。

@@ -1,6 +1,6 @@
 # 沙盘经营系统测试指南（正式版）
 
-> 更新日期：2026-03-25  
+> 更新日期：2026-04-01  
 > 适用方式：基于《正式需求文档（首版）》《接口设计文档（正式版）》《数据库设计文档（正式版）》《开发执行拆解》，定义首版测试分层、关键场景与质量门禁。  
 > 文档定位：本文件回答“这个系统要怎么测、测到什么程度算可交付”。
 
@@ -76,6 +76,14 @@
 - 解锁日志表存在
 
 ---
+
+### 2.5 推荐测试环境分层
+
+- `正式比赛库`：仅用于真实比赛 / 现场彩排，不建议在其中执行写入型开发测试。
+- `多组演练库`：用于管理员链路、汇总链路、开放下一年阻塞条件等多组协同验收。
+- `单组演练库 / 单组演练模式`：用于重复执行 `0年 -> 最终年` 的单链路推演、公式回归、本地联调与演示准备。
+- 不建议为了方便单组测试而放宽正式规则，也不建议在正式比赛库中伪造其他小组“已完成”状态。
+- 若当前仓库尚未单独实现单组演练配置，也应至少通过独立数据库与独立初始化脚本隔离测试数据。
 
 ## 3. 首版接口必测场景
 
@@ -279,3 +287,41 @@ Excel 口径回归样例统一以 [`docs/excel_reconciliation_samples.md`](./exc
 6. 文档同步更新
 
 
+
+### 2.6 单组演练库初始化与重置
+
+推荐在需要反复推演 `0年 -> 最终年` 全链路时，使用单组演练库：
+
+- 配置文件：`configs/local-single.yaml`
+- 目标数据库：`sandbox_game_single_rehearsal`
+- 默认账号：`admin / 123456`、`group01 / 123456`
+- 默认状态：仅初始化 `1` 个管理员和 `1` 个玩家组；`初始基线未提交`，方便从管理员首步开始走完整主链。
+
+初始化单组演练库：
+
+```powershell
+Set-Location 'E:\project\sand box game'
+powershell -ExecutionPolicy Bypass -File '.\scripts\init-single-rehearsal.ps1'
+```
+
+重置单组演练库：
+
+```powershell
+Set-Location 'E:\project\sand box game'
+powershell -ExecutionPolicy Bypass -File '.\scripts\reset-single-rehearsal.ps1'
+```
+
+使用单组配置启动后端：
+
+```powershell
+Set-Location 'E:\project\sand box game'
+$env:GOCACHE='E:\project\sand box game\.gocache'
+$env:GOMODCACHE='E:\project\sand box game\.cache\gomod'
+go run .\cmd\server\main.go -config .\configs\local-single.yaml
+```
+
+说明：
+
+- 若只想重新开始一次推演，优先执行“重置单组演练库”。
+- 单组演练库不放宽正式规则；它只是通过“库里只有 1 个组”来天然满足年度推进条件。
+- 建议下午全过程推演优先使用这套单组库，避免污染多组演练数据。
