@@ -211,7 +211,7 @@ func (s *AdminGroupDataQueryService) loadOperatingCalculationContext(ctx context
 		return calcctx.CalculationContext{}, nil, fmt.Errorf("load operating draft: %w", err)
 	}
 
-	operatingPayload = operatingPayload.Normalize()
+	operatingPayload = operatingPayload.Normalize().WithoutDerivedValues()
 	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
 	if err != nil {
 		return calcctx.CalculationContext{}, nil, fmt.Errorf("overlay operating adjustments: %w", err)
@@ -258,7 +258,7 @@ func (s *AdminGroupDataQueryService) loadReportCalculationContext(ctx context.Co
 		return calcctx.CalculationContext{}, fmt.Errorf("load operating draft: %w", draftErr)
 	}
 
-	operatingPayload = operatingPayload.Normalize()
+	operatingPayload = operatingPayload.Normalize().WithoutDerivedValues()
 	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
 	if err != nil {
 		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)

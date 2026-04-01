@@ -248,3 +248,34 @@ func mustFloat64(t *testing.T, value any) float64 {
 	}
 	return number
 }
+
+func TestCalculateDoesNotDoubleCountAliasedMarketInvestment(t *testing.T) {
+	t.Parallel()
+
+	calculator := NewCalculator()
+	operatingPayload := payload.NewOperatingPayload()
+	operatingPayload.Beginning.TaxAndPlanning = map[string]any{
+		"marketInvestmentTotal": 1.0,
+		"marketBidCost":         1.0,
+	}
+
+	ctx := newOperatingCalculationContext(0, enum.StageStatusQ1Open).
+		WithInitialBaseline(&payload.BaselinePayload{
+			BaselineIncomeTax:        1,
+			BaselineShortTermLoan:    0,
+			BaselineLongTermLoan:     0,
+			BaselineLineResidual:     0,
+			BaselineDepreciableAsset: 0,
+			BaselineCash:             36,
+		}).
+		WithOperatingPayload(&operatingPayload)
+
+	result, err := calculator.Calculate(ctx)
+	if err != nil {
+		t.Fatalf("calculate operating failed: %v", err)
+	}
+
+	assertFloatEquals(t, result.DerivedValues["marketBidCost"], 1)
+	assertFloatEquals(t, result.QuarterCashChecks["Q1"], 34)
+	assertFloatEquals(t, result.PeriodEndCash, 34)
+}

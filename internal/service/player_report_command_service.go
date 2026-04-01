@@ -332,7 +332,7 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 	default:
 		return calcctx.CalculationContext{}, fmt.Errorf("load operating draft: %w", draftErr)
 	}
-	operatingPayload = operatingPayload.Normalize()
+	operatingPayload = operatingPayload.Normalize().WithoutDerivedValues()
 	operatingPayload, err := s.playerNoticeService.OverlayAdjustments(ctx, group.ID, yearState.YearNo, operatingPayload)
 	if err != nil {
 		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)

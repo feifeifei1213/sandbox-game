@@ -158,13 +158,13 @@ func extractAnnualMetrics(value payload.OperatingPayload) annualOperatingMetrics
 
 	return annualOperatingMetrics{
 		marketBidCost: firstNonZero(
-			lookupAnyNumber(derived, "marketBidCost", "marketInvestmentTotal", "p5"),
-			lookupAnyNumber(value.Beginning.TaxAndPlanning, "marketBidCost", "marketInvestmentTotal", "p5"),
+			lookupPrioritizedNumber(derived, "marketBidCost", "marketInvestmentTotal", "p5"),
+			lookupPrioritizedNumber(value.Beginning.TaxAndPlanning, "marketBidCost", "marketInvestmentTotal", "p5"),
 			extractMetric(value.Beginning.MarketBid, false, "marketBidCost", "marketInvestment", "marketInvestmentTotal", "investment", "bidInvestment", "p5"),
 		),
 		orderTotal: firstNonZero(
-			lookupAnyNumber(derived, "orderTotal", "orderAmountTotal", "o5"),
-			lookupAnyNumber(value.Beginning.TaxAndPlanning, "orderTotal", "orderAmountTotal", "o5"),
+			lookupPrioritizedNumber(derived, "orderTotal", "orderAmountTotal", "o5"),
+			lookupPrioritizedNumber(value.Beginning.TaxAndPlanning, "orderTotal", "orderAmountTotal", "o5"),
 			extractMetric(value.Beginning.MarketBid, false, "orderTotal", "orderAmount", "totalOrderAmount", "annualOrderTotal", "o5"),
 		),
 		shortTermRepayment: firstNonZero(
@@ -477,6 +477,63 @@ func lookupAnyNumber(source map[string]any, keys ...string) float64 {
 		return value
 	}
 	return 0
+}
+
+func lookupPrioritizedNumber(source map[string]any, keys ...string) float64 {
+	if len(source) == 0 {
+		return 0
+	}
+	for _, key := range keys {
+		if value, ok := findMatchedNumber(source, key); ok {
+			return value
+		}
+	}
+	return 0
+}
+
+func findMatchedNumber(source any, key string) (float64, bool) {
+	normalized := normalizeSearchKey(key)
+	if normalized == "" {
+		return 0, false
+	}
+	return walkFirstMatchedNumber(source, normalized)
+}
+
+func walkFirstMatchedNumber(source any, key string) (float64, bool) {
+	switch typed := source.(type) {
+	case map[string]any:
+		for currentKey, value := range typed {
+			if keyMatches(currentKey, []string{key}) {
+				if number, ok := numberValue(value); ok {
+					return number, true
+				}
+				if nested, nestedFound := sumAllNumbersWithFound(value); nestedFound {
+					return nested, true
+				}
+			}
+
+			if nested, nestedFound := walkFirstMatchedNumber(value, key); nestedFound {
+				return nested, true
+			}
+		}
+		return 0, false
+	case []map[string]any:
+		for _, item := range typed {
+			if nested, nestedFound := walkFirstMatchedNumber(item, key); nestedFound {
+				return nested, true
+			}
+		}
+		return 0, false
+	case []any:
+		for _, item := range typed {
+			if nested, nestedFound := walkFirstMatchedNumber(item, key); nestedFound {
+				return nested, true
+			}
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
 }
 
 func sumMatchedNumbers(source any, keys ...string) (float64, bool) {

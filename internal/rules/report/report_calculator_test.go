@@ -237,3 +237,37 @@ func assertFloatEquals(t *testing.T, actual float64, expected float64) {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 }
+
+func TestCalculateDoesNotDoubleCountAliasedMarketInvestment(t *testing.T) {
+	t.Parallel()
+
+	calculator := NewCalculator()
+	operatingPayload := payload.NewOperatingPayload()
+	operatingPayload.Beginning.TaxAndPlanning = map[string]any{
+		"marketInvestmentTotal": 1.0,
+		"marketBidCost":         1.0,
+	}
+
+	ctx := newReportCalculationContext(0).
+		WithInitialBaseline(&payload.BaselinePayload{
+			BaselineIncomeTax:        1,
+			BaselineShortTermLoan:    0,
+			BaselineLongTermLoan:     0,
+			BaselineFactoryAsset:     0,
+			BaselineLineResidual:     0,
+			BaselineDepreciableAsset: 0,
+			BaselineCash:             36,
+			BaselineReceivable:       0,
+			BaselineShareCapital:     0,
+			BaselineRetainedEarnings: 0,
+		}).
+		WithOperatingPayload(&operatingPayload)
+
+	result, err := calculator.Calculate(ctx)
+	if err != nil {
+		t.Fatalf("calculate report failed: %v", err)
+	}
+
+	assertFloatEquals(t, result.ReportComprehensiveCost, 1)
+	assertFloatEquals(t, result.ReportCash, 34)
+}

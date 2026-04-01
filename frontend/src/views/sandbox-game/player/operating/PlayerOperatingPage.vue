@@ -56,10 +56,11 @@
             :model-value="activeDraftPayload"
             :editable-scopes="activeView.editableScopes"
             :invalid-scopes="activeView.invalidScopes"
-            :quarter-cash-checks="activeView.quarterCashChecks"
+            :quarter-cash-checks="activeQuarterCashChecks"
             :current-stage-code="activeView.currentStageCode"
-            :derived-values="activeView.derivedValues"
-            :period-end-cash="activeView.periodEndCash"
+            :derived-values="activeDerivedValues"
+            :period-end-cash="activePeriodEndCash"
+            :carry-forward="activeView.carryForward"
             @update:model-value="updatePayload"
           />
 
@@ -92,6 +93,7 @@ import OperatingSidebar from '@/components/sandbox-game/player/OperatingSidebar.
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatReportStatus, formatStageCode, formatYearStatus } from '@/utils/sandbox-game-display'
+import { buildOperatingPreviewCalculation } from '@/utils/sandbox-game-operating-preview'
 import type { PageMessage } from '@/stores/player-operating'
 import { usePlayerOperatingStore } from '@/stores/player-operating'
 import {
@@ -122,6 +124,7 @@ const {
   dirty,
   pageMessage,
   reportEnabled,
+  previewCalculation: storePreviewCalculation,
 } = storeToRefs(store)
 const { currentUser } = storeToRefs(authStore)
 
@@ -163,12 +166,27 @@ const previewYearTabs = computed<YearTabItem[]>(() => {
   return tabs
 })
 const previewView = computed<PlayerOperatingView>(() => buildPreviewView(previewYear.value, previewLastDraftSavedAt.value))
+const previewCalculation = computed(() =>
+  buildOperatingPreviewCalculation({
+    payload: previewDraftPayload.value,
+    carryForward: previewView.value.carryForward,
+    currentStageCode: previewView.value.currentStageCode,
+    fallback: {
+      quarterCashChecks: previewView.value.quarterCashChecks,
+      derivedValues: previewView.value.derivedValues,
+      periodEndCash: previewView.value.periodEndCash,
+    },
+  }),
+)
 
 const activeConfig = computed(() => (previewMode.value ? previewConfig.value : currentConfig.value))
 const activeYearTabs = computed(() => (previewMode.value ? previewYearTabs.value : yearTabs.value))
 const activeView = computed(() => (previewMode.value ? previewView.value : currentView.value))
 const activeSelectedYear = computed(() => (previewMode.value ? previewYear.value : selectedYear.value))
 const activeDraftPayload = computed(() => (previewMode.value ? previewDraftPayload.value : draftPayload.value))
+const activeQuarterCashChecks = computed(() => (previewMode.value ? previewCalculation.value.quarterCashChecks : storePreviewCalculation.value.quarterCashChecks))
+const activeDerivedValues = computed(() => (previewMode.value ? previewCalculation.value.derivedValues : storePreviewCalculation.value.derivedValues))
+const activePeriodEndCash = computed(() => (previewMode.value ? previewCalculation.value.periodEndCash : storePreviewCalculation.value.periodEndCash))
 const activePageMessage = computed(() => (previewMode.value ? previewPageMessage.value : pageMessage.value))
 const activeDirty = computed(() => (previewMode.value ? previewDirty.value : dirty.value))
 const activeSaving = computed(() => (previewMode.value ? previewSaving.value : saving.value))
@@ -320,6 +338,12 @@ function resetPreviewState(yearNo: number) {
 }
 
 function buildPreviewView(yearNo: number, lastDraftSavedAt: string | null): PlayerOperatingView {
+  const calculation = buildOperatingPreviewCalculation({
+    payload: previewDraftPayload.value,
+    carryForward: buildPreviewCarryForward(yearNo),
+    currentStageCode: 'YEAR_END',
+  })
+
   return {
     groupId: 1,
     yearNo,
@@ -343,15 +367,25 @@ function buildPreviewView(yearNo: number, lastDraftSavedAt: string | null): Play
       { stageCode: 'Q3', submitVersion: 1, periodEndCash: 41 + yearNo, submitTime: new Date(2026, 2, 21, 11, 30).toISOString() },
     ],
     lastDraftSavedAt,
-    quarterCashChecks: {
-      Q1: 38 + yearNo,
-      Q2: 43 + yearNo,
-      Q3: 41 + yearNo,
-      Q4: 47 + yearNo,
-    },
-    derivedValues: buildPreviewDerivedValues(yearNo),
-    periodEndCash: 47 + yearNo,
+    quarterCashChecks: calculation.quarterCashChecks,
+    derivedValues: calculation.derivedValues,
+    periodEndCash: calculation.periodEndCash,
+    carryForward: buildPreviewCarryForward(yearNo),
     noticeBoard: buildPreviewNoticeBoard(yearNo),
+  }
+}
+
+function buildPreviewCarryForward(yearNo: number) {
+  return {
+    previousIncomeTax: 1 + yearNo,
+    previousShortTermLoan: 8 + yearNo,
+    previousLongTermLoan: 4 + yearNo,
+    previousEquipmentResidual: 6 + yearNo,
+    previousDepreciableAsset: 12 + yearNo,
+    previousCash: 36 + yearNo,
+    previousReceivable: 5 + yearNo,
+    shareholderCapital: 50,
+    retainedEarnings: 18 + yearNo,
   }
 }
 

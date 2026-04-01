@@ -76,6 +76,18 @@ export interface PlayerOperatingStageSubmitHistory {
   submitTime: string
 }
 
+export interface OperatingCarryForward {
+  previousIncomeTax: number
+  previousShortTermLoan: number
+  previousLongTermLoan: number
+  previousEquipmentResidual: number
+  previousDepreciableAsset: number
+  previousCash: number
+  previousReceivable: number
+  shareholderCapital: number
+  retainedEarnings: number
+}
+
 export interface PlayerOperatingView {
   groupId: number
   yearNo: number
@@ -98,6 +110,7 @@ export interface PlayerOperatingView {
   quarterCashChecks: Record<string, number>
   derivedValues: Record<string, number>
   periodEndCash: number
+  carryForward?: OperatingCarryForward | null
   noticeBoard: PlayerNoticeBoard | null
 }
 

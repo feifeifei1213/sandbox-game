@@ -92,7 +92,7 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 	default:
 		return nil, fmt.Errorf("load operating draft: %w", draftErr)
 	}
-	operatingPayload = operatingPayload.Normalize()
+	operatingPayload = operatingPayload.Normalize().WithoutDerivedValues()
 	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)

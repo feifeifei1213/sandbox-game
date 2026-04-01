@@ -81,6 +81,7 @@
           :current-stage-code="operatingView.currentStageCode"
           :derived-values="operatingView.derivedValues"
           :period-end-cash="operatingView.periodEndCash"
+          :carry-forward="operatingView.carryForward"
           @update:model-value="noopOperatingUpdate"
         />
         <ReportSheet

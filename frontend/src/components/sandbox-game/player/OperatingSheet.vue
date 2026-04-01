@@ -557,7 +557,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { cloneOperatingPayload, type NumericCellValue, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
+import { cloneOperatingPayload, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
 
 type MarketBidKey = 'basicProductTotal' | 'standardProductTotal' | 'precisionProductTotal' | 'intelligentProductTotal'
 type MarketBidRow = Record<MarketBidKey | 'orderAmount', NumericCellValue>
@@ -570,6 +570,7 @@ const props = defineProps<{
   currentStageCode: string
   derivedValues: Record<string, number>
   periodEndCash: number
+  carryForward?: OperatingCarryForward | null
 }>()
 
 const emit = defineEmits<{
@@ -634,7 +635,7 @@ const materialFieldKeys = materialFields.map((item) => item.key)
 const marketBidRows = computed(() => buildFixedMarketBidRows(props.modelValue.beginning.marketBid))
 const marketOrderTotal = computed(() => marketBidRows.value.reduce((total, _row, index) => total + getMarketRowTotal(index), 0))
 const marketInvestmentTotal = computed(() => getStoredMarketInvestmentValue())
-const taxPaymentDisplay = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.taxPayment))
+const taxPaymentDisplay = computed(() => resolveMetric(props.carryForward?.previousIncomeTax, props.modelValue.beginning.taxAndPlanning.taxPayment))
 const planRevenueDisplay = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.planRevenue, props.derivedValues.orderTotal, marketOrderTotal.value))
 const comprehensiveCostDisplay = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.comprehensiveCostPlan, props.derivedValues.comprehensiveCostTotal))
 const shortTermLoanDelta = computed(() => getQuarterRowTotal('shortTermLoan', 'newLoan') - getQuarterRowTotal('shortTermLoan', 'dueRepayment'))
@@ -864,7 +865,7 @@ function syncMarketBidDerived(next: OperatingPayload) {
 
   const marketInvestment = normalizeNumericValue(String(next.beginning.taxAndPlanning.marketInvestmentTotal ?? ''))
   next.beginning.taxAndPlanning.marketInvestmentTotal = marketInvestment
-  next.beginning.taxAndPlanning.marketBidCost = marketInvestment
+  delete next.beginning.taxAndPlanning.marketBidCost
   next.beginning.taxAndPlanning.orderTotal = orderTotal
 }
 

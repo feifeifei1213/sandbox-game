@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
 import { formatStageCode } from '@/utils/sandbox-game-display'
+import { buildOperatingPreviewCalculation } from '@/utils/sandbox-game-operating-preview'
 import {
   getPlayerOperatingYearView,
   savePlayerOperatingDraft,
@@ -47,6 +48,20 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
   })
 
   const currentTab = computed(() => yearTabs.value.find((item) => item.yearNo === selectedYear.value) ?? null)
+  const previewCalculation = computed(() =>
+    buildOperatingPreviewCalculation({
+      payload: draftPayload.value,
+      carryForward: currentView.value?.carryForward,
+      currentStageCode: currentView.value?.currentStageCode,
+      fallback: currentView.value
+        ? {
+            quarterCashChecks: currentView.value.quarterCashChecks,
+            derivedValues: currentView.value.derivedValues,
+            periodEndCash: currentView.value.periodEndCash,
+          }
+        : null,
+    }),
+  )
 
   async function bootstrap(preferredYear?: number) {
     loading.value = true
@@ -168,6 +183,7 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
     pageMessage,
     reportEnabled,
     currentTab,
+    previewCalculation,
     bootstrap,
     loadYearView,
     updateDraft,

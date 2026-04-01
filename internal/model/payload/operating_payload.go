@@ -118,3 +118,10 @@ func normalizeQuarterMap(value OperatingQuarterMap) OperatingQuarterMap {
 	}
 	return value
 }
+
+// WithoutDerivedValues 返回移除派生区输入后的 payload，避免旧派生值反向污染实时计算。
+func (p OperatingPayload) WithoutDerivedValues() OperatingPayload {
+	normalized := p.Normalize()
+	normalized.Derived.Values = map[string]any{}
+	return normalized
+}

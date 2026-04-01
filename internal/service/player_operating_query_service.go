@@ -88,7 +88,7 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 		return nil, fmt.Errorf("load operating draft: %w", err)
 	}
 
-	operatingPayload = operatingPayload.Normalize()
+	operatingPayload = operatingPayload.Normalize().WithoutDerivedValues()
 	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
