@@ -37,6 +37,7 @@ var (
 
 type AuthService struct {
 	accountRepo        *repository.AccountRepository
+	groupRepo          *repository.GroupRepository
 	tokenSecret        []byte
 	tokenExpireSeconds int64
 }
@@ -83,7 +84,7 @@ type authTokenClaims struct {
 	ExpiresAt int64  `json:"expiresAt"`
 }
 
-func NewAuthService(accountRepo *repository.AccountRepository, cfg appconfig.AuthConfig) *AuthService {
+func NewAuthService(accountRepo *repository.AccountRepository, groupRepo *repository.GroupRepository, cfg appconfig.AuthConfig) *AuthService {
 	secret := strings.TrimSpace(cfg.TokenSecret)
 	if secret == "" {
 		secret = defaultAuthSecret
@@ -94,6 +95,7 @@ func NewAuthService(accountRepo *repository.AccountRepository, cfg appconfig.Aut
 	}
 	return &AuthService{
 		accountRepo:        accountRepo,
+		groupRepo:          groupRepo,
 		tokenSecret:        []byte(secret),
 		tokenExpireSeconds: expireSeconds,
 	}
@@ -139,6 +141,11 @@ func (s *AuthService) Login(ctx context.Context, username string, password strin
 		return nil, fmt.Errorf("update last login time: %w", err)
 	}
 
+	defaultRoute, err := s.resolveDefaultRoute(ctx, account.RoleType)
+	if err != nil {
+		return nil, err
+	}
+
 	return &AuthLoginResult{
 		AccessToken: accessToken,
 		TokenType:   authTokenTypeBearer,
@@ -149,7 +156,7 @@ func (s *AuthService) Login(ctx context.Context, username string, password strin
 			RoleType: account.RoleType,
 			GroupID:  cloneInt64Pointer(account.GroupID),
 		},
-		DefaultRoute: buildDefaultRoute(account.RoleType),
+		DefaultRoute: defaultRoute,
 	}, nil
 }
 
@@ -184,14 +191,18 @@ func (s *AuthService) AuthenticateAccessToken(ctx context.Context, accessToken s
 	}, nil
 }
 
-func (s *AuthService) BuildCurrentUser(identity AuthenticatedUser) *AuthCurrentUserResult {
+func (s *AuthService) BuildCurrentUser(ctx context.Context, identity AuthenticatedUser) (*AuthCurrentUserResult, error) {
+	defaultRoute, err := s.resolveDefaultRoute(ctx, identity.RoleType)
+	if err != nil {
+		return nil, err
+	}
 	return &AuthCurrentUserResult{
 		UserID:       identity.UserID,
 		Username:     identity.Username,
 		RoleType:     identity.RoleType,
 		GroupID:      cloneInt64Pointer(identity.GroupID),
-		DefaultRoute: buildDefaultRoute(identity.RoleType),
-	}
+		DefaultRoute: defaultRoute,
+	}, nil
 }
 
 func (s *AuthService) BuildLogoutResult() *AuthLogoutResult {
@@ -303,9 +314,24 @@ func cloneInt64Pointer(value *int64) *int64 {
 	return &copied
 }
 
-func buildDefaultRoute(roleType string) string {
-	if roleType == enum.RoleTypeAdmin {
-		return "/sandbox-game/admin/summary"
+func (s *AuthService) resolveDefaultRoute(ctx context.Context, roleType string) (string, error) {
+	if roleType != enum.RoleTypeAdmin {
+		return "/sandbox-game/player/operating?yearNo=0", nil
 	}
-	return "/sandbox-game/player/operating?yearNo=0"
+	return s.resolveAdminDefaultRoute(ctx)
+}
+
+func (s *AuthService) resolveAdminDefaultRoute(ctx context.Context) (string, error) {
+	if s.groupRepo == nil {
+		return "/sandbox-game/admin/summary", nil
+	}
+
+	groupCount, err := s.groupRepo.CountAll(ctx)
+	if err != nil {
+		return "", fmt.Errorf("count groups for admin default route: %w", err)
+	}
+	if groupCount > 0 {
+		return "/sandbox-game/admin/summary", nil
+	}
+	return "/sandbox-game/admin/setup", nil
 }

@@ -384,46 +384,56 @@ func createPreviousFormalReportRecord(t *testing.T, ctx context.Context, tx *gor
 
 func buildBalancedReportManualPayload() payload.ReportManualPayload {
 	return payload.ReportManualPayload{
-		WorkInProgress: float64Ptr(6),
-		FinishedGoods:  float64Ptr(4),
-		RawMaterials:   float64Ptr(1),
-		IncomeTaxRate:  float64Ptr(0),
+		WorkInProgress:               float64Ptr(6),
+		FinishedGoods:                float64Ptr(4),
+		RawMaterials:                 float64Ptr(1),
+		IncomeTaxRate:                float64Ptr(0),
+		EnterpriseCertificationScore: float64Ptr(0),
+		ProductionHumanScore:         float64Ptr(0),
+		ClosingSpeedScore:            float64Ptr(0),
 	}
 }
 
 func buildPreviousFormalReportComputedPayload() payload.ReportComputedPayload {
 	return payload.ReportComputedPayload{
-		ReportSalesRevenue:          0,
-		ReportDirectCost:            0,
-		ReportGrossProfit:           0,
-		ReportComprehensiveCost:     0,
-		ReportDepreciation:          0,
-		ReportOperatingProfit:       0,
-		ReportFinanceIncomeExpense:  0,
-		ReportExtraIncomeExpense:    0,
-		ReportPreTaxProfit:          0,
-		ReportIncomeTax:             0,
-		ReportNetProfit:             0,
-		ReportWorkInProgress:        6,
-		ReportFinishedGoods:         4,
-		ReportRawMaterials:          1,
-		ReportWorkInConstruction:    0,
-		ReportFactoryAsset:          40,
-		ReportLineResidual:          3,
-		ReportDepreciableAsset:      0,
-		ReportTotalNonCurrentAssets: 43,
-		ReportCash:                  35,
-		ReportReceivable:            0,
-		ReportPostTaxCash:           35,
-		ReportTotalCurrentAssets:    46,
-		ReportTotalAssets:           89,
-		ReportShortTermLiability:    20,
-		ReportLongTermLiability:     0,
-		ReportTotalLiability:        20,
-		ReportShareCapital:          50,
-		ReportRetainedEarnings:      19,
-		ReportTotalEquity:           69,
-		ReportTotalLiabilityEquity:  89,
+		ReportSalesRevenue:                0,
+		ReportDirectCost:                  0,
+		ReportGrossProfit:                 0,
+		ReportComprehensiveCost:           0,
+		ReportDepreciation:                0,
+		ReportOperatingProfit:             0,
+		ReportFinanceIncomeExpense:        0,
+		ReportExtraIncomeExpense:          0,
+		ReportPreTaxProfit:                0,
+		ReportIncomeTax:                   0,
+		ReportNetProfit:                   0,
+		ReportWorkInProgress:              6,
+		ReportFinishedGoods:               4,
+		ReportRawMaterials:                1,
+		ReportWorkInConstruction:          0,
+		ReportFactoryAsset:                40,
+		ReportLineResidual:                3,
+		ReportDepreciableAsset:            0,
+		ReportTotalNonCurrentAssets:       43,
+		ReportCash:                        35,
+		ReportReceivable:                  0,
+		ReportPostTaxCash:                 35,
+		ReportTotalCurrentAssets:          46,
+		ReportTotalAssets:                 89,
+		ReportShortTermLiability:          20,
+		ReportLongTermLiability:           0,
+		ReportTotalLiability:              20,
+		ReportShareCapital:                50,
+		ReportRetainedEarnings:            19,
+		ReportTotalEquity:                 69,
+		ReportTotalLiabilityEquity:        89,
+		ReportBestMarketDirectorBaseScore: 0,
+		ReportBestMarketDirectorScore:     0,
+		ReportBestTechnologyDirectorScore: 0,
+		ReportBestSalesDirectorScore:      0,
+		ReportBestCfoBaseScore:            0,
+		ReportBestCfoScore:                0,
+		ReportBestCeoScore:                0,
 	}
 }
 
@@ -444,6 +454,9 @@ func assertReportManualPayloadEqual(t *testing.T, expected payload.ReportManualP
 	assertFloat64PointerEqual(t, "finishedGoods", expected.FinishedGoods, actual.FinishedGoods)
 	assertFloat64PointerEqual(t, "rawMaterials", expected.RawMaterials, actual.RawMaterials)
 	assertFloat64PointerEqual(t, "incomeTaxRate", expected.IncomeTaxRate, actual.IncomeTaxRate)
+	assertFloat64PointerEqual(t, "enterpriseCertificationScore", expected.EnterpriseCertificationScore, actual.EnterpriseCertificationScore)
+	assertFloat64PointerEqual(t, "productionHumanScore", expected.ProductionHumanScore, actual.ProductionHumanScore)
+	assertFloat64PointerEqual(t, "closingSpeedScore", expected.ClosingSpeedScore, actual.ClosingSpeedScore)
 }
 
 func assertFloat64PointerEqual(t *testing.T, label string, expected *float64, actual *float64) {

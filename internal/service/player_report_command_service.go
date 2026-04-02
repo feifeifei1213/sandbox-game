@@ -355,19 +355,23 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 			return calcctx.CalculationContext{}, fmt.Errorf("load initial baseline: %w", baselineErr)
 		}
 	} else {
-		previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, group.ID, yearState.YearNo-1)
-		switch {
-		case previousReportErr == nil:
-			if len(previousReport.ReportComputedPayload) > 0 {
-				var previous payload.ReportComputedPayload
-				if unmarshalErr := json.Unmarshal(previousReport.ReportComputedPayload, &previous); unmarshalErr != nil {
-					return calcctx.CalculationContext{}, fmt.Errorf("unmarshal previous report: %w", unmarshalErr)
-				}
-				calcContext = calcContext.WithPreviousReport(&previous)
-			}
-		case errors.Is(previousReportErr, gorm.ErrRecordNotFound):
-		default:
-			return calcctx.CalculationContext{}, fmt.Errorf("load previous report: %w", previousReportErr)
+		previous, previousErr := loadEffectiveReportWithDirectorScores(
+			ctx,
+			group,
+			gameConfig,
+			yearState.YearNo-1,
+			s.groupYearRepo,
+			s.operatingRepo,
+			s.initialBaseRepo,
+			s.reportRepo,
+			s.playerNoticeService,
+			s.calculator,
+		)
+		if previousErr != nil {
+			return calcctx.CalculationContext{}, fmt.Errorf("load previous report: %w", previousErr)
+		}
+		if previous != nil {
+			calcContext = calcContext.WithPreviousReport(previous)
 		}
 	}
 

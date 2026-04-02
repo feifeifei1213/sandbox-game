@@ -5,9 +5,11 @@
         <div>
           <p class="eyebrow">Sandbox Game / Admin</p>
           <h1>管理员端</h1>
-          <p class="subtext">首版聚焦汇总、年度控制、初始基线、组数据与通知奖惩五个入口，优先服务现场主持人操作。</p>
+          <p class="subtext">首版聚焦赛前配置、汇总、年度控制、初始基线、组数据与通知奖惩六个入口，优先服务现场主持人操作。</p>
         </div>
         <div class="header-pills">
+          <span class="pill">初始化：{{ setupStatus?.initialized ? '已完成' : '未完成' }}</span>
+          <span class="pill">小组数：{{ setupStatus?.groupCount ?? '--' }}</span>
           <span class="pill">最终年份：{{ config?.finalYear ?? '--' }}</span>
           <span class="pill">当前开放：{{ config?.currentOpenYear ?? '--' }}</span>
           <span class="pill">共享基线：{{ config?.initialBaselineSubmitted ? '已提交' : '未提交' }}</span>
@@ -45,7 +47,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const shellStore = useAdminShellStore()
 const authStore = useAuthStore()
-const { config, pageMessage } = storeToRefs(shellStore)
+const { config, pageMessage, setupStatus } = storeToRefs(shellStore)
 const { currentUser } = storeToRefs(authStore)
 
 onMounted(async () => {

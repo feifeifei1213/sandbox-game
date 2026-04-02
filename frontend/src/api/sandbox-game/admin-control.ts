@@ -1,6 +1,8 @@
 ﻿import { request } from '@/api/http'
 import type {
   AdminControlConfigResult,
+  AdminControlSetupStatusResult,
+  InitializeGameResult,
   InitialBaselineViewResult,
   OpenNextYearResult,
   SubmitInitialBaselineRequest,
@@ -9,6 +11,17 @@ import type {
   UnlockYearResult,
   UpdateFinalYearResult,
 } from '@/types/sandbox-game-admin'
+
+export function getAdminControlSetupStatus() {
+  return request<AdminControlSetupStatusResult>('/api/v1/sandbox-game/admin-control/get-setup-status')
+}
+
+export function initializeAdminGame(groupCount: number) {
+  return request<InitializeGameResult>('/api/v1/sandbox-game/admin-control/initialize-game', {
+    method: 'POST',
+    body: JSON.stringify({ groupCount }),
+  })
+}
 
 export function getAdminControlConfig() {
   return request<AdminControlConfigResult>('/api/v1/sandbox-game/admin-control/get-config')

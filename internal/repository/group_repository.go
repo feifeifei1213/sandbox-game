@@ -35,6 +35,23 @@ func (r *GroupRepository) ListAll(ctx context.Context) ([]entity.Group, error) {
 	return items, nil
 }
 
+func (r *GroupRepository) CountAll(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.Group{}).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *GroupRepository) CreateBatch(ctx context.Context, items []entity.Group) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).CreateInBatches(&items, 200).Error
+}
+
 func (r *GroupRepository) MarkBankrupt(ctx context.Context, groupID int64, yearNo int, reason string, operatorName string) error {
 	return r.db.WithContext(ctx).
 		Model(&entity.Group{}).

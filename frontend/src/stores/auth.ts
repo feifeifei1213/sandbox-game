@@ -54,18 +54,7 @@ export const useAuthStore = defineStore('sandbox-auth', () => {
     validationPromise = (async () => {
       loadingCurrentUser.value = true
       try {
-        const result = await getCurrentUser()
-        if (!session.value) {
-          return false
-        }
-        persistSession(
-          {
-            ...session.value,
-            user: buildAuthUserFromCurrentUser(result),
-          },
-          true,
-        )
-        return true
+        return await refreshCurrentUser()
       } catch (error) {
         if (!getStoredAuthSession()) {
           clearSession()
@@ -79,6 +68,31 @@ export const useAuthStore = defineStore('sandbox-auth', () => {
     })()
 
     return validationPromise
+  }
+
+  async function refreshCurrentUser() {
+    restoreSession()
+    if (!session.value) {
+      return false
+    }
+
+    loadingCurrentUser.value = true
+    try {
+      const result = await getCurrentUser()
+      if (!session.value) {
+        return false
+      }
+      persistSession(
+        {
+          ...session.value,
+          user: buildAuthUserFromCurrentUser(result),
+        },
+        true,
+      )
+      return true
+    } finally {
+      loadingCurrentUser.value = false
+    }
   }
 
   async function logout() {
@@ -119,6 +133,7 @@ export const useAuthStore = defineStore('sandbox-auth', () => {
     restoreSession,
     login,
     ensureAuthenticated,
+    refreshCurrentUser,
     logout,
     clearSession,
     resolveDefaultRoute,

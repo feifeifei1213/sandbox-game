@@ -122,6 +122,28 @@ export function buildOperatingPreviewCalculation(params: BuildOperatingPreviewPa
   const extraIncomeExpense = extraIncomeReward - extraExpensePenalty
   const lineResidualChange = transferToFixed - lineSaleValue
   const depreciableAssetChange = depreciableAssetIncrease - depreciation
+  const marketReturnRatio = safeDivide(orderTotal, marketBidCost)
+  const researchIntensity = safeDivide(researchCost, salesRevenue + extraIncomeReward)
+  const laborProductivity =
+    safeDivide(
+      salesRevenue -
+        directCost +
+        shortTermInterest -
+        marketBidCost -
+        carryForward.previousIncomeTax -
+        changeProductCost -
+        lineDismantleCost +
+        humanResourceCost -
+        researchCost -
+        managementSystemCost -
+        longTermInterest -
+        lineMaintenance -
+        factoryRent -
+        marketCultivation -
+        extraExpensePenalty +
+        extraIncomeReward,
+      salaryAndProductionCost * 7 + 5,
+    ) * 100
   const yearEndCash =
     carryForward.previousCash +
     (newShortTermLoan + lineSaleValue + receivableRecovered + newLongTermLoan + factorySale + extraIncomeReward) -
@@ -181,6 +203,9 @@ export function buildOperatingPreviewCalculation(params: BuildOperatingPreviewPa
     factoryRent,
     workInConstruction,
     marketCultivation,
+    marketReturnRatio,
+    researchIntensity,
+    laborProductivity,
     lineResidual,
     depreciableAssetTotal,
     depreciation,
@@ -201,7 +226,10 @@ export function buildOperatingPreviewCalculation(params: BuildOperatingPreviewPa
 
   return {
     quarterCashChecks,
-    derivedValues,
+    derivedValues: {
+      ...fallback.derivedValues,
+      ...derivedValues,
+    },
     periodEndCash: selectPeriodEndCash(params.currentStageCode, quarterCashChecks, yearEndCash),
   }
 }
@@ -270,6 +298,13 @@ function getQuarterRecord(source: QuarterSource, quarter: QuarterCode): NumericR
 
 function firstNonZero(...values: number[]) {
   return values.find((value) => value !== 0) ?? 0
+}
+
+function safeDivide(numerator: number, denominator: number) {
+  if (denominator === 0) {
+    return 0
+  }
+  return numerator / denominator
 }
 
 function toNumber(value: unknown) {

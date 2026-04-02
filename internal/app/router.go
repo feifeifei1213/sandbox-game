@@ -43,7 +43,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	noticeRepo := repository.NewNoticeRepository(db)
 	adjustmentRepo := repository.NewGroupAdjustmentRepository(db)
 
-	authService := service.NewAuthService(accountRepo, cfg.Auth)
+	authService := service.NewAuthService(accountRepo, groupRepo, cfg.Auth)
 	authHandler := handler.NewAuthHandler(authService)
 	playerNoticeService := service.NewPlayerNoticeService(noticeRepo, adjustmentRepo)
 	gameConfigQueryService := service.NewGameConfigQueryService(gameConfigRepo, groupRepo, groupYearRepo)
@@ -176,6 +176,8 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminGroupData.GET("/get-report-view", adminGroupDataHandler.GetReportView)
 
 		adminControl := protected.Group("/admin-control")
+		adminControl.GET("/get-setup-status", adminControlHandler.GetSetupStatus)
+		adminControl.POST("/initialize-game", adminControlHandler.InitializeGame)
 		adminControl.GET("/get-config", adminControlHandler.GetConfig)
 		adminControl.PUT("/update-final-year", adminControlHandler.UpdateFinalYear)
 		adminControl.POST("/open-next-year", adminControlHandler.OpenNextYear)

@@ -75,12 +75,21 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	result := h.authService.BuildCurrentUser(service.AuthenticatedUser{
+	result, err := h.authService.BuildCurrentUser(c.Request.Context(), service.AuthenticatedUser{
 		UserID:   identity.UserID,
 		Username: identity.Username,
 		RoleType: identity.RoleType,
 		GroupID:  identity.GroupID,
 	})
+	if err != nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusInternalServerError,
+			enum.InternalServerErrorCode,
+			"获取当前登录用户失败",
+			err,
+		))
+		return
+	}
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 

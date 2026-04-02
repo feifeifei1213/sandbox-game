@@ -18,15 +18,20 @@ import (
 )
 
 const (
+	adminActionCodeInitializeGame        = "INITIALIZE_GAME"
 	adminActionCodeUpdateFinalYear       = "UPDATE_FINAL_YEAR"
 	adminActionCodeOpenNextYear          = "OPEN_NEXT_YEAR"
 	adminActionCodeSubmitInitialBaseline = "SUBMIT_INITIAL_BASELINE"
 	adminActionCodeUnlockYear            = "UNLOCK_YEAR"
 	unlockTargetTypeOperating            = "OPERATING"
 	unlockTargetTypeReport               = "REPORT"
+	initializeGameMaxGroupCount          = 10
+	initializeGameDefaultPassword        = "123456"
 )
 
 var (
+	ErrAdminControlAlreadyInitialized       = errors.New("admin control already initialized")
+	ErrAdminControlInitializeInvalid        = errors.New("admin control initialize invalid")
 	ErrAdminControlFinalYearTooSmall        = errors.New("admin control final year too small")
 	ErrAdminControlTargetYearMismatch       = errors.New("admin control target year mismatch")
 	ErrAdminControlFinalYearReached         = errors.New("admin control final year reached")
@@ -48,6 +53,21 @@ const (
 	unlockYearBlockedReasonTargetNotSubmitted = "目标尚未正式提交，不能解锁"
 	unlockYearBlockedReasonInvalidState       = "当前目标不满足异常解锁条件"
 )
+
+type InitializeInvalidError struct {
+	Reason string
+}
+
+func (e *InitializeInvalidError) Error() string {
+	if e == nil || strings.TrimSpace(e.Reason) == "" {
+		return ErrAdminControlInitializeInvalid.Error()
+	}
+	return e.Reason
+}
+
+func (e *InitializeInvalidError) Unwrap() error {
+	return ErrAdminControlInitializeInvalid
+}
 
 type OpenNextYearBlockedError struct {
 	Reason string
@@ -83,6 +103,22 @@ type UpdateFinalYearCommand struct {
 	FinalYear    int
 	OperatorID   int64
 	OperatorName string
+}
+
+type InitializeGameCommand struct {
+	GroupCount   int
+	OperatorID   int64
+	OperatorName string
+}
+
+type InitializeGameResult struct {
+	Initialized           bool   `json:"initialized"`
+	GroupCount            int    `json:"groupCount"`
+	CreatedGroupCount     int    `json:"createdGroupCount"`
+	CreatedAccountCount   int    `json:"createdAccountCount"`
+	CreatedYearStateCount int    `json:"createdYearStateCount"`
+	InitializedAt         string `json:"initializedAt"`
+	InitializedBy         string `json:"initializedBy"`
 }
 
 type UpdateFinalYearResult struct {
@@ -160,6 +196,113 @@ type AdminControlCommandService struct {
 
 func NewAdminControlCommandService(db *gorm.DB) *AdminControlCommandService {
 	return &AdminControlCommandService{db: db}
+}
+
+func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd InitializeGameCommand) (*InitializeGameResult, error) {
+	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
+	if err := validateInitializeGameInput(cmd.GroupCount); err != nil {
+		return nil, err
+	}
+
+	var result *InitializeGameResult
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txGameConfigRepo := repository.NewGameConfigRepository(tx)
+		txGroupRepo := repository.NewGroupRepository(tx)
+		txAccountRepo := repository.NewAccountRepository(tx)
+		txGroupYearRepo := repository.NewGroupYearStateRepository(tx)
+		txAdminActionLogRepo := repository.NewAdminActionLogRepository(tx)
+
+		gameConfig, err := txGameConfigRepo.GetCurrentForUpdate(ctx)
+		if err != nil {
+			return fmt.Errorf("load game config: %w", err)
+		}
+
+		existingGroupCount, err := txGroupRepo.CountAll(ctx)
+		if err != nil {
+			return fmt.Errorf("count groups: %w", err)
+		}
+		if existingGroupCount > 0 {
+			return ErrAdminControlAlreadyInitialized
+		}
+
+		existingGroupAccountCount, err := txAccountRepo.CountGroupAccounts(ctx)
+		if err != nil {
+			return fmt.Errorf("count group accounts: %w", err)
+		}
+		existingYearStateCount, err := txGroupYearRepo.CountAll(ctx)
+		if err != nil {
+			return fmt.Errorf("count group year states: %w", err)
+		}
+		if err := ensureInitializeGameEnvironmentClean(existingGroupAccountCount, existingYearStateCount); err != nil {
+			return err
+		}
+
+		now := time.Now()
+		groups := buildInitializeGameGroups(cmd.GroupCount, operatorName, now)
+		if err := txGroupRepo.CreateBatch(ctx, groups); err != nil {
+			return fmt.Errorf("create groups: %w", err)
+		}
+
+		accounts := buildInitializeGameAccounts(groups, operatorName, now)
+		if err := txAccountRepo.CreateBatch(ctx, accounts); err != nil {
+			return fmt.Errorf("create group accounts: %w", err)
+		}
+
+		yearStates := buildInitializeGameYearStates(groups, gameConfig.FinalYear, operatorName, now)
+		if err := txGroupYearRepo.CreateBatch(ctx, yearStates); err != nil {
+			return fmt.Errorf("create group year states: %w", err)
+		}
+
+		if err := txGameConfigRepo.PrepareForInitialization(ctx, gameConfig.ID, operatorName, now); err != nil {
+			return fmt.Errorf("prepare game config for initialization: %w", err)
+		}
+
+		stateBefore, err := buildInitializeGameStateSnapshot(int(existingGroupCount), gameConfig.CurrentOpenYear, gameConfig.FinalYear, gameConfig.InitialBaselineSubmitted)
+		if err != nil {
+			return fmt.Errorf("build initialize game before state: %w", err)
+		}
+		stateAfter, err := buildInitializeGameStateSnapshot(len(groups), 0, gameConfig.FinalYear, false)
+		if err != nil {
+			return fmt.Errorf("build initialize game after state: %w", err)
+		}
+		actionPayload, err := json.Marshal(map[string]any{
+			"groupCount":            len(groups),
+			"createdGroupCount":     len(groups),
+			"createdAccountCount":   len(accounts),
+			"createdYearStateCount": len(yearStates),
+		})
+		if err != nil {
+			return fmt.Errorf("marshal initialize game payload: %w", err)
+		}
+
+		logItem := &entity.AdminActionLog{
+			ActionCode:    adminActionCodeInitializeGame,
+			ActionPayload: actionPayload,
+			StateBefore:   stateBefore,
+			StateAfter:    stateAfter,
+			OperatorID:    cmd.OperatorID,
+			OperatorName:  operatorName,
+			OperateTime:   now,
+		}
+		if err := txAdminActionLogRepo.Create(ctx, logItem); err != nil {
+			return fmt.Errorf("create initialize game action log: %w", err)
+		}
+
+		result = &InitializeGameResult{
+			Initialized:           true,
+			GroupCount:            len(groups),
+			CreatedGroupCount:     len(groups),
+			CreatedAccountCount:   len(accounts),
+			CreatedYearStateCount: len(yearStates),
+			InitializedAt:         now.Format(time.RFC3339),
+			InitializedBy:         operatorName,
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (s *AdminControlCommandService) UpdateFinalYear(ctx context.Context, cmd UpdateFinalYearCommand) (*UpdateFinalYearResult, error) {
@@ -630,6 +773,23 @@ func intPointer(value int) *int {
 	return &value
 }
 
+func validateInitializeGameInput(groupCount int) error {
+	if groupCount < 1 || groupCount > initializeGameMaxGroupCount {
+		return &InitializeInvalidError{Reason: fmt.Sprintf("小组数量必须在 1 到 %d 之间", initializeGameMaxGroupCount)}
+	}
+	return nil
+}
+
+func ensureInitializeGameEnvironmentClean(existingGroupAccountCount int64, existingYearStateCount int64) error {
+	if existingGroupAccountCount > 0 {
+		return &InitializeInvalidError{Reason: "检测到未清理的玩家账号数据，请清理后再初始化比赛"}
+	}
+	if existingYearStateCount > 0 {
+		return &InitializeInvalidError{Reason: "检测到未清理的年份状态数据，请清理后再初始化比赛"}
+	}
+	return nil
+}
+
 func validateFinalYearChange(currentOpenYear int, finalYear int) error {
 	if finalYear < currentOpenYear {
 		return ErrAdminControlFinalYearTooSmall
@@ -745,6 +905,16 @@ func buildInitialBaselineStateSnapshot(submitted bool, appliedGroupCount int) ([
 	return json.Marshal(map[string]any{
 		"initialBaselineSubmitted": submitted,
 		"appliedGroupCount":        appliedGroupCount,
+	})
+}
+
+func buildInitializeGameStateSnapshot(groupCount int, currentOpenYear int, finalYear int, baselineSubmitted bool) ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"initialized":              groupCount > 0,
+		"groupCount":               groupCount,
+		"currentOpenYear":          currentOpenYear,
+		"finalYear":                finalYear,
+		"initialBaselineSubmitted": baselineSubmitted,
 	})
 }
 
@@ -864,4 +1034,93 @@ func buildRuntimeState(item entity.GroupYearState, businessStatus string) state.
 		LatestStageSubmitVersion:  item.LatestStageSubmitVersion,
 		LatestReportSubmitVersion: item.LatestReportSubmitVersion,
 	}
+}
+
+func buildInitializeGameGroups(groupCount int, operatorName string, operateTime time.Time) []entity.Group {
+	items := make([]entity.Group, 0, groupCount)
+	for groupNo := 1; groupNo <= groupCount; groupNo++ {
+		items = append(items, entity.Group{
+			GroupNo:        groupNo,
+			GroupCode:      fmt.Sprintf("GROUP_%02d", groupNo),
+			GroupName:      buildInitializeGroupName(groupNo),
+			BusinessStatus: enum.BusinessStatusNormal,
+			BaseEntity: entity.BaseEntity{
+				Creator:    operatorName,
+				CreateTime: operateTime,
+				Updater:    operatorName,
+				UpdateTime: operateTime,
+			},
+		})
+	}
+	return items
+}
+
+func buildInitializeGameAccounts(groups []entity.Group, operatorName string, operateTime time.Time) []entity.Account {
+	items := make([]entity.Account, 0, len(groups))
+	for _, group := range groups {
+		groupID := group.ID
+		items = append(items, entity.Account{
+			Username:     fmt.Sprintf("group%02d", group.GroupNo),
+			PasswordHash: hashSHA256Password(initializeGameDefaultPassword),
+			RoleType:     enum.RoleTypeGroup,
+			GroupID:      &groupID,
+			Status:       enum.AccountStatusEnabled,
+			BaseEntity: entity.BaseEntity{
+				Creator:    operatorName,
+				CreateTime: operateTime,
+				Updater:    operatorName,
+				UpdateTime: operateTime,
+			},
+		})
+	}
+	return items
+}
+
+func buildInitializeGameYearStates(groups []entity.Group, finalYear int, operatorName string, operateTime time.Time) []entity.GroupYearState {
+	if len(groups) == 0 {
+		return nil
+	}
+
+	maxYear := finalYear
+	if maxYear < 0 {
+		maxYear = 0
+	}
+
+	items := make([]entity.GroupYearState, 0, len(groups)*(maxYear+1))
+	for _, group := range groups {
+		for yearNo := 0; yearNo <= maxYear; yearNo++ {
+			yearType := enum.YearTypeFormal
+			yearStatus := enum.YearStatusLocked
+			if yearNo == 0 {
+				yearType = enum.YearTypeDemo
+				yearStatus = enum.YearStatusOperating
+			}
+			items = append(items, entity.GroupYearState{
+				GroupID:                   group.ID,
+				YearNo:                    yearNo,
+				YearType:                  yearType,
+				YearStatus:                yearStatus,
+				StageStatus:               enum.StageStatusQ1Open,
+				ReportStatus:              enum.ReportStatusLocked,
+				SummaryEffective:          false,
+				LatestStageSubmitVersion:  0,
+				LatestReportSubmitVersion: 0,
+				BaseEntity: entity.BaseEntity{
+					Creator:    operatorName,
+					CreateTime: operateTime,
+					Updater:    operatorName,
+					UpdateTime: operateTime,
+				},
+			})
+		}
+	}
+	return items
+}
+
+func buildInitializeGroupName(groupNo int) string {
+	chinese := []string{"零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"}
+	if groupNo >= 1 && groupNo <= 10 {
+		return "第" + chinese[groupNo] + "组"
+	}
+	return fmt.Sprintf("第%d组", groupNo)
 }

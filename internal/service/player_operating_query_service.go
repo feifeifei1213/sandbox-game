@@ -14,6 +14,7 @@ import (
 	carryforwardrules "sandbox-game/internal/rules/carryforward"
 	calcctx "sandbox-game/internal/rules/context"
 	operatingrules "sandbox-game/internal/rules/operating"
+	reportrules "sandbox-game/internal/rules/report"
 	"sandbox-game/internal/state"
 )
 
@@ -26,6 +27,7 @@ type PlayerOperatingQueryService struct {
 	reportRepo          *repository.ReportRepository
 	assembler           *assembler.PlayerOperatingAssembler
 	calculator          *operatingrules.Calculator
+	reportCalculator    *reportrules.Calculator
 	carryForward        *carryforwardrules.Builder
 	transitionGuard     *state.TransitionGuard
 	playerNoticeService *PlayerNoticeService
@@ -50,6 +52,7 @@ func NewPlayerOperatingQueryService(
 		reportRepo:          reportRepo,
 		assembler:           assembler,
 		calculator:          operatingrules.NewCalculator(),
+		reportCalculator:    reportrules.NewCalculator(),
 		carryForward:        carryforwardrules.NewBuilder(),
 		transitionGuard:     state.NewTransitionGuard(),
 		playerNoticeService: playerNoticeService,
@@ -130,6 +133,9 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 	operatingResult, err := s.calculator.Calculate(calculationContext)
 	if err != nil {
 		return nil, fmt.Errorf("calculate operating view: %w", err)
+	}
+	if err := enrichOperatingDerivedValuesWithReportMetrics(ctx, s.reportRepo, s.reportCalculator, calculationContext, groupID, yearNo, &operatingResult); err != nil {
+		return nil, err
 	}
 
 	stageSubmissions, err := s.operatingRepo.ListStageSubmissions(ctx, groupID, yearNo)

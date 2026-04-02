@@ -2,6 +2,10 @@ package dto
 
 import "sandbox-game/internal/model/payload"
 
+type AdminControlInitializeGameRequest struct {
+	GroupCount *int `json:"groupCount" binding:"required"`
+}
+
 type AdminControlUpdateFinalYearRequest struct {
 	FinalYear *int `json:"finalYear" binding:"required"`
 }

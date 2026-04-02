@@ -115,19 +115,23 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 			return nil, fmt.Errorf("load initial baseline: %w", baselineErr)
 		}
 	} else {
-		previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, groupID, yearNo-1)
-		switch {
-		case previousReportErr == nil:
-			if len(previousReport.ReportComputedPayload) > 0 {
-				var previous payload.ReportComputedPayload
-				if unmarshalErr := json.Unmarshal(previousReport.ReportComputedPayload, &previous); unmarshalErr != nil {
-					return nil, fmt.Errorf("unmarshal previous report: %w", unmarshalErr)
-				}
-				calcContext = calcContext.WithPreviousReport(&previous)
-			}
-		case errors.Is(previousReportErr, gorm.ErrRecordNotFound):
-		default:
-			return nil, fmt.Errorf("load previous report: %w", previousReportErr)
+		previous, previousErr := loadEffectiveReportWithDirectorScores(
+			ctx,
+			*group,
+			*gameConfig,
+			yearNo-1,
+			s.groupYearRepo,
+			s.operatingRepo,
+			s.initialBaseRepo,
+			s.reportRepo,
+			s.playerNoticeService,
+			s.calculator,
+		)
+		if previousErr != nil {
+			return nil, fmt.Errorf("load previous report: %w", previousErr)
+		}
+		if previous != nil {
+			calcContext = calcContext.WithPreviousReport(previous)
 		}
 	}
 
@@ -161,6 +165,8 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 
 	if calcContext.State.ReportStatus != enum.ReportStatusSubmitted || isZeroReportComputedPayload(computedPayload) {
 		computedPayload = calculatedPayload
+	} else {
+		overlayDirectorScores(&computedPayload, calculatedPayload)
 	}
 
 	noticeBoard, err := s.playerNoticeService.BuildBoard(ctx, groupID, yearNo)
@@ -169,8 +175,4 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 	}
 
 	return s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission, noticeBoard), nil
-}
-
-func isZeroReportComputedPayload(value payload.ReportComputedPayload) bool {
-	return value == (payload.ReportComputedPayload{})
 }

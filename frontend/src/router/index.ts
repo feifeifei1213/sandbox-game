@@ -48,6 +48,11 @@ const routes: RouteRecordRaw[] = [
         redirect: '/sandbox-game/admin/summary',
       },
       {
+        path: 'setup',
+        name: 'sandbox-admin-setup',
+        component: () => import('@/views/sandbox-game/admin/setup/AdminSetupPage.vue'),
+      },
+      {
         path: 'summary',
         name: 'sandbox-admin-summary',
         component: () => import('@/views/sandbox-game/admin/summary/AdminSummaryPage.vue'),
@@ -117,6 +122,19 @@ router.beforeEach(async (to) => {
   const requiredRoleType = getRequiredRoleType(to)
   if (requiredRoleType && authStore.currentUser?.roleType !== requiredRoleType) {
     return authStore.resolveDefaultRoute()
+  }
+
+  if (authStore.currentUser?.roleType === 'ADMIN') {
+    const defaultRoute = authStore.resolveDefaultRoute()
+    if (to.path === '/sandbox-game/admin') {
+      return defaultRoute
+    }
+    if (defaultRoute === '/sandbox-game/admin/setup' && to.path !== defaultRoute) {
+      return defaultRoute
+    }
+    if (defaultRoute !== '/sandbox-game/admin/setup' && to.path === '/sandbox-game/admin/setup') {
+      return defaultRoute
+    }
   }
 
   return true

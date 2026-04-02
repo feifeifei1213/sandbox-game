@@ -57,6 +57,15 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     if (draftManualPayload.value.incomeTaxRate === null) {
       missing.push('所得税税率')
     }
+    if (draftManualPayload.value.enterpriseCertificationScore === null) {
+      missing.push('企业认证得分')
+    }
+    if (draftManualPayload.value.productionHumanScore === null) {
+      missing.push('最佳生产人力总监得分')
+    }
+    if (draftManualPayload.value.closingSpeedScore === null) {
+      missing.push('关账速度得分')
+    }
     return missing
   })
   const submitReady = computed(() => Boolean(currentView.value?.canSubmit) && missingFields.value.length === 0 && balancePassed.value)

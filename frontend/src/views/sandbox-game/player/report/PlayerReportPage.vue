@@ -145,6 +145,9 @@ const previewDraftManualPayload = ref<ReportManualPayload>({
   finishedGoods: 4,
   rawMaterials: 2,
   incomeTaxRate: 0.25,
+  enterpriseCertificationScore: 3,
+  productionHumanScore: 4,
+  closingSpeedScore: 2,
 })
 const previewDirty = ref(false)
 const previewSaving = ref(false)
@@ -217,6 +220,13 @@ const previewBaseComputedPayload = computed<ReportComputedPayload>(() => {
     reportRetainedEarnings: 12 + yearFactor,
     reportTotalEquity: 0,
     reportTotalLiabilityEquity: 0,
+    reportBestMarketDirectorBaseScore: 2 + yearFactor,
+    reportBestMarketDirectorScore: 0,
+    reportBestTechnologyDirectorScore: 4 + yearFactor * 2,
+    reportBestSalesDirectorScore: 36 + yearFactor * 8,
+    reportBestCfoBaseScore: 5 + yearFactor,
+    reportBestCfoScore: 0,
+    reportBestCeoScore: 0,
   }
 })
 const previewComputedPayloadLocal = computed(() =>
@@ -239,6 +249,15 @@ const previewMissingFields = computed(() => {
   }
   if (previewDraftManualPayload.value.incomeTaxRate === null) {
     missing.push('所得税税率')
+  }
+  if (previewDraftManualPayload.value.enterpriseCertificationScore === null) {
+    missing.push('企业认证得分')
+  }
+  if (previewDraftManualPayload.value.productionHumanScore === null) {
+    missing.push('最佳生产人力总监得分')
+  }
+  if (previewDraftManualPayload.value.closingSpeedScore === null) {
+    missing.push('关账速度得分')
   }
   return missing
 })

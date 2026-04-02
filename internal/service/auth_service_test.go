@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"testing"
@@ -33,7 +31,7 @@ func TestAuthServiceLoginAndAuthenticateGroupAccount(t *testing.T) {
 	username := fmt.Sprintf("auth_group_%d", time.Now().UnixNano())
 	accountID := createAuthIntegrationAccount(t, ctx, tx, username, "123456", enum.RoleTypeGroup, &groupID)
 
-	authService := NewAuthService(repository.NewAccountRepository(tx), appconfig.AuthConfig{
+	authService := NewAuthService(repository.NewAccountRepository(tx), repository.NewGroupRepository(tx), appconfig.AuthConfig{
 		Mode:               "local",
 		TokenSecret:        "integration-auth-secret",
 		TokenExpireSeconds: 3600,
@@ -72,7 +70,10 @@ func TestAuthServiceLoginAndAuthenticateGroupAccount(t *testing.T) {
 		t.Fatalf("expected last_login_time to be updated after login")
 	}
 
-	currentUser := authService.BuildCurrentUser(*authenticated)
+	currentUser, err := authService.BuildCurrentUser(ctx, *authenticated)
+	if err != nil {
+		t.Fatalf("build current user failed: %v", err)
+	}
 	if currentUser.DefaultRoute != "/sandbox-game/player/operating?yearNo=0" {
 		t.Fatalf("unexpected current user default route: %s", currentUser.DefaultRoute)
 	}
@@ -93,7 +94,7 @@ func TestAuthServiceRejectsInvalidPassword(t *testing.T) {
 	username := fmt.Sprintf("auth_admin_%d", time.Now().UnixNano())
 	createAuthIntegrationAccount(t, ctx, tx, username, "123456", enum.RoleTypeAdmin, nil)
 
-	authService := NewAuthService(repository.NewAccountRepository(tx), appconfig.AuthConfig{
+	authService := NewAuthService(repository.NewAccountRepository(tx), repository.NewGroupRepository(tx), appconfig.AuthConfig{
 		Mode:               "local",
 		TokenSecret:        "integration-auth-secret",
 		TokenExpireSeconds: 3600,
@@ -102,6 +103,53 @@ func TestAuthServiceRejectsInvalidPassword(t *testing.T) {
 	_, err := authService.Login(ctx, username, "654321")
 	if !errors.Is(err, ErrAuthInvalidCredentials) {
 		t.Fatalf("expected invalid credentials error, got %v", err)
+	}
+}
+
+func TestAuthServiceAdminDefaultRouteDependsOnInitialization(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	if err := tx.WithContext(ctx).Where("1 = 1").Delete(&entity.Group{}).Error; err != nil {
+		t.Fatalf("clear groups: %v", err)
+	}
+
+	username := fmt.Sprintf("auth_admin_setup_%d", time.Now().UnixNano())
+	accountID := createAuthIntegrationAccount(t, ctx, tx, username, "123456", enum.RoleTypeAdmin, nil)
+
+	authService := NewAuthService(repository.NewAccountRepository(tx), repository.NewGroupRepository(tx), appconfig.AuthConfig{
+		Mode:               "local",
+		TokenSecret:        "integration-auth-secret",
+		TokenExpireSeconds: 3600,
+	})
+
+	setupResult, err := authService.Login(ctx, username, "123456")
+	if err != nil {
+		t.Fatalf("login before initialization failed: %v", err)
+	}
+	if setupResult.DefaultRoute != "/sandbox-game/admin/setup" {
+		t.Fatalf("expected admin setup route before initialization, got %s", setupResult.DefaultRoute)
+	}
+
+	createAdminIntegrationGroup(t, ctx, tx, "认证测试-初始化后", enum.BusinessStatusNormal, nil)
+	currentUser, err := authService.BuildCurrentUser(ctx, AuthenticatedUser{
+		UserID:   accountID,
+		Username: username,
+		RoleType: enum.RoleTypeAdmin,
+	})
+	if err != nil {
+		t.Fatalf("build current user after initialization failed: %v", err)
+	}
+	if currentUser.DefaultRoute != "/sandbox-game/admin/summary" {
+		t.Fatalf("expected admin summary route after initialization, got %s", currentUser.DefaultRoute)
 	}
 }
 
@@ -119,7 +167,7 @@ func createAuthIntegrationAccount(
 	now := time.Now()
 	account := entity.Account{
 		Username:     username,
-		PasswordHash: buildSHA256PasswordHash(password),
+		PasswordHash: hashSHA256Password(password),
 		RoleType:     roleType,
 		GroupID:      groupID,
 		Status:       enum.AccountStatusEnabled,
@@ -134,9 +182,4 @@ func createAuthIntegrationAccount(
 		t.Fatalf("create auth integration account: %v", err)
 	}
 	return account.ID
-}
-
-func buildSHA256PasswordHash(password string) string {
-	sum := sha256.Sum256([]byte(password))
-	return sha256PasswordPrefix + hex.EncodeToString(sum[:])
 }

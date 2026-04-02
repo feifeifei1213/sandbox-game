@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	actionInitSingle  = "init-single"
-	actionResetSingle = "reset-single"
+	actionInitSingle       = "init-single"
+	actionResetSingle      = "reset-single"
+	actionInitCompetition  = "init-competition"
+	actionResetCompetition = "reset-competition"
 )
 
 func main() {
@@ -24,7 +26,7 @@ func main() {
 	var action string
 
 	flag.StringVar(&configPath, "config", "configs/local-single.yaml", "配置文件路径")
-	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single")
+	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single/init-competition/reset-competition")
 	flag.Parse()
 
 	if err := run(configPath, action); err != nil {
@@ -65,7 +67,15 @@ func run(configPath string, action string) error {
 		if err := ensureDatabase(adminDB, targetDBName); err != nil {
 			return err
 		}
+	case actionInitCompetition:
+		if err := ensureDatabase(adminDB, targetDBName); err != nil {
+			return err
+		}
 	case actionResetSingle:
+		if err := recreateDatabase(adminDB, targetDBName); err != nil {
+			return err
+		}
+	case actionResetCompetition:
 		if err := recreateDatabase(adminDB, targetDBName); err != nil {
 			return err
 		}
@@ -88,10 +98,9 @@ func run(configPath string, action string) error {
 		return err
 	}
 
-	migrationFiles := []string{
-		filepath.Join(projectRoot, "migrations", "mysql", "0001_init.sql"),
-		filepath.Join(projectRoot, "migrations", "mysql", "0003_notice_adjustment.sql"),
-		filepath.Join(projectRoot, "migrations", "mysql", "0002_seed_single_group.sql"),
+	migrationFiles, err := resolveMigrationFiles(projectRoot, action)
+	if err != nil {
+		return err
 	}
 
 	for _, file := range migrationFiles {
@@ -100,8 +109,24 @@ func run(configPath string, action string) error {
 		}
 	}
 
-	fmt.Printf("single rehearsal database ready: %s (%s)\n", targetDBName, action)
+	fmt.Printf("database ready: %s (%s)\n", targetDBName, action)
 	return nil
+}
+
+func resolveMigrationFiles(projectRoot string, action string) ([]string, error) {
+	commonFiles := []string{
+		filepath.Join(projectRoot, "migrations", "mysql", "0001_init.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0003_notice_adjustment.sql"),
+	}
+
+	switch action {
+	case actionInitSingle, actionResetSingle:
+		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0002_seed_single_group.sql")), nil
+	case actionInitCompetition, actionResetCompetition:
+		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0004_seed_competition_admin.sql")), nil
+	default:
+		return nil, fmt.Errorf("unsupported migration action: %s", action)
+	}
 }
 
 func cloneDSNWithoutDatabase(cfg *driver.Config) string {

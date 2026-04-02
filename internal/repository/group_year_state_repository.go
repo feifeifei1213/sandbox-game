@@ -58,6 +58,23 @@ func (r *GroupYearStateRepository) ListByYear(ctx context.Context, yearNo int) (
 	return items, nil
 }
 
+func (r *GroupYearStateRepository) CountAll(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *GroupYearStateRepository) CreateBatch(ctx context.Context, items []entity.GroupYearState) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).CreateInBatches(&items, 200).Error
+}
+
 func (r *GroupYearStateRepository) EnsureFormalYearStates(ctx context.Context, cmd EnsureFormalYearStatesCommand) (int64, error) {
 	if len(cmd.GroupIDs) == 0 || cmd.FromYear > cmd.ToYear {
 		return 0, nil

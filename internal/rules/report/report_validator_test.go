@@ -31,13 +31,19 @@ func TestValidateSubmitRejectsIllegalTaxRate(t *testing.T) {
 	finishedGoods := 2.0
 	rawMaterials := 3.0
 	incomeTaxRate := 0.2
+	enterpriseCertificationScore := 0.0
+	productionHumanScore := 0.0
+	closingSpeedScore := 0.0
 
 	validator := NewValidator()
 	ctx := newReportContext().WithReportManualPayload(&payload.ReportManualPayload{
-		WorkInProgress: &workInProgress,
-		FinishedGoods:  &finishedGoods,
-		RawMaterials:   &rawMaterials,
-		IncomeTaxRate:  &incomeTaxRate,
+		WorkInProgress:               &workInProgress,
+		FinishedGoods:                &finishedGoods,
+		RawMaterials:                 &rawMaterials,
+		IncomeTaxRate:                &incomeTaxRate,
+		EnterpriseCertificationScore: &enterpriseCertificationScore,
+		ProductionHumanScore:         &productionHumanScore,
+		ClosingSpeedScore:            &closingSpeedScore,
 	})
 
 	result := validator.ValidateSubmit(ctx, payload.ReportComputedPayload{
@@ -56,13 +62,19 @@ func TestValidateSubmitAcceptsBalancedReport(t *testing.T) {
 	finishedGoods := 0.0
 	rawMaterials := 0.0
 	incomeTaxRate := 0.25
+	enterpriseCertificationScore := 0.0
+	productionHumanScore := 0.0
+	closingSpeedScore := 0.0
 
 	validator := NewValidator()
 	ctx := newReportContext().WithReportManualPayload(&payload.ReportManualPayload{
-		WorkInProgress: &workInProgress,
-		FinishedGoods:  &finishedGoods,
-		RawMaterials:   &rawMaterials,
-		IncomeTaxRate:  &incomeTaxRate,
+		WorkInProgress:               &workInProgress,
+		FinishedGoods:                &finishedGoods,
+		RawMaterials:                 &rawMaterials,
+		IncomeTaxRate:                &incomeTaxRate,
+		EnterpriseCertificationScore: &enterpriseCertificationScore,
+		ProductionHumanScore:         &productionHumanScore,
+		ClosingSpeedScore:            &closingSpeedScore,
 	})
 
 	result := validator.ValidateSubmit(ctx, payload.ReportComputedPayload{

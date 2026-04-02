@@ -43,6 +43,15 @@ type AdminControlConfigResult struct {
 	LatestAdminAction          *AdminActionSummary `json:"latestAdminAction"`
 }
 
+type AdminControlSetupStatusResult struct {
+	Initialized              bool   `json:"initialized"`
+	GroupCount               int    `json:"groupCount"`
+	FinalYear                int    `json:"finalYear"`
+	CurrentOpenYear          int    `json:"currentOpenYear"`
+	InitialBaselineSubmitted bool   `json:"initialBaselineSubmitted"`
+	DefaultRoute             string `json:"defaultRoute"`
+}
+
 type InitialBaselineViewResult struct {
 	Submitted         bool                    `json:"submitted"`
 	Editable          bool                    `json:"editable"`
@@ -124,6 +133,33 @@ func (s *AdminControlQueryService) GetConfig(ctx context.Context) (*AdminControl
 		InitialBaselineSubmittedAt: baselineSubmittedAt,
 		InitialBaselineSubmitter:   baselineSubmitterName,
 		LatestAdminAction:          latestAdminAction,
+	}, nil
+}
+
+func (s *AdminControlQueryService) GetSetupStatus(ctx context.Context) (*AdminControlSetupStatusResult, error) {
+	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+
+	groupCount, err := s.groupRepo.CountAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("count groups: %w", err)
+	}
+
+	initialized := groupCount > 0
+	defaultRoute := "/sandbox-game/admin/setup"
+	if initialized {
+		defaultRoute = "/sandbox-game/admin/summary"
+	}
+
+	return &AdminControlSetupStatusResult{
+		Initialized:              initialized,
+		GroupCount:               int(groupCount),
+		FinalYear:                gameConfig.FinalYear,
+		CurrentOpenYear:          gameConfig.CurrentOpenYear,
+		InitialBaselineSubmitted: gameConfig.InitialBaselineSubmitted,
+		DefaultRoute:             defaultRoute,
 	}, nil
 }
 

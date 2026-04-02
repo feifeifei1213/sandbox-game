@@ -14,17 +14,30 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { RouterLink, useRoute } from 'vue-router'
 
-const route = useRoute()
+import { useAdminShellStore } from '@/stores/admin-shell'
 
-const items = [
-  { to: '/sandbox-game/admin/summary', label: '汇总', description: '年度汇总区 + 最终排名区' },
-  { to: '/sandbox-game/admin/control', label: '年度控制', description: '最终年份、开放下一年、阻断摘要' },
-  { to: '/sandbox-game/admin/baseline', label: '初始基线', description: '共享模板录入与提交锁定' },
-  { to: '/sandbox-game/admin/group-data', label: '组数据', description: '组与年份查看入口，支持异常解锁' },
-  { to: '/sandbox-game/admin/notices', label: '通知与奖惩', description: '发送普通通知并按组下发奖励与罚款' },
-]
+const route = useRoute()
+const shellStore = useAdminShellStore()
+const { setupStatus } = storeToRefs(shellStore)
+
+const items = computed(() => {
+  if (!setupStatus.value?.initialized) {
+    return [
+      { to: '/sandbox-game/admin/setup', label: '赛前配置', description: '先配置本场比赛小组数量，再初始化比赛环境' },
+    ]
+  }
+  return [
+    { to: '/sandbox-game/admin/summary', label: '汇总', description: '年度汇总区 + 最终排名区' },
+    { to: '/sandbox-game/admin/control', label: '年度控制', description: '最终年份、开放下一年、阻断摘要' },
+    { to: '/sandbox-game/admin/baseline', label: '初始基线', description: '共享模板录入与提交锁定' },
+    { to: '/sandbox-game/admin/group-data', label: '组数据', description: '组与年份查看入口，支持异常解锁' },
+    { to: '/sandbox-game/admin/notices', label: '通知与奖惩', description: '发送普通通知并按组下发奖励与罚款' },
+  ]
+})
 </script>
 
 <style scoped>

@@ -137,6 +137,24 @@ func validateManualPayloadForSubmit(manual *payload.ReportManualPayload) []opera
 			Message: "所得税税率不能为空",
 		})
 	}
+	if manual.EnterpriseCertificationScore == nil {
+		issues = append(issues, operating.ValidationIssue{
+			Field:   "enterpriseCertificationScore",
+			Message: "企业认证得分不能为空",
+		})
+	}
+	if manual.ProductionHumanScore == nil {
+		issues = append(issues, operating.ValidationIssue{
+			Field:   "productionHumanScore",
+			Message: "最佳生产人力总监得分不能为空",
+		})
+	}
+	if manual.ClosingSpeedScore == nil {
+		issues = append(issues, operating.ValidationIssue{
+			Field:   "closingSpeedScore",
+			Message: "关账速度得分不能为空",
+		})
+	}
 
 	return issues
 }

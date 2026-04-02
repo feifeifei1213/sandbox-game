@@ -187,6 +187,9 @@ export interface ReportManualPayload {
   finishedGoods: number | null
   rawMaterials: number | null
   incomeTaxRate: number | null
+  enterpriseCertificationScore: number | null
+  productionHumanScore: number | null
+  closingSpeedScore: number | null
 }
 
 export interface ReportComputedPayload {
@@ -221,6 +224,13 @@ export interface ReportComputedPayload {
   reportRetainedEarnings: number
   reportTotalEquity: number
   reportTotalLiabilityEquity: number
+  reportBestMarketDirectorBaseScore: number
+  reportBestMarketDirectorScore: number
+  reportBestTechnologyDirectorScore: number
+  reportBestSalesDirectorScore: number
+  reportBestCfoBaseScore: number
+  reportBestCfoScore: number
+  reportBestCeoScore: number
 }
 
 export interface PlayerReportManualFieldOptions {
@@ -281,6 +291,9 @@ export function createEmptyReportManualPayload(): ReportManualPayload {
     finishedGoods: null,
     rawMaterials: null,
     incomeTaxRate: null,
+    enterpriseCertificationScore: null,
+    productionHumanScore: null,
+    closingSpeedScore: null,
   }
 }
 
@@ -290,6 +303,9 @@ export function cloneReportManualPayload(payload?: ReportManualPayload | null): 
     finishedGoods: normalizeNullableNumber(payload?.finishedGoods),
     rawMaterials: normalizeNullableNumber(payload?.rawMaterials),
     incomeTaxRate: normalizeNullableNumber(payload?.incomeTaxRate),
+    enterpriseCertificationScore: normalizeNullableNumber(payload?.enterpriseCertificationScore),
+    productionHumanScore: normalizeNullableNumber(payload?.productionHumanScore),
+    closingSpeedScore: normalizeNullableNumber(payload?.closingSpeedScore),
   }
 }
 
@@ -326,6 +342,13 @@ export function createEmptyReportComputedPayload(): ReportComputedPayload {
     reportRetainedEarnings: 0,
     reportTotalEquity: 0,
     reportTotalLiabilityEquity: 0,
+    reportBestMarketDirectorBaseScore: 0,
+    reportBestMarketDirectorScore: 0,
+    reportBestTechnologyDirectorScore: 0,
+    reportBestSalesDirectorScore: 0,
+    reportBestCfoBaseScore: 0,
+    reportBestCfoScore: 0,
+    reportBestCeoScore: 0,
   }
 }
 
@@ -340,6 +363,9 @@ export function buildReportComputedPreview(
   const finishedGoods = manual.finishedGoods ?? 0
   const rawMaterials = manual.rawMaterials ?? 0
   const incomeTaxRate = manual.incomeTaxRate ?? 0
+  const enterpriseCertificationScore = manual.enterpriseCertificationScore ?? 0
+  const productionHumanScore = manual.productionHumanScore ?? 0
+  const closingSpeedScore = manual.closingSpeedScore ?? 0
   const reportIncomeTax = Math.max(Math.round(base.reportPreTaxProfit * incomeTaxRate), 0)
   const reportNetProfit = base.reportPreTaxProfit - reportIncomeTax
   const reportPostTaxCash = base.reportCash - reportIncomeTax
@@ -347,6 +373,14 @@ export function buildReportComputedPreview(
   const reportTotalAssets = base.reportTotalNonCurrentAssets + reportTotalCurrentAssets
   const reportTotalEquity = base.reportShareCapital + base.reportRetainedEarnings + reportNetProfit
   const reportTotalLiabilityEquity = base.reportTotalLiability + reportTotalEquity
+  const reportBestMarketDirectorScore = base.reportBestMarketDirectorBaseScore + enterpriseCertificationScore
+  const reportBestCfoScore = base.reportBestCfoBaseScore + closingSpeedScore
+  const reportBestCeoScore =
+    reportBestMarketDirectorScore +
+    base.reportBestTechnologyDirectorScore +
+    productionHumanScore +
+    base.reportBestSalesDirectorScore +
+    reportBestCfoScore
 
   return {
     ...base,
@@ -360,6 +394,9 @@ export function buildReportComputedPreview(
     reportTotalAssets,
     reportTotalEquity,
     reportTotalLiabilityEquity,
+    reportBestMarketDirectorScore,
+    reportBestCfoScore,
+    reportBestCeoScore,
   }
 }
 

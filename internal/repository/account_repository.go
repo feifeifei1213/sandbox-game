@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
 )
 
@@ -35,6 +36,24 @@ func (r *AccountRepository) GetByUsername(ctx context.Context, username string) 
 		return nil, err
 	}
 	return &item, nil
+}
+
+func (r *AccountRepository) CountGroupAccounts(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.Account{}).
+		Where("role_type = ?", enum.RoleTypeGroup).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *AccountRepository) CreateBatch(ctx context.Context, items []entity.Account) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).CreateInBatches(&items, 200).Error
 }
 
 func (r *AccountRepository) UpdateLastLoginTime(ctx context.Context, accountID int64, loginTime time.Time) error {

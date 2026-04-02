@@ -13,6 +13,15 @@ export interface AdminActionSummary {
   targetYearNo?: number | null
 }
 
+export interface AdminControlSetupStatusResult {
+  initialized: boolean
+  groupCount: number
+  finalYear: number
+  currentOpenYear: number
+  initialBaselineSubmitted: boolean
+  defaultRoute: string
+}
+
 export interface AdminControlConfigResult {
   finalYear: number
   currentOpenYear: number
@@ -25,6 +34,16 @@ export interface AdminControlConfigResult {
   initialBaselineSubmittedAt: string | null
   initialBaselineSubmitterName: string | null
   latestAdminAction: AdminActionSummary | null
+}
+
+export interface InitializeGameResult {
+  initialized: boolean
+  groupCount: number
+  createdGroupCount: number
+  createdAccountCount: number
+  createdYearStateCount: number
+  initializedAt: string
+  initializedBy: string
 }
 
 export interface UpdateFinalYearResult {

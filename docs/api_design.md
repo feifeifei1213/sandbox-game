@@ -1,6 +1,6 @@
 # 沙盘经营系统接口设计文档（正式版）
 
-> 更新日期：2026-03-30  
+> 更新日期：2026-04-02  
 > 适用方式：基于《正式需求文档（首版）》《最小状态机 v0.1》《技术选型细化文档（Go 方向） v0.1》，定义首版正式业务接口边界，作为后续 Go 后端开发、前端 API 客户端开发和接口测试的统一依据。  
 > 文档定位：本文件定义接口域划分、路径风格、请求/响应结构、核心动作语义、关键错误状态和测试口径。  
 > 说明：本文件已按 `1组 最终版.xlsx` 口径收口；接口域划分、动作语义和结构性字段已经冻结，若后续仅有页面标签细修，应优先更新映射文档，不直接改动接口结构。
@@ -76,6 +76,8 @@
 - `sandbox-game:player-operating:query`
 - `sandbox-game:player-operating:submit-stage`
 - `sandbox-game:player-report:submit`
+- `sandbox-game:admin-control:query-setup`
+- `sandbox-game:admin-control:initialize-game`
 - `sandbox-game:admin-control:open-next-year`
 - `sandbox-game:admin-control:unlock-year`
 - `sandbox-game:admin-notice:query`
@@ -265,7 +267,7 @@
 | `user.username` | 登录名 |
 | `user.roleType` | `ADMIN` / `GROUP` |
 | `user.groupId` | 玩家所属组，管理员为空 |
-| `defaultRoute` | 默认跳转地址；玩家为 `player/operating?yearNo=0`，管理员为 `admin/summary` |
+| `defaultRoute` | 默认跳转地址；玩家为 `player/operating?yearNo=0`，管理员按初始化状态返回 `admin/setup` 或 `admin/summary` |
 
 #### 6.0.2 获取当前登录用户
 
@@ -537,7 +539,76 @@
 
 ### 6.5 `admin-control`
 
-#### 6.5.1 获取控制台配置
+#### 6.5.1 获取赛前初始化状态
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-control/get-setup-status`
+- 权限：`sandbox-game:admin-control:query-setup`
+
+Go DTO 建议：
+
+- 响应：`AdminControlSetupStatusResp`
+
+返回字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `initialized` | `bool` | 比赛是否已初始化 |
+| `groupCount` | `int` | 当前已初始化的小组数量 |
+| `finalYear` | `int` | 当前最终年份配置 |
+| `currentOpenYear` | `int` | 当前开放年份 |
+| `initialBaselineSubmitted` | `bool` | 初始基线是否已提交 |
+| `defaultRoute` | `string` | 管理员当前默认跳转地址 |
+
+说明：
+
+- 首版建议直接以 `sg_group` 实际记录数推断 `initialized` 与 `groupCount`。
+- 当 `initialized=false` 时，`defaultRoute` 应返回 `admin/setup`；当 `initialized=true` 时，应返回 `admin/summary`。
+
+#### 6.5.2 初始化比赛
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-control/initialize-game`
+- 权限：`sandbox-game:admin-control:initialize-game`
+
+Go DTO 建议：
+
+- 请求：`InitializeGameReq`
+- 响应：`InitializeGameResp`
+
+请求体：
+
+```json
+{
+  "groupCount": 6
+}
+```
+
+请求字段建议：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `groupCount` | `int` | 是 | 本场比赛要初始化的小组数量，首版建议限制在 `1 ~ 10` |
+
+响应字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `initialized` | `bool` | 初始化后应返回 `true` |
+| `groupCount` | `int` | 实际初始化的小组数量 |
+| `createdGroupCount` | `int` | 本次创建的小组主数据数量 |
+| `createdAccountCount` | `int` | 本次创建的账号数量 |
+| `createdYearStateCount` | `int` | 本次创建的年份状态数量 |
+
+规则：
+
+- 仅管理员可调用。
+- 仅允许在比赛未初始化时调用；若已初始化，应返回 `409`。
+- 服务端应以单事务一次性创建 `sg_group`、`sg_account`、`sg_group_year_state`。
+- 初始化成功后，管理员账号保留 `admin`，玩家账号建议按 `group01 ~ groupNN` 自动生成。
+- 初始化成功后，系统应处于“`0年` 已开放、正式年份已预置但锁定”的初始状态。
+
+#### 6.5.3 获取控制台配置
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-control/get-config`
@@ -568,7 +639,7 @@ Go DTO 建议：
 - 本接口服务于管理员年度控制页顶部状态区。
 - `openNextYearBlockedReason` 只返回原因摘要，不返回逐组明细。
 
-#### 6.5.2 更新最终年份
+#### 6.5.4 更新最终年份
 
 - 方法：`PUT`
 - 路径：`/api/v1/sandbox-game/admin-control/update-final-year`
@@ -614,7 +685,7 @@ Go DTO 建议：
 - 若 `finalYear` 下调且仍不小于 `currentOpenYear`，允许更新，但不物理删除已存在的未来年份数据。
 - 更新成功后必须写入管理员动作日志。
 
-#### 6.5.3 开放下一年
+#### 6.5.5 开放下一年
 
 - 方法：`POST`
 - 路径：`/api/v1/sandbox-game/admin-control/open-next-year`
@@ -654,7 +725,7 @@ Go DTO 建议：
 | `openNextYearBlockedReason` | `string` | 若已到最终年份或后续被阻塞，返回摘要原因 |
 | `latestAdminAction` | `object` | 本次动作摘要 |
 
-#### 6.5.4 获取初始基线
+#### 6.5.6 获取初始基线
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-control/get-initial-baseline`
@@ -680,7 +751,7 @@ Go DTO 建议：
 | `submitterName` | `string \| null` | 提交人 |
 | `submittedAt` | `string \| null` | 提交时间，RFC3339 |
 
-#### 6.5.5 提交初始基线
+#### 6.5.7 提交初始基线
 
 - 方法：`POST`
 - 路径：`/api/v1/sandbox-game/admin-control/submit-initial-baseline`
@@ -721,7 +792,7 @@ Go DTO 建议：
 | `submittedAt` | `string` | 提交时间，RFC3339 |
 | `submitterName` | `string` | 提交管理员名称 |
 
-#### 6.5.6 异常解锁某组某年
+#### 6.5.8 异常解锁某组某年
 
 - 方法：`POST`
 - 路径：`/api/v1/sandbox-game/admin-control/unlock-year`
@@ -790,7 +861,7 @@ Go DTO 建议：
 | `businessStatus` | `string` | 解锁后经营状态 |
 | `unlockLogId` | `int64` | 解锁日志 ID |
 
-#### 6.5.7 后端实现规则清单
+#### 6.5.9 后端实现规则清单
 
 1. DTO 与枚举
 - `UnlockYearReq` 必须新增 `unlockTargetType`、`targetStageCode` 字段。
@@ -832,9 +903,9 @@ Go DTO 建议：
 - 单元测试覆盖：`OPERATING/Q1`、`OPERATING/Q2`、`OPERATING/YEAR_END`、`REPORT` 四类主场景。
 - 集成测试覆盖：失效草稿保留、汇总失效、破产恢复、重新提交后重新生效。
 
-### 6.5.8 `admin-notice`
+### 6.6 `admin-notice`
 
-#### 6.5.8.1 查看通知与奖惩最近记录
+#### 6.6.1 查看通知与奖惩最近记录
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-notice/get-records?limit=20`
@@ -856,7 +927,7 @@ Go DTO 建议：
 - 首版采用页面刷新 / 轮询口径，不做 WebSocket。
 - 管理端记录区只做查看，不承担撤回或编辑历史记录能力。
 
-#### 6.5.8.2 发送普通通知
+#### 6.6.2 发送普通通知
 
 - 方法：`POST`
 - 路径：`/api/v1/sandbox-game/admin-notice/send-general`
@@ -893,7 +964,7 @@ Go DTO 建议：
 - 普通通知仅负责展示，不参与经营、财报、汇总计算。
 - 允许发送赛事播报类消息，例如 `第一小组已破产`。
 
-#### 6.5.8.3 下发奖惩
+#### 6.6.3 下发奖惩
 
 - 方法：`POST`
 - 路径：`/api/v1/sandbox-game/admin-notice/send-adjustment`
@@ -938,9 +1009,9 @@ Go DTO 建议：
 
 ---
 
-### 6.6 `admin-group-data`
+### 6.7 `admin-group-data`
 
-#### 6.6.1 查看任意组经营页视图
+#### 6.7.1 查看任意组经营页视图
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-group-data/get-operating-view?groupId=1&yearNo=1`
@@ -951,13 +1022,13 @@ Go DTO 建议：
 - 管理员查看指定组指定年的经营页数据与状态
 - 返回结构可复用玩家端 `get-year-view` 的数据模型
 
-#### 6.6.2 查看任意组财报页视图
+#### 6.7.2 查看任意组财报页视图
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-group-data/get-report-view?groupId=1&yearNo=1`
 - 权限：`sandbox-game:admin-group-data:query`
 
-#### 6.6.3 分页查询阶段提交日志
+#### 6.7.3 分页查询阶段提交日志
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-group-data/page-stage-submissions`
@@ -971,7 +1042,7 @@ Go DTO 建议：
 - `pageNo`
 - `pageSize`
 
-#### 6.6.4 分页查询财报提交日志
+#### 6.7.4 分页查询财报提交日志
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-group-data/page-report-submissions`
@@ -979,15 +1050,15 @@ Go DTO 建议：
 
 ---
 
-### 6.7 `audit-log`
+### 6.8 `audit-log`
 
-#### 6.7.1 分页查询异常解锁日志
+#### 6.8.1 分页查询异常解锁日志
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/audit-log/page-unlock-log`
 - 权限：`sandbox-game:audit-log:query`
 
-#### 6.7.2 分页查询管理员动作日志
+#### 6.8.2 分页查询管理员动作日志
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/audit-log/page-admin-action-log`
@@ -1129,6 +1200,8 @@ type AdminActionSummaryResp struct {
 | Go 常量名 | 默认 HTTP | 触发场景 | 默认提示语建议 |
 |---|---|---|---|
 | `ErrAdminControlConfigNotFound` | `404` | 配置表未初始化 | `游戏配置不存在` |
+| `ErrAdminControlAlreadyInitialized` | `409` | 比赛已初始化后重复初始化 | `比赛已初始化，不能重复执行初始化` |
+| `ErrAdminControlInitializeInvalid` | `422` | 初始化请求缺失或 `groupCount` 非法 | `初始化参数不合法` |
 | `ErrAdminControlFinalYearTooSmall` | `422` | `finalYear < currentOpenYear` | `最终年份不能小于当前开放年份` |
 | `ErrAdminControlTargetYearMismatch` | `409` | `targetYearNo != currentOpenYear + 1` | `开放年份与当前状态不一致` |
 | `ErrAdminControlFinalYearReached` | `409` | 已到最终年份仍尝试开放 | `已达到最终年份，无法继续开放` |
@@ -1211,6 +1284,3 @@ type AdminActionSummaryResp struct {
 - 详细接口示例 JSON 样例库
 - `.http` 用例文件
 - 异常解锁日志的高级筛选条件与导出策略
-
-
-

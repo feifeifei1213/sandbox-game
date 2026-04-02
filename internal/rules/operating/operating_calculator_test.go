@@ -279,3 +279,107 @@ func TestCalculateDoesNotDoubleCountAliasedMarketInvestment(t *testing.T) {
 	assertFloatEquals(t, result.QuarterCashChecks["Q1"], 34)
 	assertFloatEquals(t, result.PeriodEndCash, 34)
 }
+
+func TestCalculateDemoYearMatchesFixedFormulaSample(t *testing.T) {
+	t.Parallel()
+
+	calculator := NewCalculator()
+	operatingPayload := payload.NewOperatingPayload()
+	operatingPayload.Beginning.TaxAndPlanning = map[string]any{
+		"marketInvestmentTotal": 1.0,
+		"orderAmountTotal":      11.0,
+	}
+	operatingPayload.Quarter.ShortTermLoan = payload.OperatingQuarterMap{
+		"Q1": {"interest": 1.0, "newLoan": 20.0},
+	}
+	operatingPayload.Quarter.MaterialPayment = payload.OperatingQuarterMap{
+		"Q1": {"materialCost": 20.0},
+	}
+	operatingPayload.Quarter.ProductionLineAdjust = payload.OperatingQuarterMap{
+		"Q1": {
+			"changeProduct":       2.0,
+			"dismantleCost":       1.0,
+			"lineSale":            5.0,
+			"newLineInstall":      2.0,
+			"constructionToFixed": 10.0,
+			"newDepreciableAsset": 19.0,
+		},
+	}
+	operatingPayload.Quarter.HumanResource = payload.OperatingQuarterMap{
+		"Q1": {"staffCost": 4.0},
+	}
+	operatingPayload.Quarter.SalaryAndProduction = payload.OperatingQuarterMap{
+		"Q1": {"salaryCost": 14.0},
+	}
+	operatingPayload.Quarter.ResearchAndManagement = payload.OperatingQuarterMap{
+		"Q1": {"technologyResearch": 5.0, "managementSystem": 6.0},
+	}
+	operatingPayload.Quarter.ReceivableUpdate = payload.OperatingQuarterMap{
+		"Q1": {"receivableCollection": 11.0},
+	}
+	operatingPayload.Quarter.DeliverySettlement = payload.OperatingQuarterMap{
+		"Q1": {"salesRevenue": 11.0, "directCost": 4.0},
+	}
+	operatingPayload.YearEnd.LongTermLoan = map[string]any{
+		"interest": 1.0,
+		"newLoan":  140.0,
+	}
+	operatingPayload.YearEnd.AssetAdjustment = map[string]any{
+		"lineMaintenance":   1.0,
+		"purchase":          20.0,
+		"sale":              15.0,
+		"rent":              1.0,
+		"marketCultivation": 1.0,
+	}
+
+	ctx := newOperatingCalculationContext(0, enum.StageStatusYearEndOpen).
+		WithInitialBaseline(&payload.BaselinePayload{
+			BaselineIncomeTax:        1,
+			BaselineShortTermLoan:    20,
+			BaselineLongTermLoan:     0,
+			BaselineLineResidual:     3,
+			BaselineDepreciableAsset: 0,
+			BaselineCash:             36,
+		}).
+		WithOperatingPayload(&operatingPayload)
+
+	result, err := calculator.Calculate(ctx)
+	if err != nil {
+		t.Fatalf("calculate operating failed: %v", err)
+	}
+
+	assertFloatEquals(t, result.QuarterCashChecks["Q1"], 15)
+	assertFloatEquals(t, result.QuarterCashChecks["Q2"], 15)
+	assertFloatEquals(t, result.QuarterCashChecks["Q3"], 15)
+	assertFloatEquals(t, result.QuarterCashChecks["Q4"], 15)
+	assertFloatEquals(t, result.PeriodEndCash, 146)
+	assertFloatEquals(t, result.DerivedValues["marketBidCost"], 1)
+	assertFloatEquals(t, result.DerivedValues["salesRevenue"], 11)
+	assertFloatEquals(t, result.DerivedValues["directCost"], 4)
+	assertFloatEquals(t, result.DerivedValues["marketReturnRatio"], 11)
+	assertFloatEquals(t, result.DerivedValues["researchIntensity"], 0.45454545454545453)
+	assertFloatEquals(t, result.DerivedValues["laborProductivity"], -7.766990291262135)
+	assertFloatEquals(t, result.DerivedValues["financeIncomeExpense"], 2)
+	assertFloatEquals(t, result.DerivedValues["factoryAssetChange"], 5)
+	assertFloatEquals(t, result.DerivedValues["receivableChange"], 0)
+	assertFloatEquals(t, result.DerivedValues["lineResidualChange"], 5)
+	assertFloatEquals(t, result.DerivedValues["depreciableAssetChange"], 13)
+	assertFloatEquals(t, result.DerivedValues["periodEndCash"], 146)
+}
+
+func TestBuildReportIndicatorValuesMatchesExcelFormulaSample(t *testing.T) {
+	t.Parallel()
+
+	result := BuildReportIndicatorValues(payload.ReportComputedPayload{
+		ReportSalesRevenue: 11,
+		ReportDirectCost:   4,
+		ReportNetProfit:    -23,
+		ReportTotalEquity:  46,
+		ReportTotalAssets:  226,
+	})
+
+	assertFloatEquals(t, result["netAssetYield"], -0.5)
+	assertFloatEquals(t, result["totalAssetYield"], -0.10176991150442478)
+	assertFloatEquals(t, result["netProfitRate"], -2.090909090909091)
+	assertFloatEquals(t, result["grossMarginRate"], 0.6363636363636364)
+}

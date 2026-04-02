@@ -1,0 +1,187 @@
+﻿# 沙盘经营系统文档索引
+
+> 更新日期：2026-04-02  
+> 适用目录：`E:\project\sand box game`
+
+## 1. 项目简介
+
+本项目是一个面向企业培训与经营推演场景的沙盘经营系统。
+
+当前首版重点覆盖：
+
+- 玩家端经营页
+- 玩家端财报页
+- 管理员端汇总页
+- 管理员端年度控制
+- 管理员端初始基线
+- 管理员端组数据查看与异常解锁
+- 管理员端通知与奖惩
+- 单组演练环境与全过程测试支持
+
+系统定位不是把桌游流程完全电子化，而是先把 Excel 已承载的经营、财报、汇总与必要流程控制落到系统中。
+
+---
+
+## 2. 当前技术栈
+
+- 后端：Go
+- 前端：Vue 3 + TypeScript + Vite
+- 数据库：MySQL
+- 文档：统一收口在 `docs/`
+
+---
+
+## 3. 目录说明
+
+项目中当前重点目录：
+
+- `cmd/`：Go 启动入口与辅助工具
+- `internal/`：后端业务代码
+- `frontend/`：正式前端工程
+- `configs/`：本地配置文件
+- `migrations/`：数据库结构与种子数据
+- `docs/`：需求、设计、联调、测试、运行说明
+- `demo 网页/`：静态页面原型与演示稿
+- `game doc/`：Excel、规则文档与原始业务资料
+
+---
+
+## 4. 如何快速启动
+
+### 4.1 启动后端
+
+```powershell
+Set-Location 'E:\project\sand box game'
+$env:GOCACHE='E:\project\sand box game\.gocache'
+$env:GOMODCACHE='E:\project\sand box game\.cache\gomod'
+go run .\cmd\server\main.go -config .\configs\local.yaml
+```
+
+### 4.2 启动前端
+
+```powershell
+Set-Location 'E:\project\sand box game\frontend'
+npm run dev
+```
+
+### 4.3 常用地址
+
+- 前端登录页：`http://127.0.0.1:5173/sandbox-game/login`
+- 后端健康检查：`http://127.0.0.1:8080/healthz`
+
+---
+
+## 5. 常用联调账号
+
+默认联调账号口径：
+
+- 管理员：`admin / 123456`
+- 玩家：`group01 / 123456`
+
+说明：
+
+- 多组演练环境下，玩家账号可能扩展为 `group01 ~ groupNN`
+- 单组演练环境下，通常只保留 `admin` 与 `group01`
+
+---
+
+## 6. 推荐阅读顺序
+
+如果你要理解这个项目，推荐按这个顺序看文档：
+
+1. [requirements_spec.md](E:\project\sand box game\docs\requirements_spec.md)
+2. [requirements_consensus_checklist.md](E:\project\sand box game\docs\requirements_consensus_checklist.md)
+3. [technical_selection.md](E:\project\sand box game\docs\technical_selection.md)
+4. [database_design.md](E:\project\sand box game\docs\database_design.md)
+5. [api_design.md](E:\project\sand box game\docs\api_design.md)
+6. [frontend_page_structure.md](E:\project\sand box game\docs\frontend_page_structure.md)
+7. [implementation_plan.md](E:\project\sand box game\docs\implementation_plan.md)
+
+---
+
+## 7. 按用途查文档
+
+### 7.1 看需求
+
+- [requirements_spec.md](E:\project\sand box game\docs\requirements_spec.md)
+- [requirements_consensus_checklist.md](E:\project\sand box game\docs\requirements_consensus_checklist.md)
+
+### 7.2 看技术方案
+
+- [technical_selection.md](E:\project\sand box game\docs\technical_selection.md)
+- [go_project_structure.md](E:\project\sand box game\docs\go_project_structure.md)
+- [backend_guide.md](E:\project\sand box game\docs\backend_guide.md)
+- [frontend_guide.md](E:\project\sand box game\docs\frontend_guide.md)
+
+### 7.3 看数据库与接口
+
+- [database_design.md](E:\project\sand box game\docs\database_design.md)
+- [api_design.md](E:\project\sand box game\docs\api_design.md)
+- [minimal_state_machine.md](E:\project\sand box game\docs\minimal_state_machine.md)
+
+### 7.4 看测试与联调
+
+- [testing_guide.md](E:\project\sand box game\docs\testing_guide.md)
+- [integration_acceptance_runbook.md](E:\project\sand box game\docs\integration_acceptance_runbook.md)
+- [single_group_rehearsal_runbook.md](E:\project\sand box game\docs\single_group_rehearsal_runbook.md)
+
+### 7.5 看比赛上线与现场使用
+
+- [competition_launch_runbook.md](E:\project\sand box game\docs\competition_launch_runbook.md)
+- [competition_deploy_checklist.md](E:\project\sand box game\docs\competition_deploy_checklist.md)
+
+### 7.5.1 正式版上线包落点
+
+- `configs/competition.yaml`
+- `migrations/mysql/0004_seed_competition_admin.sql`
+- `scripts/init-competition.ps1`
+- `scripts/reset-competition.ps1`
+- `scripts/start-competition.ps1`
+- `scripts/build-competition-package.ps1`
+- `scripts/nginx/sandbox-game.competition.conf`
+- `docs/competition_deploy_checklist.md`
+
+### 7.6 看 Excel 规则与对账样例
+
+- [calculation_rule_spec.md](E:\project\sand box game\docs\calculation_rule_spec.md)
+- [excel_field_mapping.md](E:\project\sand box game\docs\excel_field_mapping.md)
+- [excel_reconciliation_samples.md](E:\project\sand box game\docs\excel_reconciliation_samples.md)
+
+---
+
+## 8. 当前重要说明
+
+- 正式比赛规则与测试/演练环境要区分看待。
+- 单组演练脚本和单组演练库是测试工具，不是正式比赛主流程入口。
+- 正式产品方向已经收口为：管理员端赛前配置比赛，再录入初始基线，再开始比赛。
+- 正式比赛数据库初始化不应直接使用 `0002_seed_data.sql`，而应使用正式比赛专用初始化脚本，仅保留 `admin + sg_game_config`，再由管理员首登后在 `赛前配置页` 初始化比赛。
+- 当前正式版推荐采用 `Nginx + Go + MySQL` 结构：`Nginx` 提供前端静态资源与统一访问地址，Go 提供业务 API。
+- 文档若发生冲突，以最新需求文档、共识清单与实施计划为准。
+
+## 9. 正式版上线最短路径
+
+推荐按以下顺序执行：
+
+1. 修改 `configs/competition.yaml`
+2. 执行 `scripts/init-competition.ps1`
+3. 执行 `scripts/build-competition-package.ps1`
+4. 在比赛主机启动 `scripts/start-competition.ps1`
+5. 应用 `scripts/nginx/sandbox-game.competition.conf`
+6. 管理员登录后先完成 `赛前配置页` 初始化，再开始正式比赛
+
+现场如果需要逐条照着执行，请直接使用：
+
+- [competition_deploy_checklist.md](E:\project\sand box game\docs\competition_deploy_checklist.md)
+
+---
+
+## 10. 文档维护约定
+
+后续如新增页面、接口、规则或初始化能力，至少同步更新：
+
+- `requirements_spec.md`
+- `requirements_consensus_checklist.md`
+- `implementation_plan.md`
+- 对应专题文档
+
+这样可以保证需求、设计、开发、测试口径一致。

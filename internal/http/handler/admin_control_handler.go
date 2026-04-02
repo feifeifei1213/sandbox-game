@@ -28,6 +28,106 @@ func NewAdminControlHandler(
 	}
 }
 
+func (h *AdminControlHandler) GetSetupStatus(c *gin.Context) {
+	if !ensureAdminIdentity(c, "当前身份无权查看赛前初始化状态") {
+		return
+	}
+
+	result, err := h.queryService.GetSetupStatus(c.Request.Context())
+	if err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusNotFound,
+				enum.NotFoundCode,
+				"未找到赛前初始化状态",
+				err,
+			))
+		default:
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusInternalServerError,
+				enum.InternalServerErrorCode,
+				"获取赛前初始化状态失败",
+				err,
+			))
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminControlHandler) InitializeGame(c *gin.Context) {
+	var req dto.AdminControlInitializeGameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"初始化比赛参数不正确",
+			err,
+		))
+		return
+	}
+	if req.GroupCount == nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"groupCount 参数不正确",
+			nil,
+		))
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权初始化比赛") {
+		return
+	}
+
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.commandService.InitializeGame(c.Request.Context(), service.InitializeGameCommand{
+		GroupCount:   *req.GroupCount,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusNotFound,
+				enum.NotFoundCode,
+				"未找到游戏配置",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlAlreadyInitialized):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusConflict,
+				enum.ConflictCode,
+				"比赛已初始化，不能重复执行初始化",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlInitializeInvalid):
+			msg := err.Error()
+			if msg == "" || msg == service.ErrAdminControlInitializeInvalid.Error() {
+				msg = "初始化参数不合法"
+			}
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				msg,
+				err,
+			))
+		default:
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusInternalServerError,
+				enum.InternalServerErrorCode,
+				"初始化比赛失败",
+				err,
+			))
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *AdminControlHandler) GetConfig(c *gin.Context) {
 	if !ensureAdminIdentity(c, "当前身份无权查看年度控制配置") {
 		return

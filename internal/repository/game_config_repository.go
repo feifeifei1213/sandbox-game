@@ -69,3 +69,15 @@ func (r *GameConfigRepository) UpdateInitialBaselineSubmitted(ctx context.Contex
 			"update_time":                updateTime,
 		}).Error
 }
+
+func (r *GameConfigRepository) PrepareForInitialization(ctx context.Context, id int64, operatorName string, updateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.GameConfig{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"current_open_year":          0,
+			"initial_baseline_submitted": false,
+			"updater":                    operatorName,
+			"update_time":                updateTime,
+		}).Error
+}

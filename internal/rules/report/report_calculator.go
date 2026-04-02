@@ -21,9 +21,15 @@ type reportCarryBase struct {
 	previousReceivable       float64
 	shareCapital             float64
 	retainedEarnings         float64
+	previousTotalEquity      float64
+	previousBestMarketScore  float64
+	previousBestTechScore    float64
+	previousBestSalesScore   float64
+	previousBestCfoBaseScore float64
 }
 
 type operatingReportMetrics struct {
+	orderTotal           float64
 	marketBidCost        float64
 	shortTermRepayment   float64
 	shortTermInterest    float64
@@ -123,47 +129,73 @@ func (c *Calculator) Calculate(ctx calcctx.CalculationContext) (payload.ReportCo
 	reportTotalLiability := reportShortTermLiability + reportLongTermLiability
 	reportTotalEquity := carryBase.shareCapital + carryBase.retainedEarnings + reportNetProfit
 	reportTotalLiabilityEquity := reportTotalLiability + reportTotalEquity
+	reportBestMarketDirectorBaseScore := carryBase.previousBestMarketScore + metrics.marketCultivation
+	reportBestMarketDirectorScore := reportBestMarketDirectorBaseScore + manual.enterpriseCertificationScore
+	reportBestTechnologyDirectorScore := carryBase.previousBestTechScore + metrics.researchCost
+	reportBestSalesDirectorScore := carryBase.previousBestSalesScore + metrics.orderTotal
+	reportBestCfoBaseScore := 0.0
+	if !ctx.IsDemoYear() {
+		// Excel 的 CFO 黄色分始终以 0 年财报权益为基线；
+		// 这里用“上一年黄色基础分 + 本年权益增量的一半”做等价累计。
+		reportBestCfoBaseScore = carryBase.previousBestCfoBaseScore + 0.5*(reportTotalEquity-carryBase.previousTotalEquity)
+	}
+	reportBestCfoScore := reportBestCfoBaseScore + manual.closingSpeedScore
+	reportBestCeoScore := reportBestMarketDirectorScore +
+		reportBestTechnologyDirectorScore +
+		manual.productionHumanScore +
+		reportBestSalesDirectorScore +
+		reportBestCfoScore
 
 	return payload.ReportComputedPayload{
-		ReportSalesRevenue:          metrics.salesRevenue,
-		ReportDirectCost:            metrics.directCost,
-		ReportGrossProfit:           reportGrossProfit,
-		ReportComprehensiveCost:     reportComprehensiveCost,
-		ReportDepreciation:          reportDepreciation,
-		ReportOperatingProfit:       reportOperatingProfit,
-		ReportFinanceIncomeExpense:  reportFinanceIncomeExpense,
-		ReportExtraIncomeExpense:    reportExtraIncomeExpense,
-		ReportPreTaxProfit:          reportPreTaxProfit,
-		ReportIncomeTax:             reportIncomeTax,
-		ReportNetProfit:             reportNetProfit,
-		ReportWorkInProgress:        manual.workInProgress,
-		ReportFinishedGoods:         manual.finishedGoods,
-		ReportRawMaterials:          manual.rawMaterials,
-		ReportWorkInConstruction:    metrics.workInConstruction,
-		ReportFactoryAsset:          reportFactoryAsset,
-		ReportLineResidual:          reportLineResidual,
-		ReportDepreciableAsset:      reportDepreciableAsset,
-		ReportTotalNonCurrentAssets: reportTotalNonCurrentAssets,
-		ReportCash:                  reportCash,
-		ReportReceivable:            reportReceivable,
-		ReportPostTaxCash:           reportPostTaxCash,
-		ReportTotalCurrentAssets:    reportTotalCurrentAssets,
-		ReportTotalAssets:           reportTotalAssets,
-		ReportShortTermLiability:    reportShortTermLiability,
-		ReportLongTermLiability:     reportLongTermLiability,
-		ReportTotalLiability:        reportTotalLiability,
-		ReportShareCapital:          carryBase.shareCapital,
-		ReportRetainedEarnings:      carryBase.retainedEarnings,
-		ReportTotalEquity:           reportTotalEquity,
-		ReportTotalLiabilityEquity:  reportTotalLiabilityEquity,
+		ReportSalesRevenue:                metrics.salesRevenue,
+		ReportDirectCost:                  metrics.directCost,
+		ReportGrossProfit:                 reportGrossProfit,
+		ReportComprehensiveCost:           reportComprehensiveCost,
+		ReportDepreciation:                reportDepreciation,
+		ReportOperatingProfit:             reportOperatingProfit,
+		ReportFinanceIncomeExpense:        reportFinanceIncomeExpense,
+		ReportExtraIncomeExpense:          reportExtraIncomeExpense,
+		ReportPreTaxProfit:                reportPreTaxProfit,
+		ReportIncomeTax:                   reportIncomeTax,
+		ReportNetProfit:                   reportNetProfit,
+		ReportWorkInProgress:              manual.workInProgress,
+		ReportFinishedGoods:               manual.finishedGoods,
+		ReportRawMaterials:                manual.rawMaterials,
+		ReportWorkInConstruction:          metrics.workInConstruction,
+		ReportFactoryAsset:                reportFactoryAsset,
+		ReportLineResidual:                reportLineResidual,
+		ReportDepreciableAsset:            reportDepreciableAsset,
+		ReportTotalNonCurrentAssets:       reportTotalNonCurrentAssets,
+		ReportCash:                        reportCash,
+		ReportReceivable:                  reportReceivable,
+		ReportPostTaxCash:                 reportPostTaxCash,
+		ReportTotalCurrentAssets:          reportTotalCurrentAssets,
+		ReportTotalAssets:                 reportTotalAssets,
+		ReportShortTermLiability:          reportShortTermLiability,
+		ReportLongTermLiability:           reportLongTermLiability,
+		ReportTotalLiability:              reportTotalLiability,
+		ReportShareCapital:                carryBase.shareCapital,
+		ReportRetainedEarnings:            carryBase.retainedEarnings,
+		ReportTotalEquity:                 reportTotalEquity,
+		ReportTotalLiabilityEquity:        reportTotalLiabilityEquity,
+		ReportBestMarketDirectorBaseScore: reportBestMarketDirectorBaseScore,
+		ReportBestMarketDirectorScore:     reportBestMarketDirectorScore,
+		ReportBestTechnologyDirectorScore: reportBestTechnologyDirectorScore,
+		ReportBestSalesDirectorScore:      reportBestSalesDirectorScore,
+		ReportBestCfoBaseScore:            reportBestCfoBaseScore,
+		ReportBestCfoScore:                reportBestCfoScore,
+		ReportBestCeoScore:                reportBestCeoScore,
 	}, nil
 }
 
 type normalizedManualPayload struct {
-	workInProgress float64
-	finishedGoods  float64
-	rawMaterials   float64
-	incomeTaxRate  float64
+	workInProgress               float64
+	finishedGoods                float64
+	rawMaterials                 float64
+	incomeTaxRate                float64
+	enterpriseCertificationScore float64
+	productionHumanScore         float64
+	closingSpeedScore            float64
 }
 
 func normalizeManualPayload(manual *payload.ReportManualPayload) normalizedManualPayload {
@@ -182,6 +214,15 @@ func normalizeManualPayload(manual *payload.ReportManualPayload) normalizedManua
 	}
 	if manual.IncomeTaxRate != nil {
 		result.incomeTaxRate = *manual.IncomeTaxRate
+	}
+	if manual.EnterpriseCertificationScore != nil {
+		result.enterpriseCertificationScore = *manual.EnterpriseCertificationScore
+	}
+	if manual.ProductionHumanScore != nil {
+		result.productionHumanScore = *manual.ProductionHumanScore
+	}
+	if manual.ClosingSpeedScore != nil {
+		result.closingSpeedScore = *manual.ClosingSpeedScore
 	}
 	return result
 }
@@ -202,6 +243,7 @@ func buildCarryBase(ctx calcctx.CalculationContext) (reportCarryBase, error) {
 			previousReceivable:       ctx.InitialBaseline.BaselineReceivable,
 			shareCapital:             ctx.InitialBaseline.BaselineShareCapital,
 			retainedEarnings:         ctx.InitialBaseline.BaselineRetainedEarnings + calculateBaselineNetProfit(*ctx.InitialBaseline),
+			previousTotalEquity:      ctx.InitialBaseline.BaselineShareCapital + ctx.InitialBaseline.BaselineRetainedEarnings + calculateBaselineNetProfit(*ctx.InitialBaseline),
 		}, nil
 	}
 
@@ -220,6 +262,11 @@ func buildCarryBase(ctx calcctx.CalculationContext) (reportCarryBase, error) {
 		previousReceivable:       ctx.PreviousReport.ReportReceivable,
 		shareCapital:             ctx.PreviousReport.ReportShareCapital,
 		retainedEarnings:         ctx.PreviousReport.ReportRetainedEarnings + ctx.PreviousReport.ReportNetProfit,
+		previousTotalEquity:      ctx.PreviousReport.ReportTotalEquity,
+		previousBestMarketScore:  ctx.PreviousReport.ReportBestMarketDirectorBaseScore,
+		previousBestTechScore:    ctx.PreviousReport.ReportBestTechnologyDirectorScore,
+		previousBestSalesScore:   ctx.PreviousReport.ReportBestSalesDirectorScore,
+		previousBestCfoBaseScore: ctx.PreviousReport.ReportBestCfoBaseScore,
 	}, nil
 }
 
@@ -234,6 +281,11 @@ func extractOperatingMetrics(value payload.OperatingPayload) operatingReportMetr
 	derived := value.Derived.Values
 	result := operatingReportMetrics{}
 
+	result.orderTotal = firstNonZero(
+		lookupPrioritizedNumber(derived, "orderTotal", "marketOrderTotal", "o5"),
+		lookupPrioritizedNumber(value.Beginning.TaxAndPlanning, "orderTotal", "marketOrderTotal", "o5"),
+		extractMetric(value.Beginning.MarketBid, true, "orderTotal", "orderAmount", "marketOrderTotal", "o5"),
+	)
 	result.marketBidCost = firstNonZero(
 		lookupPrioritizedNumber(derived, "marketBidCost", "marketInvestmentTotal", "p5"),
 		lookupPrioritizedNumber(value.Beginning.TaxAndPlanning, "marketBidCost", "marketInvestmentTotal", "p5"),
@@ -241,75 +293,75 @@ func extractOperatingMetrics(value payload.OperatingPayload) operatingReportMetr
 	)
 	result.shortTermRepayment = firstNonZero(
 		lookupAnyNumber(derived, "shortTermRepayment", "o10"),
-		extractMetric(value.Quarter.ShortTermLoan, false, "shortTermRepayment", "dueRepayment", "repayment", "o10"),
+		sumQuarterMetric(value.Quarter.ShortTermLoan, false, "shortTermRepayment", "dueRepayment", "repayment", "o10"),
 	)
 	result.shortTermInterest = firstNonZero(
 		lookupAnyNumber(derived, "shortTermInterest", "financeShortTermInterest", "o11"),
-		extractMetric(value.Quarter.ShortTermLoan, false, "shortTermInterest", "interest", "loanInterest", "o11"),
+		sumQuarterMetric(value.Quarter.ShortTermLoan, false, "shortTermInterest", "interest", "loanInterest", "o11"),
 	)
 	result.newShortTermLoan = firstNonZero(
 		lookupAnyNumber(derived, "newShortTermLoan", "shortTermNewLoan", "o12"),
-		extractMetric(value.Quarter.ShortTermLoan, false, "newShortTermLoan", "newLoan", "additionalLoan", "o12"),
+		sumQuarterMetric(value.Quarter.ShortTermLoan, false, "newShortTermLoan", "newLoan", "additionalLoan", "o12"),
 	)
 	result.materialPayment = firstNonZero(
 		lookupAnyNumber(derived, "materialPayment", "materialPaymentTotal", "o18"),
-		extractMetric(value.Quarter.MaterialPayment, true, "materialPayment", "materialPaymentTotal", "materialCost", "o18"),
+		sumQuarterMetric(value.Quarter.MaterialPayment, true, "materialPayment", "materialPaymentTotal", "materialCost", "o18"),
 	)
 	result.changeProductCost = firstNonZero(
 		lookupAnyNumber(derived, "changeProductCost", "o21"),
-		extractMetric(value.Quarter.ProductionLineAdjust, false, "changeProductCost", "changeProduct", "productChange", "switchProduct", "o21"),
+		sumQuarterMetric(value.Quarter.ProductionLineAdjust, false, "changeProductCost", "changeProduct", "productChange", "switchProduct", "o21"),
 	)
 	result.lineDismantleCost = firstNonZero(
 		lookupAnyNumber(derived, "lineDismantleCost", "o22"),
-		extractMetric(value.Quarter.ProductionLineAdjust, false, "lineDismantleCost", "dismantleCost", "removeCost", "o22"),
+		sumQuarterMetric(value.Quarter.ProductionLineAdjust, false, "lineDismantleCost", "dismantleCost", "removeCost", "o22"),
 	)
 	result.lineSaleValue = firstNonZero(
 		lookupAnyNumber(derived, "lineSaleValue", "o23"),
-		extractMetric(value.Quarter.ProductionLineAdjust, false, "lineSaleValue", "lineSale", "sellValue", "saleValue", "o23"),
+		sumQuarterMetric(value.Quarter.ProductionLineAdjust, false, "lineSaleValue", "lineSale", "sellValue", "saleValue", "o23"),
 	)
 	result.newLineInstall = firstNonZero(
 		lookupAnyNumber(derived, "newLineInstall", "o26"),
-		extractMetric(value.Quarter.ProductionLineAdjust, false, "newLineInstall", "installCost", "newLineInvestment", "o26"),
+		sumQuarterMetric(value.Quarter.ProductionLineAdjust, false, "newLineInstall", "installCost", "newLineInvestment", "o26"),
 	)
 	result.transferToFixed = firstNonZero(
 		lookupAnyNumber(derived, "transferToFixed", "lineResidualIncrease", "o27"),
-		extractMetric(value.Quarter.ProductionLineAdjust, false, "transferToFixed", "constructionToFixed", "completedTransfer", "lineResidualIncrease", "o27"),
+		sumQuarterMetric(value.Quarter.ProductionLineAdjust, false, "transferToFixed", "constructionToFixed", "completedTransfer", "lineResidualIncrease", "o27"),
 	)
 	result.depreciableAssetIncr = firstNonZero(
 		lookupAnyNumber(derived, "depreciableAssetIncrease", "o28"),
-		extractMetric(value.Quarter.ProductionLineAdjust, false, "depreciableAssetIncrease", "assetCapitalization", "newDepreciableAsset", "o28"),
+		sumQuarterMetric(value.Quarter.ProductionLineAdjust, false, "depreciableAssetIncrease", "assetCapitalization", "newDepreciableAsset", "o28"),
 	)
 	result.humanResourceCost = firstNonZero(
 		lookupAnyNumber(derived, "humanResourceCost", "o29"),
-		extractMetric(value.Quarter.HumanResource, true, "humanResourceCost", "humanResourceFee", "staffCost", "o29"),
+		sumQuarterMetric(value.Quarter.HumanResource, true, "humanResourceCost", "humanResourceFee", "staffCost", "o29"),
 	)
 	result.salaryAndProduction = firstNonZero(
 		lookupAnyNumber(derived, "salaryAndProductionCost", "o31"),
-		extractMetric(value.Quarter.SalaryAndProduction, true, "salaryAndProductionCost", "salaryCost", "workerSalary", "productionSalary", "o31"),
+		sumQuarterMetric(value.Quarter.SalaryAndProduction, true, "salaryAndProductionCost", "salaryCost", "workerSalary", "productionSalary", "o31"),
 	)
 	result.researchCost = firstNonZero(
 		lookupAnyNumber(derived, "researchCost", "o33"),
-		extractMetric(value.Quarter.ResearchAndManagement, false, "researchCost", "technologyResearch", "rdCost", "o33"),
+		sumQuarterMetric(value.Quarter.ResearchAndManagement, false, "researchCost", "technologyResearch", "rdCost", "o33"),
 	)
 	result.managementSystemCost = firstNonZero(
 		lookupAnyNumber(derived, "managementSystemCost", "o34"),
-		extractMetric(value.Quarter.ResearchAndManagement, false, "managementSystemCost", "managementSystem", "qhseCost", "o34"),
+		sumQuarterMetric(value.Quarter.ResearchAndManagement, false, "managementSystemCost", "managementSystem", "qhseCost", "o34"),
 	)
 	result.receivableRecovered = firstNonZero(
 		lookupAnyNumber(derived, "receivableRecovered", "o36"),
-		extractMetric(value.Quarter.ReceivableUpdate, false, "receivableRecovered", "receivableCollection", "cashCollection", "o36"),
+		sumQuarterMetric(value.Quarter.ReceivableUpdate, false, "receivableRecovered", "receivableCollection", "cashCollection", "o36"),
 	)
 	result.salesRevenue = firstNonZero(
 		lookupAnyNumber(derived, "salesRevenue", "deliverySalesRevenue", "o38"),
-		extractMetric(value.Quarter.DeliverySettlement, false, "salesRevenue", "deliverySalesRevenue", "orderSalesRevenue", "o38"),
+		sumQuarterMetric(value.Quarter.DeliverySettlement, false, "salesRevenue", "deliverySalesRevenue", "orderSalesRevenue", "o38"),
 	)
 	result.directCost = firstNonZero(
 		lookupAnyNumber(derived, "directCost", "deliveryDirectCost", "o39"),
-		extractMetric(value.Quarter.DeliverySettlement, false, "directCost", "deliveryDirectCost", "orderCost", "o39"),
+		sumQuarterMetric(value.Quarter.DeliverySettlement, false, "directCost", "deliveryDirectCost", "orderCost", "o39"),
 	)
 	result.managementSalary = firstNonZero(
 		lookupAnyNumber(derived, "managementSalary", "o40"),
-		extractMetric(value.Quarter.DeliverySettlement, false, "managementSalary", "managementStaffCost", "adminSalary", "o40"),
+		sumQuarterMetric(value.Quarter.DeliverySettlement, false, "managementSalary", "managementStaffCost", "adminSalary", "o40"),
 	)
 	result.longTermInterest = firstNonZero(
 		lookupAnyNumber(derived, "longTermInterest", "o42"),
@@ -349,18 +401,39 @@ func extractOperatingMetrics(value payload.OperatingPayload) operatingReportMetr
 	)
 	result.discountExpense = firstNonZero(
 		lookupAnyNumber(derived, "discountExpense", "o55"),
-		extractMetric(value.Extra.IncomeAndPenalty, false, "discountExpense", "factoringExpense", "discountCost", "o55"),
+		sumQuarterMetric(value.Extra.IncomeAndPenalty, false, "discountExpense", "factoringExpense", "discountCost", "o55"),
 	)
 	result.extraExpensePenalty = firstNonZero(
 		lookupAnyNumber(derived, "extraExpensePenalty", "o57"),
-		extractMetric(value.Extra.IncomeAndPenalty, false, "extraExpensePenalty", "penalty", "fine", "o57"),
+		sumQuarterMetric(value.Extra.IncomeAndPenalty, false, "extraExpensePenalty", "penalty", "fine", "o57"),
 	)
 	result.extraIncomeReward = firstNonZero(
 		lookupAnyNumber(derived, "extraIncomeReward", "o58"),
-		extractMetric(value.Extra.IncomeAndPenalty, false, "extraIncomeReward", "reward", "bonus", "o58"),
+		sumQuarterMetric(value.Extra.IncomeAndPenalty, false, "extraIncomeReward", "reward", "bonus", "o58"),
 	)
 
 	return result
+}
+
+func sumQuarterMetric(source payload.OperatingQuarterMap, allowFallbackTotal bool, keys ...string) float64 {
+	var total float64
+	for _, quarter := range []string{"Q1", "Q2", "Q3", "Q4"} {
+		total += quarterMetric(source, quarter, allowFallbackTotal, keys...)
+	}
+	return total
+}
+
+func quarterMetric(source payload.OperatingQuarterMap, quarter string, allowFallbackTotal bool, keys ...string) float64 {
+	if len(source) == 0 {
+		return 0
+	}
+	for key, value := range source {
+		if normalizeSearchKey(key) != normalizeSearchKey(quarter) {
+			continue
+		}
+		return extractMetric(value, allowFallbackTotal, keys...)
+	}
+	return 0
 }
 
 func extractMetric(source any, allowFallbackTotal bool, keys ...string) float64 {

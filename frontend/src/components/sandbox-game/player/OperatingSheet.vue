@@ -84,7 +84,7 @@
 
           <tr>
             <th class="row-head">8</th>
-            <td class="section-band band-quarter" rowspan="32">每季度工作</td>
+            <td class="section-band band-quarter" rowspan="36">每季度工作</td>
             <td class="group-title" rowspan="4">1. 短期贷款更新账期</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`loan-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -107,9 +107,13 @@
             <td v-if="index === 0" class="orange-cell" :rowspan="shortTermLoanFields.length">{{ formatNumber(shortTermLoanDelta) }}</td>
             <td v-if="index === 0" class="empty-cell" :rowspan="shortTermLoanFields.length"></td>
           </tr>
-
           <tr>
             <th class="row-head">12</th>
+            <td class="reminder-cell" colspan="9">请将短期贷款右移一格</td>
+          </tr>
+
+          <tr>
+            <th class="row-head">13</th>
             <td class="group-title" rowspan="6">2. 支付材料费用</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`material-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -117,7 +121,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr v-for="(field, index) in materialFields" :key="`material-${field.key}`">
-            <th class="row-head">{{ 13 + index }}</th>
+            <th class="row-head">{{ 14 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
             <td v-for="quarter in quarterList" :key="`material-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -131,24 +135,39 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">17</th>
+            <th class="row-head">18</th>
             <td class="result-title">合计</td>
             <td v-for="quarter in quarterList" :key="`material-total-${quarter.key}`" class="result-cell">{{ formatNumber(getQuarterGroupQuarterTotal('materialPayment', materialFieldKeys, quarter.key)) }}</td>
             <td class="result-cell">{{ formatNumber(getQuarterGroupGrandTotal('materialPayment', materialFieldKeys)) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
+          <tr>
+            <th class="row-head">19</th>
+            <td class="reminder-cell" colspan="9">产品进度更新</td>
+          </tr>
 
           <tr>
-            <th class="row-head">18</th>
-            <td class="group-title" rowspan="7">3. 生产线调整</td>
-            <td class="note-cell center"></td>
+            <th class="row-head">20</th>
+            <td class="group-title" colspan="2">3. 生产线调整</td>
             <td v-for="quarter in quarterList" :key="`line-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
-          <tr v-for="(field, index) in productionLineFields" :key="`line-${field.key}`">
-            <th class="row-head">{{ 19 + index }}</th>
-            <td class="note-cell">{{ field.label }}</td>
+          <tr v-for="(field, index) in productionLineRows" :key="`line-${field.key}`">
+            <th class="row-head">{{ 21 + index }}</th>
+            <template v-if="field.groupLabel">
+              <td class="nested-group-cell" :rowspan="field.groupRowspan ?? 1">{{ field.groupLabel }}</td>
+              <td class="note-cell">{{ field.label }}</td>
+            </template>
+            <template v-else-if="field.labelColspan === 2">
+              <td class="note-cell" colspan="2">{{ field.label }}</td>
+            </template>
+            <template v-else-if="field.useExistingGroupCell">
+              <td class="note-cell">{{ field.label }}</td>
+            </template>
+            <template v-else>
+              <td class="note-cell" colspan="2">{{ field.label }}</td>
+            </template>
             <td v-for="quarter in quarterList" :key="`line-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
                 :value="displayCell(getQuarterFieldValue('productionLineAdjustment', quarter.key, field.key))"
@@ -162,7 +181,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">25</th>
+            <th class="row-head">27</th>
             <td class="group-title" rowspan="2">4. 人力资源</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`hr-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -170,7 +189,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">26</th>
+            <th class="row-head">28</th>
             <td class="note-cell">人力资源费用</td>
             <td v-for="quarter in quarterList" :key="`hr-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -185,7 +204,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">27</th>
+            <th class="row-head">29</th>
             <td class="group-title" rowspan="2">5. 工资与生产</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`salary-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -193,7 +212,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">28</th>
+            <th class="row-head">30</th>
             <td class="note-cell">工资与生产费用</td>
             <td v-for="quarter in quarterList" :key="`salary-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -208,7 +227,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">29</th>
+            <th class="row-head">31</th>
             <td class="group-title" rowspan="3">6. 研发与管理</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`research-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -216,7 +235,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr v-for="(field, index) in researchFields" :key="`research-${field.key}`">
-            <th class="row-head">{{ 30 + index }}</th>
+            <th class="row-head">{{ 32 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
             <td v-for="quarter in quarterList" :key="`research-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -229,9 +248,13 @@
             <td class="result-cell">{{ formatNumber(getQuarterRowTotal('researchAndManagement', field.key)) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
+          <tr>
+            <th class="row-head">34</th>
+            <td class="reminder-cell" colspan="9">下新供应链订单</td>
+          </tr>
 
           <tr>
-            <th class="row-head">32</th>
+            <th class="row-head">35</th>
             <td class="group-title" rowspan="2">7. 应收更新</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`receivable-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -239,7 +262,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">33</th>
+            <th class="row-head">36</th>
             <td class="note-cell">应收回款</td>
             <td v-for="quarter in quarterList" :key="`receivable-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -252,9 +275,13 @@
             <td class="result-cell">{{ formatNumber(getQuarterRowTotal('receivableUpdate', 'receivableCollection')) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
+          <tr>
+            <th class="row-head">37</th>
+            <td class="reminder-cell" colspan="9">请将应收账款向左移动一格</td>
+          </tr>
 
           <tr>
-            <th class="row-head">34</th>
+            <th class="row-head">38</th>
             <td class="group-title" rowspan="3">8. 产品验收交付</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`delivery-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -262,7 +289,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">35</th>
+            <th class="row-head">39</th>
             <td class="note-cell">销售收入</td>
             <td v-for="quarter in quarterList" :key="`sales-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -276,7 +303,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">36</th>
+            <th class="row-head">40</th>
             <td class="note-cell">直接成本</td>
             <td v-for="quarter in quarterList" :key="`cost-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -291,7 +318,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">37</th>
+            <th class="row-head">41</th>
             <td class="group-title" rowspan="2">9. 支付管理人员费用</td>
             <td class="note-cell center">每季 1M</td>
             <td v-for="quarter in quarterList" :key="`management-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
@@ -299,7 +326,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">38</th>
+            <th class="row-head">42</th>
             <td class="note-cell">管理人员费用</td>
             <td v-for="quarter in quarterList" :key="`management-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
@@ -314,7 +341,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">41</th>
+            <th class="row-head">43</th>
             <td class="group-title" colspan="2">核对季末现金</td>
             <td class="quarter-cash-cell">{{ displayQuarterCash('Q1') }}</td>
             <td class="quarter-cash-cell">{{ displayQuarterCash('Q2') }}</td>
@@ -325,7 +352,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">42</th>
+            <th class="row-head">44</th>
             <td class="section-band band-year-end" rowspan="12">年末工作</td>
             <td class="group-title" rowspan="3">1. 办理长期贷款账期更新</td>
             <td class="note-cell">付利息</td>
@@ -342,7 +369,7 @@
             <td class="empty-cell" rowspan="3"></td>
           </tr>
           <tr>
-            <th class="row-head">43</th>
+            <th class="row-head">45</th>
             <td class="note-cell">到期还款</td>
             <td class="note-cell center" colspan="5">------------------------------</td>
             <td :class="editableCellClass('YEAR_END')">
@@ -355,7 +382,7 @@
             </td>
           </tr>
           <tr>
-            <th class="row-head">44</th>
+            <th class="row-head">46</th>
             <td class="note-cell">办理新贷款</td>
             <td class="note-cell center" colspan="5">------------------------------</td>
             <td :class="editableCellClass('YEAR_END')">
@@ -369,7 +396,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">45</th>
+            <th class="row-head">47</th>
             <td class="group-title">2. 支付生产线年度维护费</td>
             <td class="note-cell center">1M / 条</td>
             <td class="empty-cell" colspan="5"></td>
@@ -385,7 +412,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">46</th>
+            <th class="row-head">48</th>
             <td class="group-title" rowspan="2">3. 数据中心资产</td>
             <td class="note-cell center">购买</td>
             <td class="note-cell center" colspan="5">数据中心 A / B / C 价位（40M、32M、16M）</td>
@@ -400,7 +427,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">47</th>
+            <th class="row-head">49</th>
             <td class="note-cell center">出售</td>
             <td class="note-cell center" colspan="5">数据中心 A / B / C 价位（40M、32M、16M）</td>
             <td :class="editableCellClass('YEAR_END')">
@@ -415,7 +442,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">48</th>
+            <th class="row-head">50</th>
             <td class="group-title">4. 数据中心租金</td>
             <td class="note-cell center">付租金</td>
             <td class="note-cell center" colspan="5">数据中心 A / B / C 租金（4M、3M、2M）</td>
@@ -430,7 +457,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">49</th>
+            <th class="row-head">51</th>
             <td class="group-title">5. 生产线残值</td>
             <td class="empty-cell" colspan="6"></td>
             <td class="result-cell">{{ formatNumber(derivedMetric('lineResidual')) }}</td>
@@ -438,7 +465,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">50</th>
+            <th class="row-head">52</th>
             <td class="group-title" rowspan="3">6. 生产线折旧</td>
             <td class="note-cell">折旧前待折资产总价值</td>
             <td class="empty-cell" colspan="5"></td>
@@ -446,14 +473,14 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">51</th>
+            <th class="row-head">53</th>
             <td class="note-cell">折旧费</td>
             <td class="note-cell center" colspan="5">按待折资产的 1 / 3 取整</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('depreciation')) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
-            <th class="row-head">52</th>
+            <th class="row-head">54</th>
             <td class="note-cell">未完工生产线价值</td>
             <td class="empty-cell" colspan="5"></td>
             <td :class="editableCellClass('YEAR_END')">
@@ -468,7 +495,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">53</th>
+            <th class="row-head">55</th>
             <td class="group-title">7. 新市场培育</td>
             <td class="empty-cell"></td>
             <td class="note-cell center" colspan="5">每年可向区域、全国、全球各投 1M</td>
@@ -484,7 +511,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">54</th>
+            <th class="row-head">56</th>
             <td class="section-band band-misc" rowspan="4">其他收支</td>
             <td class="group-title" rowspan="4">额外收入 / 罚款</td>
             <td class="note-cell center"></td>
@@ -493,7 +520,7 @@
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr v-for="(field, index) in extraFields" :key="`extra-${field.key}`">
-            <th class="row-head">{{ 55 + index }}</th>
+            <th class="row-head">{{ 57 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
             <td v-for="quarter in quarterList" :key="`extra-${field.key}-${quarter.key}`" :class="extraCellClass(field.key, quarter.scope)">
               <template v-if="isAdminIssuedExtraField(field.key)">
@@ -514,39 +541,50 @@
 
           <tr>
             <th class="row-head">59</th>
-            <td class="metric-label" colspan="2">期末现金</td>
+            <td class="metric-label">期末现金</td>
             <td class="result-cell">{{ formatNumber(periodEndCash) }}</td>
             <td class="metric-label">现金收入</td>
             <td class="result-cell">{{ formatNumber(cashInflow) }}</td>
             <td class="metric-label">现金支出</td>
             <td class="result-cell">{{ formatNumber(cashOutflow) }}</td>
             <td class="metric-label">市场回报比</td>
-            <td class="result-cell">{{ formatPercent(marketReturnRatio) }}</td>
-            <td class="result-cell">{{ formatNumber(laborProductivity) }}</td>
+            <td class="result-cell">{{ formatDisplayNumber(optionalDerivedMetric('marketReturnRatio')) }}</td>
+            <td class="dual-metric-cell" colspan="2">
+              <div class="metric-stack-line">
+                <span>研发投入强度</span>
+                <strong>{{ formatDisplayPercent(optionalDerivedMetric('researchIntensity')) }}</strong>
+              </div>
+              <div class="metric-stack-line">
+                <span>劳动生产率</span>
+                <strong>{{ formatDisplayNumber(optionalDerivedMetric('laborProductivity')) }}</strong>
+              </div>
+            </td>
           </tr>
           <tr>
             <th class="row-head">60</th>
-            <td class="metric-label" colspan="2">财务收入 / 支出</td>
+            <td class="metric-label">财务收入/支出</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('financeIncomeExpense')) }}</td>
             <td class="metric-label">不动产增减值</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('factoryAssetChange')) }}</td>
             <td class="metric-label">待折资产增减</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('depreciableAssetChange')) }}</td>
-            <td class="metric-label">净资产收益</td>
-            <td class="result-cell">{{ formatPercent(netAssetYield) }}</td>
-            <td class="result-cell">{{ formatPercent(totalAssetYield) }}</td>
+            <td class="metric-label">净产收益率</td>
+            <td class="result-cell">{{ formatDisplayPercent(optionalDerivedMetric('netAssetYield')) }}</td>
+            <td class="metric-label">总产收益</td>
+            <td class="result-cell">{{ formatDisplayPercent(optionalDerivedMetric('totalAssetYield')) }}</td>
           </tr>
           <tr>
             <th class="row-head">61</th>
-            <td class="metric-label" colspan="2">额外收入 / 支出</td>
+            <td class="metric-label">额外收入/支出</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('extraIncomeExpense')) }}</td>
             <td class="metric-label">残值增减</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('lineResidualChange')) }}</td>
             <td class="metric-label">应收增减</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('receivableChange')) }}</td>
             <td class="metric-label">净利润率</td>
-            <td class="result-cell">{{ formatPercent(netProfitRate) }}</td>
-            <td class="result-cell">{{ formatPercent(grossMarginRate) }}</td>
+            <td class="result-cell">{{ formatDisplayPercent(optionalDerivedMetric('netProfitRate')) }}</td>
+            <td class="metric-label">毛率润率</td>
+            <td class="result-cell">{{ formatDisplayPercent(optionalDerivedMetric('grossMarginRate')) }}</td>
           </tr>
         </tbody>
       </table>
@@ -611,14 +649,23 @@ const materialFields = [
   { key: 'intelligentProduct', label: '智能产品' },
 ] as const
 
-const productionLineFields = [
-  { key: 'changeProduct', label: '变更产品' },
-  { key: 'dismantleCost', label: '生产线拆除 1M / 条' },
-  { key: 'lineSale', label: '生产线出售' },
-  { key: 'newLineInstall', label: '新生产线安装' },
-  { key: 'constructionToFixed', label: '转入固定资产' },
-  { key: 'newDepreciableAsset', label: '新增待折资产' },
-] as const
+interface ProductionLineRow {
+  key: string
+  label: string
+  labelColspan?: number
+  groupLabel?: string
+  groupRowspan?: number
+  useExistingGroupCell?: boolean
+}
+
+const productionLineRows: ReadonlyArray<ProductionLineRow> = [
+  { key: 'changeProduct', label: '变更产品', labelColspan: 2 },
+  { key: 'dismantleCost', label: '生产线拆除 1M / 条', labelColspan: 2 },
+  { key: 'lineSale', label: '生产线出售', labelColspan: 2 },
+  { key: 'newLineInstall', label: '新生产线安装', labelColspan: 2 },
+  { key: 'constructionToFixed', label: '生产线残值', groupLabel: '建成生产线转固', groupRowspan: 2 },
+  { key: 'newDepreciableAsset', label: '待折资产', useExistingGroupCell: true },
+]
 
 const researchFields = [
   { key: 'technologyResearch', label: '技术研发' },
@@ -642,7 +689,6 @@ const shortTermLoanDelta = computed(() => getQuarterRowTotal('shortTermLoan', 'n
 const longTermLoanDelta = computed(() => toNumber(getYearEndFieldValue('longTermLoan', 'newLoan')) - toNumber(getYearEndFieldValue('longTermLoan', 'repayment')))
 
 const cashInflow = computed(() =>
-  derivedMetric('salesRevenue') +
   derivedMetric('receivableRecovered') +
   derivedMetric('newShortTermLoan') +
   toNumber(getYearEndFieldValue('longTermLoan', 'newLoan')) +
@@ -675,13 +721,6 @@ const cashOutflow = computed(() =>
   derivedMetric('extraExpensePenalty'),
 )
 
-const marketReturnRatio = computed(() => ratio(marketOrderTotal.value, toNumber(marketInvestmentTotal.value)))
-const laborProductivity = computed(() => safeValue(derivedMetric('salesRevenue'), derivedMetric('salaryAndProductionCost') + derivedMetric('humanResourceCost')))
-const netAssetYield = computed(() => ratio(computeNetProfit(), derivedMetric('lineResidual') + derivedMetric('depreciableAssetTotal')))
-const totalAssetYield = computed(() => ratio(computeNetProfit(), props.periodEndCash + derivedMetric('lineResidual') + derivedMetric('depreciableAssetTotal')))
-const netProfitRate = computed(() => ratio(computeNetProfit(), derivedMetric('salesRevenue')))
-const grossMarginRate = computed(() => ratio(derivedMetric('salesRevenue') - derivedMetric('directCost'), derivedMetric('salesRevenue')))
-
 function visibleQuarterCount() {
   switch (props.currentStageCode) {
     case 'Q1':
@@ -711,19 +750,12 @@ function derivedMetric(key: string) {
   return toNumber(props.derivedValues[key])
 }
 
-function computeNetProfit() {
-  return derivedMetric('salesRevenue') - derivedMetric('directCost') - derivedMetric('comprehensiveCostTotal') - derivedMetric('financeIncomeExpense') + derivedMetric('extraIncomeExpense')
-}
-
-function safeValue(numerator: number, denominator: number) {
-  if (denominator === 0) {
-    return 0
+function optionalDerivedMetric(key: string) {
+  const value = props.derivedValues[key]
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return null
   }
-  return numerator / denominator
-}
-
-function ratio(numerator: number, denominator: number) {
-  return safeValue(numerator, denominator)
+  return value
 }
 
 function isScopeEditable(scope: string) {
@@ -811,6 +843,20 @@ function formatNumber(value: unknown) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(2)}%`
+}
+
+function formatDisplayNumber(value: number | null) {
+  if (value === null) {
+    return '--'
+  }
+  return formatNumber(value)
+}
+
+function formatDisplayPercent(value: number | null) {
+  if (value === null) {
+    return '--'
+  }
+  return formatPercent(value)
 }
 
 function createMarketBidRow(): MarketBidRow {
@@ -1091,7 +1137,10 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 .result-title,
 .note-cell,
 .metric-label,
-.empty-cell {
+.dual-metric-cell,
+.empty-cell,
+.nested-group-cell,
+.reminder-cell {
   padding: 8px 10px;
   font-size: 13px;
   line-height: 1.45;
@@ -1108,9 +1157,47 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   background: #f8fafc;
 }
 
+.nested-group-cell {
+  background: #f3f6fa;
+  text-align: center;
+  font-weight: 700;
+  color: #314458;
+}
+
+.reminder-cell {
+  background: #f8f0cf;
+  color: #6d5415;
+  font-weight: 700;
+}
+
+.dual-metric-cell {
+  background: #f8fafc;
+  padding: 8px 10px;
+}
+
 .metric-label {
   text-align: center;
   font-weight: 700;
+}
+
+.metric-stack-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #33475b;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-stack-line + .metric-stack-line {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #d6dfea;
+}
+
+.metric-stack-line strong {
+  color: #173753;
 }
 
 .empty-cell {

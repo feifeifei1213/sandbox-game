@@ -103,6 +103,9 @@ func (s *AdminGroupDataQueryService) GetOperatingView(ctx context.Context, group
 	if err != nil {
 		return nil, fmt.Errorf("calculate operating view: %w", err)
 	}
+	if err := enrichOperatingDerivedValuesWithReportMetrics(ctx, s.reportRepo, s.reportCalculator, calculationContext, groupID, yearNo, &operatingResult); err != nil {
+		return nil, err
+	}
 
 	stageSubmissions, err := s.operatingRepo.ListStageSubmissions(ctx, groupID, yearNo)
 	if err != nil {
@@ -166,6 +169,8 @@ func (s *AdminGroupDataQueryService) GetReportView(ctx context.Context, groupID 
 
 	if calculationContext.State.ReportStatus != enum.ReportStatusSubmitted || isZeroReportComputedPayload(computedPayload) {
 		computedPayload = calculatedPayload
+	} else {
+		overlayDirectorScores(&computedPayload, calculatedPayload)
 	}
 
 	return s.reportAssembler.Build(
@@ -292,19 +297,23 @@ func (s *AdminGroupDataQueryService) attachCarrySource(ctx context.Context, calc
 		return calculationContext, nil
 	}
 
-	previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, groupID, yearNo-1)
-	switch {
-	case previousReportErr == nil:
-		if len(previousReport.ReportComputedPayload) > 0 {
-			var previous payload.ReportComputedPayload
-			if unmarshalErr := json.Unmarshal(previousReport.ReportComputedPayload, &previous); unmarshalErr != nil {
-				return calcctx.CalculationContext{}, fmt.Errorf("unmarshal previous report: %w", unmarshalErr)
-			}
-			calculationContext = calculationContext.WithPreviousReport(&previous)
-		}
-	case errors.Is(previousReportErr, gorm.ErrRecordNotFound):
-	default:
-		return calcctx.CalculationContext{}, fmt.Errorf("load previous report: %w", previousReportErr)
+	previous, previousErr := loadEffectiveReportWithDirectorScores(
+		ctx,
+		calculationContext.Group,
+		calculationContext.GameConfig,
+		yearNo-1,
+		s.groupYearRepo,
+		s.operatingRepo,
+		s.initialBaselineRepo,
+		s.reportRepo,
+		s.playerNoticeService,
+		s.reportCalculator,
+	)
+	if previousErr != nil {
+		return calcctx.CalculationContext{}, fmt.Errorf("load previous report: %w", previousErr)
+	}
+	if previous != nil {
+		calculationContext = calculationContext.WithPreviousReport(previous)
 	}
 
 	return calculationContext, nil

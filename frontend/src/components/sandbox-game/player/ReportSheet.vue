@@ -64,8 +64,16 @@
                   <option v-for="item in taxRateOptions" :key="item" :value="String(item)">{{ formatTaxRate(item) }}</option>
                 </select>
               </template>
+              <template v-else-if="row.profit.kind === 'manual-number'">
+                <input
+                  :value="manualInputValue(row.profit.manualKey)"
+                  :disabled="!canEdit"
+                  inputmode="decimal"
+                  @input="updateManualNumber(row.profit.manualKey, $event)"
+                />
+              </template>
               <template v-else-if="row.profit.computedKey">
-                {{ formatNumber(computedPayload[row.profit.computedKey]) }}
+                {{ formatComputedCell(row.profit) }}
               </template>
             </td>
             <td class="spacer-cell"></td>
@@ -79,21 +87,41 @@
                   @input="updateManualNumber(row.asset.manualKey, $event)"
                 />
               </template>
+              <template v-else-if="row.asset.kind === 'manual-select'">
+                <select :value="manualSelectValue(row.asset.manualKey)" :disabled="!canEdit" @change="updateTaxRate($event)">
+                  <option value="">请选择</option>
+                  <option v-for="item in taxRateOptions" :key="item" :value="String(item)">{{ formatTaxRate(item) }}</option>
+                </select>
+              </template>
               <template v-else-if="row.asset.computedKey">
-                {{ formatNumber(computedPayload[row.asset.computedKey]) }}
+                {{ formatComputedCell(row.asset) }}
               </template>
             </td>
             <td class="spacer-cell"></td>
             <td :class="labelCellClass(row.liability)">{{ row.liability.label || '' }}</td>
             <td :class="valueCellClass(row.liability)">
-              <template v-if="row.liability.computedKey">
-                {{ formatNumber(computedPayload[row.liability.computedKey]) }}
+              <template v-if="row.liability.kind === 'manual-number'">
+                <input
+                  :value="manualInputValue(row.liability.manualKey)"
+                  :disabled="!canEdit"
+                  inputmode="decimal"
+                  @input="updateManualNumber(row.liability.manualKey, $event)"
+                />
+              </template>
+              <template v-else-if="row.liability.kind === 'manual-select'">
+                <select :value="manualSelectValue(row.liability.manualKey)" :disabled="!canEdit" @change="updateTaxRate($event)">
+                  <option value="">请选择</option>
+                  <option v-for="item in taxRateOptions" :key="item" :value="String(item)">{{ formatTaxRate(item) }}</option>
+                </select>
+              </template>
+              <template v-else-if="row.liability.computedKey">
+                {{ formatComputedCell(row.liability) }}
               </template>
             </td>
           </tr>
 
           <tr>
-            <th class="row-head">25</th>
+            <th class="row-head">30</th>
             <td class="note-cell" colspan="2">资产负债平衡校验</td>
             <td class="spacer-cell"></td>
             <td class="label-cell footer-label">总资产</td>
@@ -103,13 +131,13 @@
             <td class="summary-cell">{{ formatNumber(computedPayload.reportTotalLiabilityEquity) }}</td>
           </tr>
           <tr>
-            <th class="row-head">26</th>
+            <th class="row-head">31</th>
             <td class="note-cell" colspan="2">提交前需满足：总资产 = 总负债 + 总权益</td>
             <td class="spacer-cell"></td>
             <td class="label-cell footer-label">差额</td>
             <td :class="balanceValueCellClass">{{ formatNumber(balanceGap) }}</td>
             <td class="spacer-cell"></td>
-            <td class="note-cell" colspan="2">税率仅允许选择 0.25 / 0.15 / 0</td>
+            <td class="note-cell" colspan="2">税率仅允许选择 0.25 / 0.15 / 0，绿色得分项需显式填写</td>
           </tr>
         </tbody>
       </table>
@@ -132,6 +160,7 @@ interface SheetCell {
   kind: CellKind
   computedKey?: ComputedKey
   manualKey?: ManualKey
+  suffix?: string
 }
 
 interface SheetRow {
@@ -156,27 +185,32 @@ const emit = defineEmits<{
 const blankCell: SheetCell = { kind: 'blank' }
 
 const sheetRows: SheetRow[] = [
-  { rowNo: 4, profit: { label: '销售收入', kind: 'computed', computedKey: 'reportSalesRevenue' }, asset: blankCell, liability: blankCell },
-  { rowNo: 5, profit: { label: '直接成本', kind: 'computed', computedKey: 'reportDirectCost' }, asset: blankCell, liability: blankCell },
+  { rowNo: 4, profit: { label: '销售收入', kind: 'computed', computedKey: 'reportSalesRevenue' }, asset: { label: '非流动资产', kind: 'blank' }, liability: { label: '负债', kind: 'blank' } },
+  { rowNo: 5, profit: { label: '直接成本', kind: 'computed', computedKey: 'reportDirectCost' }, asset: { label: '在建生产线', kind: 'computed', computedKey: 'reportWorkInConstruction' }, liability: blankCell },
   { rowNo: 6, profit: blankCell, asset: { label: '厂房', kind: 'computed', computedKey: 'reportFactoryAsset' }, liability: blankCell },
   { rowNo: 7, profit: { label: '毛利', kind: 'computed', computedKey: 'reportGrossProfit' }, asset: { label: '生产线残值', kind: 'computed', computedKey: 'reportLineResidual' }, liability: { label: '短期负债', kind: 'computed', computedKey: 'reportShortTermLiability' } },
   { rowNo: 8, profit: blankCell, asset: { label: '待折资产', kind: 'computed', computedKey: 'reportDepreciableAsset' }, liability: { label: '长期负债', kind: 'computed', computedKey: 'reportLongTermLiability' } },
-  { rowNo: 9, profit: blankCell, asset: { label: '非流动资产合计', kind: 'computed', computedKey: 'reportTotalNonCurrentAssets' }, liability: { label: '负债合计', kind: 'computed', computedKey: 'reportTotalLiability' } },
-  { rowNo: 10, profit: { label: '综合费用', kind: 'computed', computedKey: 'reportComprehensiveCost' }, asset: blankCell, liability: blankCell },
-  { rowNo: 11, profit: { label: '折旧', kind: 'computed', computedKey: 'reportDepreciation' }, asset: blankCell, liability: blankCell },
+  { rowNo: 9, profit: blankCell, asset: { label: '总非流动资产', kind: 'computed', computedKey: 'reportTotalNonCurrentAssets' }, liability: blankCell },
+  { rowNo: 10, profit: { label: '综合费用', kind: 'computed', computedKey: 'reportComprehensiveCost' }, asset: blankCell, liability: { label: '总负债', kind: 'computed', computedKey: 'reportTotalLiability' } },
+  { rowNo: 11, profit: { label: '折旧', kind: 'computed', computedKey: 'reportDepreciation' }, asset: { label: '流动资产', kind: 'blank' }, liability: blankCell },
   { rowNo: 12, profit: blankCell, asset: blankCell, liability: blankCell },
-  { rowNo: 13, profit: { label: '营业利润', kind: 'computed', computedKey: 'reportOperatingProfit' }, asset: { label: '现金', kind: 'computed', computedKey: 'reportCash' }, liability: blankCell },
+  { rowNo: 13, profit: { label: '营业利润', kind: 'computed', computedKey: 'reportOperatingProfit' }, asset: { label: '现金', kind: 'computed', computedKey: 'reportCash' }, liability: { label: '总权益', kind: 'blank' } },
   { rowNo: 14, profit: blankCell, asset: { label: '应收款', kind: 'computed', computedKey: 'reportReceivable' }, liability: blankCell },
   { rowNo: 15, profit: blankCell, asset: { label: '在制品', kind: 'manual-number', manualKey: 'workInProgress' }, liability: { label: '股东资本', kind: 'computed', computedKey: 'reportShareCapital' } },
   { rowNo: 16, profit: { label: '财务收入/支出', kind: 'computed', computedKey: 'reportFinanceIncomeExpense' }, asset: { label: '成品', kind: 'manual-number', manualKey: 'finishedGoods' }, liability: { label: '利润留存', kind: 'computed', computedKey: 'reportRetainedEarnings' } },
-  { rowNo: 17, profit: { label: '额外收入/支出', kind: 'computed', computedKey: 'reportExtraIncomeExpense' }, asset: { label: '材料', kind: 'manual-number', manualKey: 'rawMaterials' }, liability: blankCell },
-  { rowNo: 18, profit: blankCell, asset: { label: '税后现金', kind: 'computed', computedKey: 'reportPostTaxCash' }, liability: blankCell },
-  { rowNo: 19, profit: { label: '税前利润', kind: 'computed', computedKey: 'reportPreTaxProfit' }, asset: { label: '流动资产合计', kind: 'computed', computedKey: 'reportTotalCurrentAssets' }, liability: { label: '权益合计', kind: 'computed', computedKey: 'reportTotalEquity' } },
+  { rowNo: 17, profit: { label: '额外收入/支出', kind: 'computed', computedKey: 'reportExtraIncomeExpense' }, asset: { label: '材料', kind: 'manual-number', manualKey: 'rawMaterials' }, liability: { label: '年度净利润', kind: 'computed', computedKey: 'reportNetProfit' } },
+  { rowNo: 18, profit: blankCell, asset: { label: '所得税后现金', kind: 'computed', computedKey: 'reportPostTaxCash' }, liability: blankCell },
+  { rowNo: 19, profit: { label: '税前利润', kind: 'computed', computedKey: 'reportPreTaxProfit' }, asset: { label: '总流动资产', kind: 'computed', computedKey: 'reportTotalCurrentAssets' }, liability: { label: '总股东权益', kind: 'computed', computedKey: 'reportTotalEquity' } },
   { rowNo: 20, profit: blankCell, asset: blankCell, liability: blankCell },
   { rowNo: 21, profit: { label: '所得税', kind: 'computed', computedKey: 'reportIncomeTax' }, asset: blankCell, liability: blankCell },
   { rowNo: 22, profit: { label: '年度净利润', kind: 'computed', computedKey: 'reportNetProfit' }, asset: { label: '总资产', kind: 'computed', computedKey: 'reportTotalAssets' }, liability: { label: '总负债和权益', kind: 'computed', computedKey: 'reportTotalLiabilityEquity' } },
   { rowNo: 23, profit: blankCell, asset: blankCell, liability: blankCell },
-  { rowNo: 24, profit: { label: '所得税税率', kind: 'manual-select', manualKey: 'incomeTaxRate' }, asset: blankCell, liability: blankCell },
+  { rowNo: 24, profit: { label: '所得税税率', kind: 'manual-select', manualKey: 'incomeTaxRate' }, asset: { label: '最佳市场经营总监得分', kind: 'computed', computedKey: 'reportBestMarketDirectorBaseScore', suffix: '+' }, liability: { label: '企业认证得分', kind: 'manual-number', manualKey: 'enterpriseCertificationScore' } },
+  { rowNo: 25, profit: blankCell, asset: { label: '最佳科技创新总监得分', kind: 'computed', computedKey: 'reportBestTechnologyDirectorScore' }, liability: blankCell },
+  { rowNo: 26, profit: blankCell, asset: { label: '最佳生产人力总监得分', kind: 'manual-number', manualKey: 'productionHumanScore' }, liability: blankCell },
+  { rowNo: 27, profit: blankCell, asset: { label: '最佳销售总监得分', kind: 'computed', computedKey: 'reportBestSalesDirectorScore' }, liability: blankCell },
+  { rowNo: 28, profit: blankCell, asset: { label: '最佳 CFO（财务总监）得分', kind: 'computed', computedKey: 'reportBestCfoBaseScore', suffix: '+' }, liability: { label: '关账速度得分', kind: 'manual-number', manualKey: 'closingSpeedScore' } },
+  { rowNo: 29, profit: blankCell, asset: { label: '最佳 CEO（总经理）得分', kind: 'computed', computedKey: 'reportBestCeoScore' }, liability: blankCell },
 ]
 
 const balanceGap = computed(() => {
@@ -216,6 +250,17 @@ function formatNumber(value: number | null | undefined) {
     return ''
   }
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function formatComputedCell(cell: SheetCell) {
+  if (!cell.computedKey) {
+    return ''
+  }
+  const value = formatNumber(props.computedPayload[cell.computedKey])
+  if (!value) {
+    return ''
+  }
+  return cell.suffix ? `${value} ${cell.suffix}` : value
 }
 
 function manualInputValue(key?: ManualKey) {

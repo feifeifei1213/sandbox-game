@@ -353,6 +353,9 @@ func buildDerivedValues(carryBase operatingCarryBase, metrics annualOperatingMet
 	extraIncomeExpense := metrics.extraIncomeReward - metrics.extraExpensePenalty
 	lineResidualChange := metrics.transferToFixed - metrics.lineSaleValue
 	depreciableAssetChange := metrics.depreciableAssetIncr - depreciation
+	marketReturnRatio := safeDivide(metrics.orderTotal, metrics.marketBidCost)
+	researchIntensity := safeDivide(metrics.researchCost, metrics.salesRevenue+metrics.extraIncomeReward)
+	laborProductivity := calculateLaborProductivity(carryBase, metrics)
 	periodEndCash := carryBase.previousCash +
 		(metrics.newShortTermLoan + metrics.lineSaleValue + metrics.receivableRecovered + metrics.newLongTermLoan + metrics.factorySale + metrics.extraIncomeReward) -
 		(carryBase.previousIncomeTax + metrics.marketBidCost + metrics.shortTermRepayment + metrics.shortTermInterest + metrics.materialPayment + metrics.changeProductCost + metrics.lineDismantleCost + metrics.newLineInstall + metrics.humanResourceCost + metrics.salaryAndProduction + metrics.researchCost + metrics.managementSystemCost + metrics.managementSalary + metrics.lineMaintenance + metrics.factoryPurchase + metrics.longTermInterest + metrics.longTermRepayment + metrics.factoryRent + metrics.marketCultivation + metrics.discountExpense + metrics.extraExpensePenalty)
@@ -391,6 +394,9 @@ func buildDerivedValues(carryBase operatingCarryBase, metrics annualOperatingMet
 		"factoryRent":              metrics.factoryRent,
 		"workInConstruction":       metrics.workInConstruction,
 		"marketCultivation":        metrics.marketCultivation,
+		"marketReturnRatio":        marketReturnRatio,
+		"researchIntensity":        researchIntensity,
+		"laborProductivity":        laborProductivity,
 		"lineResidual":             lineResidual,
 		"depreciableAssetTotal":    depreciableAssetTotal,
 		"depreciation":             depreciation,
@@ -408,6 +414,45 @@ func buildDerivedValues(carryBase operatingCarryBase, metrics annualOperatingMet
 		"q3QuarterEndCashCheck":    quarterCashChecks["Q3"],
 		"q4QuarterEndCashCheck":    quarterCashChecks["Q4"],
 	}
+}
+
+// BuildReportIndicatorValues 基于财报口径返回经营页底部需要展示的收益率指标。
+func BuildReportIndicatorValues(report payload.ReportComputedPayload) map[string]float64 {
+	return map[string]float64{
+		"netAssetYield":   safeDivide(report.ReportNetProfit, report.ReportTotalEquity),
+		"totalAssetYield": safeDivide(report.ReportNetProfit, report.ReportTotalAssets),
+		"netProfitRate":   safeDivide(report.ReportNetProfit, report.ReportSalesRevenue),
+		"grossMarginRate": 1 - safeDivide(report.ReportDirectCost, report.ReportSalesRevenue),
+	}
+}
+
+func calculateLaborProductivity(carryBase operatingCarryBase, metrics annualOperatingMetrics) float64 {
+	numerator := metrics.salesRevenue -
+		metrics.directCost +
+		metrics.shortTermInterest -
+		metrics.marketBidCost -
+		carryBase.previousIncomeTax -
+		metrics.changeProductCost -
+		metrics.lineDismantleCost +
+		metrics.humanResourceCost -
+		metrics.researchCost -
+		metrics.managementSystemCost -
+		metrics.longTermInterest -
+		metrics.lineMaintenance -
+		metrics.factoryRent -
+		metrics.marketCultivation -
+		metrics.extraExpensePenalty +
+		metrics.extraIncomeReward
+
+	denominator := metrics.salaryAndProduction*7 + 5
+	return safeDivide(numerator, denominator) * 100
+}
+
+func safeDivide(numerator float64, denominator float64) float64 {
+	if denominator == 0 {
+		return 0
+	}
+	return numerator / denominator
 }
 
 func selectPeriodEndCash(stageStatus string, quarterCashChecks map[string]float64, yearEndCash float64) float64 {
