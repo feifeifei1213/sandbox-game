@@ -118,6 +118,7 @@
 | `baselineFinanceIncomeExpense` | `baseline_finance_income_expense` | `C16` | 财务收入/支出 | `ADMIN_INPUT` | 初始基线损益表输入 |
 | `baselineExtraIncomeExpense` | `baseline_extra_income_expense` | `C17` | 额外收入/支出 | `ADMIN_INPUT` | 初始基线损益表输入 |
 | `baselineIncomeTax` | `baseline_income_tax` | `C21` | 所得税 | `ADMIN_INPUT` | 初始基线税额直接录入 |
+| `baselineWorkInConstruction` | `baseline_work_in_construction` | `G5` | 在建生产线 | `ADMIN_INPUT` | 初始基线非流动资产输入；制造业版显示名为“在建生产线”，服务版显示名为“在建贵宾厅” |
 | `baselineFactoryAsset` | `baseline_factory_asset` | `G6` | 厂房 | `ADMIN_INPUT` | 初始基线资产输入 |
 | `baselineLineResidual` | `baseline_line_residual` | `G7` | 生产线残值 | `ADMIN_INPUT` | 初始基线资产输入 |
 | `baselineDepreciableAsset` | `baseline_depreciable_asset` | `G8` | 待折资产 | `ADMIN_INPUT` | 初始基线资产输入 |
@@ -224,6 +225,7 @@
 | 管理端初始基线 | `baselineFactoryAsset` | 厂房 | 厂房 | 已按最终版 Excel 收口 |
 | 管理端初始基线 | `baselineLineResidual` | 生产线残值 | 生产线残值 | 已按最终版 Excel 收口 |
 | 管理端初始基线 | `baselineDepreciableAsset` | 待折资产 | 待折资产 | 已按最终版 Excel 收口 |
+| 管理端初始基线 | `baselineWorkInConstruction` | 在建生产线 | 在建生产线 | 制造业版新增补齐，作为初始基线资产项；服务版对应显示名为“在建贵宾厅” |
 | 管理端初始基线 | `baselineReceivable` | 应收款 | 应收款 | 已按最终版 Excel 收口 |
 | 管理端初始基线 | `baselineRawMaterials` | 材料 | 材料 | 已按最终版 Excel 收口 |
 | 管理端初始基线 | `baselineShortTermLoan` | 短期负债 | 短期负债 | 已按最终版 Excel 收口 |

@@ -1,6 +1,6 @@
-# 沙盘经营系统现场一键部署清单
+# 沙盘经营系统服务版现场一键部署清单
 
-> 更新日期：2026-04-02  
+> 更新日期：2026-04-03  
 > 适用对象：比赛现场技术支持、部署执行人、主持人  
 > 文档定位：本文件不是解释“为什么这样部署”，而是给现场直接照着执行的清单。若要看完整背景和边界，请同时参考 `docs/competition_launch_runbook.md`。
 
@@ -46,9 +46,10 @@
 - Nginx 已安装并可用
 - 比赛主机已安装 `Go` 和 `Node.js`
 - 防火墙已放行对外访问端口，建议 `80`
-- 已准备一个正式比赛数据库，例如 `sandbox_game_competition`
+- 已准备一个正式比赛数据库，例如 `sandbox_game_service_competition`
 - 已准备数据库账号，具备该库的建表和写入权限
 - 已明确正式比赛不复用开发库、不复用演练库
+- 若现场同时保留制造业版和服务版，已明确两者不共用同一正式库
 - 已准备管理员账号发放口径，默认可用 `admin / 123456`
 
 ---
@@ -61,7 +62,7 @@
 
 ```yaml
 mysql:
-  dsn: root:你的数据库密码@tcp(127.0.0.1:3306)/sandbox_game_competition?charset=utf8mb4&parseTime=True&loc=Local
+  dsn: root:你的数据库密码@tcp(127.0.0.1:3306)/sandbox_game_service_competition?charset=utf8mb4&parseTime=True&loc=Local
 
 auth:
   tokenSecret: 替换成一串随机密钥
@@ -72,6 +73,7 @@ auth:
 - `mysql.dsn` 指向正式比赛库
 - `tokenSecret` 不再保留 `CHANGE_ME_TO_A_RANDOM_SECRET`
 - `server.port` 保持 `8080` 即可，供 `Nginx` 反向代理
+- 若本机还部署制造业版，服务版 `mysql.dsn` 必须改到独立库，不能继续指向制造业版正式库
 
 ---
 
@@ -86,8 +88,8 @@ Set-Location 'E:\project\sand box game'
 
 执行完成后，重点查看两个产物：
 
-- `.\.runtime\competition-package\sandbox-game-competition\`
-- `.\.runtime\competition-package\sandbox-game-competition.zip`
+- `.\.runtime\competition-package\sandbox-game-service-competition\`
+- `.\.runtime\competition-package\sandbox-game-service-competition.zip`
 
 上线包内应至少包含：
 
@@ -102,7 +104,7 @@ Set-Location 'E:\project\sand box game'
 - `docs\competition_launch_runbook.md`
 - `docs\competition_deploy_checklist.md`
 
-如果比赛主机不能直接编译，也可以把整个 `sandbox-game-competition` 目录复制到比赛主机。
+如果比赛主机不能直接编译，也可以把整个 `sandbox-game-service-competition` 目录复制到比赛主机。
 
 ---
 
@@ -111,7 +113,7 @@ Set-Location 'E:\project\sand box game'
 在比赛主机进入上线包根目录，例如：
 
 ```powershell
-Set-Location 'E:\deploy\sandbox-game-competition'
+Set-Location 'E:\deploy\sandbox-game-service-competition'
 .\scripts\init-competition.ps1 -ConfigPath .\configs\competition.yaml
 ```
 
@@ -136,7 +138,7 @@ Set-Location 'E:\deploy\sandbox-game-competition'
 在比赛主机进入上线包根目录执行：
 
 ```powershell
-Set-Location 'E:\deploy\sandbox-game-competition'
+Set-Location 'E:\deploy\sandbox-game-service-competition'
 .\scripts\start-competition.ps1 -ConfigPath .\configs\competition.yaml
 ```
 
@@ -171,7 +173,7 @@ server {
     listen       80;
     server_name  _;
 
-    root   E:/deploy/sandbox-game-competition/frontend/dist;
+    root   E:/deploy/sandbox-game-service-competition/frontend/dist;
     index  index.html;
 
     location /api/ {
@@ -276,7 +278,7 @@ cd 'E:\nginx'
 若比赛尚未正式开始，且确认要整库重置，可执行：
 
 ```powershell
-Set-Location 'E:\deploy\sandbox-game-competition'
+Set-Location 'E:\deploy\sandbox-game-service-competition'
 .\scripts\reset-competition.ps1 -ConfigPath .\configs\competition.yaml
 .\scripts\init-competition.ps1 -ConfigPath .\configs\competition.yaml
 ```

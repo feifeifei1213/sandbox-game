@@ -328,6 +328,42 @@ func TestCalculateFormalYearAccumulatesCfoBaseAgainstDemoYearReference(t *testin
 	assertFloatEquals(t, result.ReportBestCfoScore, 258)
 }
 
+func TestCalculateFormalYearDoesNotCarryForwardPreviousWorkInConstruction(t *testing.T) {
+	t.Parallel()
+
+	calculator := NewCalculator()
+	operatingPayload := payload.NewOperatingPayload()
+
+	ctx := newReportCalculationContext(1).
+		WithPreviousReport(&payload.ReportComputedPayload{
+			ReportIncomeTax:          0,
+			ReportShortTermLiability: 20,
+			ReportLongTermLiability:  0,
+			ReportWorkInConstruction: 99,
+			ReportFactoryAsset:       40,
+			ReportLineResidual:       3,
+			ReportDepreciableAsset:   0,
+			ReportCash:               35,
+			ReportReceivable:         0,
+			ReportShareCapital:       50,
+			ReportRetainedEarnings:   17,
+			ReportNetProfit:          0,
+			ReportTotalEquity:        67,
+		}).
+		WithOperatingPayload(&operatingPayload)
+
+	result, err := calculator.Calculate(ctx)
+	if err != nil {
+		t.Fatalf("calculate report failed: %v", err)
+	}
+
+	assertFloatEquals(t, result.ReportWorkInConstruction, 0)
+	assertFloatEquals(t, result.ReportFactoryAsset, 40)
+	assertFloatEquals(t, result.ReportLineResidual, 3)
+	assertFloatEquals(t, result.ReportDepreciableAsset, 0)
+	assertFloatEquals(t, result.ReportTotalNonCurrentAssets, 43)
+}
+
 func newReportCalculationContext(yearNo int) calcctx.CalculationContext {
 	group := entity.Group{
 		ID:             1,
@@ -473,6 +509,7 @@ func buildExcelFinalSampleBaseline() *payload.BaselinePayload {
 		BaselineFinanceIncomeExpense: 2,
 		BaselineExtraIncomeExpense:   2,
 		BaselineIncomeTax:            1,
+		BaselineWorkInConstruction:   0,
 		BaselineFactoryAsset:         40,
 		BaselineLineResidual:         3,
 		BaselineDepreciableAsset:     0,

@@ -9,6 +9,7 @@ type BaselinePayload struct {
 	BaselineFinanceIncomeExpense float64 `json:"baselineFinanceIncomeExpense"`
 	BaselineExtraIncomeExpense   float64 `json:"baselineExtraIncomeExpense"`
 	BaselineIncomeTax            float64 `json:"baselineIncomeTax"`
+	BaselineWorkInConstruction   float64 `json:"baselineWorkInConstruction"`
 	BaselineFactoryAsset         float64 `json:"baselineFactoryAsset"`
 	BaselineLineResidual         float64 `json:"baselineLineResidual"`
 	BaselineDepreciableAsset     float64 `json:"baselineDepreciableAsset"`

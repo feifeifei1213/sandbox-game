@@ -163,9 +163,7 @@ func rebuildReportDirectorScoresRecursive(
 	if err != nil {
 		return payload.ReportComputedPayload{}, fmt.Errorf("overlay adjustments for director score rebuild: %w", err)
 	}
-
-	calcContext := calcctx.NewCalculationContext(group, *yearState, gameConfig).
-		WithOperatingPayload(&operatingPayload)
+	calcContext := calcctx.NewCalculationContext(group, *yearState, gameConfig)
 
 	manualPayload := payload.ReportManualPayload{}
 	report, reportErr := reportRepo.FindByGroupIDAndYear(ctx, group.ID, yearNo)
@@ -184,19 +182,13 @@ func rebuildReportDirectorScoresRecursive(
 	calcContext = calcContext.WithReportManualPayload(&manualPayload)
 
 	if yearNo == 0 {
-		baseline, baselineErr := initialBaselineRepo.FindByGroupID(ctx, group.ID)
-		switch {
-		case baselineErr == nil:
-			if len(baseline.BaselinePayload) > 0 {
-				var baselinePayload payload.BaselinePayload
-				if unmarshalErr := json.Unmarshal(baseline.BaselinePayload, &baselinePayload); unmarshalErr != nil {
-					return payload.ReportComputedPayload{}, fmt.Errorf("unmarshal baseline for director score rebuild: %w", unmarshalErr)
-				}
-				calcContext = calcContext.WithInitialBaseline(&baselinePayload)
-			}
-		case errors.Is(baselineErr, gorm.ErrRecordNotFound):
-		default:
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, initialBaselineRepo, group.ID)
+		if baselineErr != nil {
 			return payload.ReportComputedPayload{}, fmt.Errorf("load baseline for director score rebuild: %w", baselineErr)
+		}
+		if baselinePayload != nil {
+			operatingPayload = applyInitialBaselineDefaultsToOperatingPayload(operatingPayload, baselinePayload)
+			calcContext = calcContext.WithInitialBaseline(baselinePayload)
 		}
 	} else {
 		previous, rebuildErr := rebuildReportDirectorScoresRecursive(
@@ -217,6 +209,7 @@ func rebuildReportDirectorScoresRecursive(
 		}
 		calcContext = calcContext.WithPreviousReport(&previous)
 	}
+	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	computedPayload, err := calculator.Calculate(calcContext)
 	if err != nil {

@@ -9,7 +9,7 @@ $resolvedConfigPath = if ([System.IO.Path]::IsPathRooted($ConfigPath)) { $Config
 $resolvedOutputDir = if ([System.IO.Path]::IsPathRooted($OutputDir)) { $OutputDir } else { Join-Path $projectRoot $OutputDir }
 $goCache = Join-Path $projectRoot '.gocache'
 $goModCache = Join-Path $projectRoot '.cache\gomod'
-$releaseName = 'sandbox-game-competition'
+$releaseName = 'sandbox-game-service-competition'
 $releaseRoot = Join-Path $resolvedOutputDir $releaseName
 $zipPath = Join-Path $resolvedOutputDir ($releaseName + '.zip')
 

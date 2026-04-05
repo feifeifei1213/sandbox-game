@@ -1,11 +1,14 @@
 ﻿# 沙盘经营系统文档索引
 
-> 更新日期：2026-04-02  
+> 更新日期：2026-04-03  
 > 适用目录：`E:\project\sand box game`
 
 ## 1. 项目简介
 
 本项目是一个面向企业培训与经营推演场景的沙盘经营系统。
+
+当前 `guibing` 分支用于“服务版”游戏，展示口径以 `game doc/1组（服务）.xlsx` 为准；若与主线制造业版字段名不同，优先按本分支文档与服务版 Excel 收口。
+当前服务版正式环境建议使用独立数据库 `sandbox_game_service_competition`，不要与制造业版正式环境共库。
 
 当前首版重点覆盖：
 
@@ -130,7 +133,7 @@ npm run dev
 - [competition_launch_runbook.md](E:\project\sand box game\docs\competition_launch_runbook.md)
 - [competition_deploy_checklist.md](E:\project\sand box game\docs\competition_deploy_checklist.md)
 
-### 7.5.1 正式版上线包落点
+### 7.5.1 服务版正式版上线包落点
 
 - `configs/competition.yaml`
 - `migrations/mysql/0004_seed_competition_admin.sql`
@@ -155,6 +158,7 @@ npm run dev
 - 单组演练脚本和单组演练库是测试工具，不是正式比赛主流程入口。
 - 正式产品方向已经收口为：管理员端赛前配置比赛，再录入初始基线，再开始比赛。
 - 正式比赛数据库初始化不应直接使用 `0002_seed_data.sql`，而应使用正式比赛专用初始化脚本，仅保留 `admin + sg_game_config`，再由管理员首登后在 `赛前配置页` 初始化比赛。
+- 若制造业版与服务版并行保留，两者必须至少隔离数据库、`competition.yaml` 和正式上线包目录，不能只切分支后继续共用同一正式库。
 - 当前正式版推荐采用 `Nginx + Go + MySQL` 结构：`Nginx` 提供前端静态资源与统一访问地址，Go 提供业务 API。
 - 文档若发生冲突，以最新需求文档、共识清单与实施计划为准。
 
