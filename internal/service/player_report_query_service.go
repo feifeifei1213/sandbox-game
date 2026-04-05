@@ -97,22 +97,15 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
-	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	if yearNo == 0 {
-		baseline, baselineErr := s.initialBaseRepo.FindByGroupID(ctx, groupID)
-		switch {
-		case baselineErr == nil:
-			if len(baseline.BaselinePayload) > 0 {
-				var baselinePayload payload.BaselinePayload
-				if unmarshalErr := json.Unmarshal(baseline.BaselinePayload, &baselinePayload); unmarshalErr != nil {
-					return nil, fmt.Errorf("unmarshal initial baseline: %w", unmarshalErr)
-				}
-				calcContext = calcContext.WithInitialBaseline(&baselinePayload)
-			}
-		case errors.Is(baselineErr, gorm.ErrRecordNotFound):
-		default:
-			return nil, fmt.Errorf("load initial baseline: %w", baselineErr)
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaseRepo, groupID)
+		if baselineErr != nil {
+			return nil, baselineErr
+		}
+		if baselinePayload != nil {
+			operatingPayload = applyInitialBaselineDefaultsToOperatingPayload(operatingPayload, baselinePayload)
+			calcContext = calcContext.WithInitialBaseline(baselinePayload)
 		}
 	} else {
 		previous, previousErr := loadEffectiveReportWithDirectorScores(
@@ -134,6 +127,7 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 			calcContext = calcContext.WithPreviousReport(previous)
 		}
 	}
+	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	manualPayload := payload.ReportManualPayload{}
 	computedPayload := payload.ReportComputedPayload{}

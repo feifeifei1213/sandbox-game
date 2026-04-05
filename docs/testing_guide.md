@@ -1,6 +1,6 @@
 # 沙盘经营系统测试指南（正式版）
 
-> 更新日期：2026-04-01  
+> 更新日期：2026-04-05  
 > 适用方式：基于《正式需求文档（首版）》《接口设计文档（正式版）》《数据库设计文档（正式版）》《开发执行拆解》，定义首版测试分层、关键场景与质量门禁。  
 > 文档定位：本文件回答“这个系统要怎么测、测到什么程度算可交付”。
 
@@ -325,3 +325,36 @@ go run .\cmd\server\main.go -config .\configs\local-single.yaml
 - 若只想重新开始一次推演，优先执行“重置单组演练库”。
 - 单组演练库不放宽正式规则；它只是通过“库里只有 1 个组”来天然满足年度推进条件。
 - 建议下午全过程推演优先使用这套单组库，避免污染多组演练数据。
+
+### 2.7 赛前配置小组数量手工验收
+
+推荐在验证“管理员亲手配置小组数量”能力时，使用独立测试库与独立配置：
+
+- 配置文件：`configs/local-group-count-test.yaml`
+- 目标数据库：`sandbox_game_group_count_test`
+- 初始化脚本：`scripts/init-competition.ps1`
+- 默认账号：`admin / 123456`
+
+推荐执行顺序：
+
+```powershell
+Set-Location 'E:\project\sand box game'
+.\scripts\init-competition.ps1 -ConfigPath .\configs\local-group-count-test.yaml
+```
+
+```powershell
+Set-Location 'E:\project\sand box game'
+.\scripts\start-competition.ps1 -ConfigPath .\configs\local-group-count-test.yaml
+```
+
+```powershell
+Set-Location 'E:\project\sand box game\frontend'
+npm run dev
+```
+
+本轮人工验收记录（2026-04-05）：
+
+- 管理员首次登录后成功进入 `赛前配置页`
+- 小组数量成功配置并初始化为 `6`
+- 最终年份成功配置为 `5`
+- 本轮按用户确认将该功能记为完成

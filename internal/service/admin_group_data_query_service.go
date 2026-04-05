@@ -221,6 +221,15 @@ func (s *AdminGroupDataQueryService) loadOperatingCalculationContext(ctx context
 	if err != nil {
 		return calcctx.CalculationContext{}, nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
+	if yearNo == 0 {
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaselineRepo, groupID)
+		if baselineErr != nil {
+			return calcctx.CalculationContext{}, nil, baselineErr
+		}
+		if baselinePayload != nil {
+			operatingPayload = applyInitialBaselineDefaultsToOperatingPayload(operatingPayload, baselinePayload)
+		}
+	}
 	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	calculationContext, err = s.attachCarrySource(ctx, calculationContext, groupID, yearNo)
@@ -268,6 +277,15 @@ func (s *AdminGroupDataQueryService) loadReportCalculationContext(ctx context.Co
 	if err != nil {
 		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
+	if yearNo == 0 {
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaselineRepo, groupID)
+		if baselineErr != nil {
+			return calcctx.CalculationContext{}, baselineErr
+		}
+		if baselinePayload != nil {
+			operatingPayload = applyInitialBaselineDefaultsToOperatingPayload(operatingPayload, baselinePayload)
+		}
+	}
 	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	calculationContext, err = s.attachCarrySource(ctx, calculationContext, groupID, yearNo)
@@ -280,19 +298,12 @@ func (s *AdminGroupDataQueryService) loadReportCalculationContext(ctx context.Co
 
 func (s *AdminGroupDataQueryService) attachCarrySource(ctx context.Context, calculationContext calcctx.CalculationContext, groupID int64, yearNo int) (calcctx.CalculationContext, error) {
 	if yearNo == 0 {
-		baseline, baselineErr := s.initialBaselineRepo.FindByGroupID(ctx, groupID)
-		switch {
-		case baselineErr == nil:
-			if len(baseline.BaselinePayload) > 0 {
-				var baselinePayload payload.BaselinePayload
-				if unmarshalErr := json.Unmarshal(baseline.BaselinePayload, &baselinePayload); unmarshalErr != nil {
-					return calcctx.CalculationContext{}, fmt.Errorf("unmarshal initial baseline: %w", unmarshalErr)
-				}
-				calculationContext = calculationContext.WithInitialBaseline(&baselinePayload)
-			}
-		case errors.Is(baselineErr, gorm.ErrRecordNotFound):
-		default:
-			return calcctx.CalculationContext{}, fmt.Errorf("load initial baseline: %w", baselineErr)
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaselineRepo, groupID)
+		if baselineErr != nil {
+			return calcctx.CalculationContext{}, baselineErr
+		}
+		if baselinePayload != nil {
+			calculationContext = calculationContext.WithInitialBaseline(baselinePayload)
 		}
 		return calculationContext, nil
 	}

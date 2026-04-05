@@ -96,6 +96,7 @@ export interface BaselinePayload {
   baselineFinanceIncomeExpense: number
   baselineExtraIncomeExpense: number
   baselineIncomeTax: number
+  baselineWorkInConstruction: number
   baselineFactoryAsset: number
   baselineLineResidual: number
   baselineDepreciableAsset: number
@@ -248,6 +249,7 @@ export function createEmptyBaselinePayload(): BaselinePayload {
     baselineFinanceIncomeExpense: 0,
     baselineExtraIncomeExpense: 0,
     baselineIncomeTax: 0,
+    baselineWorkInConstruction: 0,
     baselineFactoryAsset: 0,
     baselineLineResidual: 0,
     baselineDepreciableAsset: 0,

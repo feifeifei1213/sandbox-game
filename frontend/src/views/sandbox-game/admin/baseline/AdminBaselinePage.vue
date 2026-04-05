@@ -123,6 +123,7 @@ const fieldDefs: Array<{
   { key: 'baselineFinanceIncomeExpense', section: '损益', label: '财务收入/支出', note: '共享模板基线输入项' },
   { key: 'baselineExtraIncomeExpense', section: '损益', label: '额外收入/支出', note: '共享模板基线输入项' },
   { key: 'baselineIncomeTax', section: '损益', label: '所得税', note: '共享模板基线输入项' },
+  { key: 'baselineWorkInConstruction', section: '资产', label: '在建生产线', note: '共享模板基线输入项' },
   { key: 'baselineFactoryAsset', section: '资产', label: '厂房', note: '共享模板基线输入项' },
   { key: 'baselineLineResidual', section: '资产', label: '生产线残值', note: '共享模板基线输入项' },
   { key: 'baselineDepreciableAsset', section: '资产', label: '待折资产', note: '共享模板基线输入项' },

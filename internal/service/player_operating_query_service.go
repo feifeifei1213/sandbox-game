@@ -96,22 +96,15 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
-	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	if yearNo == 0 {
-		baseline, baselineErr := s.initialBaseRepo.FindByGroupID(ctx, groupID)
-		switch {
-		case baselineErr == nil:
-			if len(baseline.BaselinePayload) > 0 {
-				var baselinePayload payload.BaselinePayload
-				if unmarshalErr := json.Unmarshal(baseline.BaselinePayload, &baselinePayload); unmarshalErr != nil {
-					return nil, fmt.Errorf("unmarshal initial baseline: %w", unmarshalErr)
-				}
-				calculationContext = calculationContext.WithInitialBaseline(&baselinePayload)
-			}
-		case errors.Is(baselineErr, gorm.ErrRecordNotFound):
-		default:
-			return nil, fmt.Errorf("load initial baseline: %w", baselineErr)
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaseRepo, groupID)
+		if baselineErr != nil {
+			return nil, baselineErr
+		}
+		if baselinePayload != nil {
+			operatingPayload = applyInitialBaselineDefaultsToOperatingPayload(operatingPayload, baselinePayload)
+			calculationContext = calculationContext.WithInitialBaseline(baselinePayload)
 		}
 	} else {
 		previousReport, previousReportErr := s.reportRepo.FindEffectiveByGroupIDAndYear(ctx, groupID, yearNo-1)
@@ -129,6 +122,7 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 			return nil, fmt.Errorf("load previous report: %w", previousReportErr)
 		}
 	}
+	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	operatingResult, err := s.calculator.Calculate(calculationContext)
 	if err != nil {

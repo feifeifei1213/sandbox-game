@@ -122,15 +122,12 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 
 	calcContext := calcctx.NewCalculationContext(*group, *yearState, *gameConfig)
 	if cmd.YearNo == 0 {
-		baseline, baselineErr := s.initialBaseRepo.FindByGroupID(ctx, cmd.GroupID)
-		if baselineErr == nil && len(baseline.BaselinePayload) > 0 {
-			var baselinePayload payload.BaselinePayload
-			if unmarshalErr := json.Unmarshal(baseline.BaselinePayload, &baselinePayload); unmarshalErr != nil {
-				return nil, fmt.Errorf("unmarshal initial baseline: %w", unmarshalErr)
-			}
-			calcContext = calcContext.WithInitialBaseline(&baselinePayload)
-		} else if baselineErr != nil && !errors.Is(baselineErr, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("load initial baseline: %w", baselineErr)
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaseRepo, cmd.GroupID)
+		if baselineErr != nil {
+			return nil, baselineErr
+		}
+		if baselinePayload != nil {
+			calcContext = calcContext.WithInitialBaseline(baselinePayload)
 		}
 	}
 	if cmd.YearNo > 0 {
@@ -168,6 +165,9 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
+	if cmd.YearNo == 0 && calcContext.InitialBaseline != nil {
+		normalizedPayload = applyInitialBaselineDefaultsToOperatingPayload(normalizedPayload, calcContext.InitialBaseline)
 	}
 
 	now := time.Now()
@@ -215,15 +215,14 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 		WithOperatingPayload(&normalizedPayload)
 
 	if cmd.YearNo == 0 {
-		baseline, baselineErr := s.initialBaseRepo.FindByGroupID(ctx, cmd.GroupID)
-		if baselineErr == nil && len(baseline.BaselinePayload) > 0 {
-			var baselinePayload payload.BaselinePayload
-			if unmarshalErr := json.Unmarshal(baseline.BaselinePayload, &baselinePayload); unmarshalErr != nil {
-				return nil, fmt.Errorf("unmarshal initial baseline: %w", unmarshalErr)
-			}
-			calcContext = calcContext.WithInitialBaseline(&baselinePayload)
-		} else if baselineErr != nil && !errors.Is(baselineErr, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("load initial baseline: %w", baselineErr)
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaseRepo, cmd.GroupID)
+		if baselineErr != nil {
+			return nil, baselineErr
+		}
+		if baselinePayload != nil {
+			normalizedPayload = applyInitialBaselineDefaultsToOperatingPayload(normalizedPayload, baselinePayload)
+			calcContext = calcContext.WithOperatingPayload(&normalizedPayload)
+			calcContext = calcContext.WithInitialBaseline(baselinePayload)
 		}
 	}
 	if cmd.YearNo > 0 {

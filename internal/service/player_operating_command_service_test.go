@@ -325,6 +325,7 @@ func buildIntegrationBaselinePayload() payload.BaselinePayload {
 		BaselineFinanceIncomeExpense: 2,
 		BaselineExtraIncomeExpense:   2,
 		BaselineIncomeTax:            1,
+		BaselineWorkInConstruction:   0,
 		BaselineFactoryAsset:         40,
 		BaselineLineResidual:         3,
 		BaselineDepreciableAsset:     0,

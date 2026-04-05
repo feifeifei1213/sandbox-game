@@ -337,22 +337,15 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 	if err != nil {
 		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
-	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	if yearState.YearNo == 0 {
-		baseline, baselineErr := s.initialBaseRepo.FindByGroupID(ctx, group.ID)
-		switch {
-		case baselineErr == nil:
-			if len(baseline.BaselinePayload) > 0 {
-				var baselinePayload payload.BaselinePayload
-				if unmarshalErr := json.Unmarshal(baseline.BaselinePayload, &baselinePayload); unmarshalErr != nil {
-					return calcctx.CalculationContext{}, fmt.Errorf("unmarshal initial baseline: %w", unmarshalErr)
-				}
-				calcContext = calcContext.WithInitialBaseline(&baselinePayload)
-			}
-		case errors.Is(baselineErr, gorm.ErrRecordNotFound):
-		default:
-			return calcctx.CalculationContext{}, fmt.Errorf("load initial baseline: %w", baselineErr)
+		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaseRepo, group.ID)
+		if baselineErr != nil {
+			return calcctx.CalculationContext{}, baselineErr
+		}
+		if baselinePayload != nil {
+			operatingPayload = applyInitialBaselineDefaultsToOperatingPayload(operatingPayload, baselinePayload)
+			calcContext = calcContext.WithInitialBaseline(baselinePayload)
 		}
 	} else {
 		previous, previousErr := loadEffectiveReportWithDirectorScores(
@@ -374,6 +367,7 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 			calcContext = calcContext.WithPreviousReport(previous)
 		}
 	}
+	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	if err := calcContext.Validate(); err != nil {
 		return calcctx.CalculationContext{}, err
