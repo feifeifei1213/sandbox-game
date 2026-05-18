@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统 Excel 字段与页面映射文档（首版）
 
-> 更新日期：2026-03-29  
+> 更新日期：2026-05-18  
 > 适用方式：基于当前 Excel 模板、正式需求与接口/数据库设计，先冻结“结构性映射”和“关键字段映射”，作为后续前端页面、接口字段、规则实现的统一对照表。  
 > 文档定位：本文件不是完整逐格抄录 Excel，而是说明“哪些字段已经冻结、哪些映射当前仍未逐格穷尽”。
 
@@ -68,6 +68,7 @@
 | 区块编码 | 页面区块 | 年份适用范围 | 阶段归属 | 数据类型 |
 |---|---|---|---|---|
 | `operating.beginning` | 年初区 | `0年 ~ 最终年` | `Q1` 提交时一起处理 | `PLAYER_INPUT + SYSTEM_CALCULATED` |
+| `player.annualOrder` | 年度订单页 | `1年 ~ 最终年` | 经营页 `Q1` 提交前置流程 | `PLAYER_INPUT + SYSTEM_DERIVED` |
 | `operating.q1` | Q1 区 | `0年 ~ 最终年` | `Q1` | `PLAYER_INPUT + SYSTEM_CALCULATED` |
 | `operating.q2` | Q2 区 | `0年 ~ 最终年` | `Q2` | `PLAYER_INPUT + SYSTEM_CALCULATED` |
 | `operating.q3` | Q3 区 | `0年 ~ 最终年` | `Q3` | `PLAYER_INPUT + SYSTEM_CALCULATED` |
@@ -90,6 +91,8 @@
 | 区块编码 | 页面区块 | 数据类型 |
 |---|---|---|
 | `admin.initialBaseline` | 初始基线 | `ADMIN_INPUT` |
+| `admin.orderControl` | 订单数量控制与订单池生成 | `ADMIN_INPUT + SYSTEM_DERIVED` |
+| `admin.orderPool` | 订单池查看与市场竞标控制 | `ADMIN_INPUT + SYSTEM_DERIVED` |
 | `admin.summary` | 汇总指标区 | `SYSTEM_DERIVED` |
 | `admin.control` | 年度配置与推进 | `ADMIN_INPUT + SYSTEM_DERIVED` |
 | `admin.unlock` | 异常解锁 | `ADMIN_INPUT + SYSTEM_DERIVED` |
@@ -188,6 +191,41 @@
 | `q4QuarterEndCashCheck` | - | `M41` | Q4 季末现金核对值 | `SYSTEM_CALCULATED` | 主表只读展示 |
 | `periodEndCashTitle` | - | `A59` | 期末现金 | `SYSTEM_DERIVED` | 主表标题位置 |
 
+### 4.6.1 年度订单模块关键字段
+
+说明：
+
+- 订单推算来源为 `道具-订单推算（服务企业）.xlsx`。
+- 该 Excel 当前作为订单生成/推算工具，不作为系统运行时公式引擎。
+- 首版系统读取管理员确认后的订单池结果，并保存为固定业务数据。
+
+| 系统字段名 | 数据库存储名 | 来源/页面 | 当前显示名 | 类型 | 说明 |
+|---|---|---|---|---|---|
+| `orderYearNo` | `year_no` | 订单池 | 年份 | `SYSTEM_DERIVED` | 订单所属年份，`1年 ~ 最终年` |
+| `marketCode` | `market_code` | 订单池/年度订单页 | 市场 | `ADMIN_INPUT + PLAYER_INPUT` | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
+| `orderType` | `order_type` | 订单池/年度订单页 | 订单类型 | `ADMIN_INPUT + SYSTEM_DERIVED` | `代办过检 / 两舱贵宾 / 商务贵宾 / 会员定制` |
+| `orderAmount` | `order_amount` | 订单池 | 订单金额 | `SYSTEM_DERIVED` | 由订单推算 Excel 或系统生成结果写入 |
+| `orderQuantity` | `order_quantity` | 订单池 | 数量 | `SYSTEM_DERIVED` | 订单卡片数量字段 |
+| `unitPrice` | `unit_price` | 订单池 | 单价 | `SYSTEM_DERIVED` | 订单卡片单价字段 |
+| `accountTerm` | `account_term` | 订单池 | 账期 | `SYSTEM_DERIVED` | 订单卡片账期字段 |
+| `orderPoolStatus` | `status` | 订单池 | 订单状态 | `SYSTEM_DERIVED` | `AVAILABLE / SELECTED / VOID` 等后续实现枚举 |
+| `marketInvestment` | `market_investment` | 年度订单页 | 市场投入 | `PLAYER_INPUT` | 玩家按市场提交，提交后不可修改 |
+| `selectedOrderId` | `order_id` | 年度订单页 | 已选订单 | `PLAYER_INPUT + SYSTEM_DERIVED` | 玩家轮到本组时选择的订单 |
+| `selectedOrderAmount` | `selected_order_amount` | 年度订单页/经营页 | 已选订单金额 | `SYSTEM_DERIVED` | 汇总进入经营页订单总额 |
+| `selectedOrderTotal` | - | 经营页 | 订单总额 | `SYSTEM_DERIVED` | 正式年份由本组四个市场已选订单金额汇总 |
+| `marketInvestmentTotal` | - | 经营页 | 市场投入 | `SYSTEM_DERIVED` | 正式年份由本组四个市场投入汇总 |
+| `orderDeliveryStatus` | `delivery_status` | 年度订单页/经营页 | 交付状态 | `SYSTEM_DERIVED` | `SELECTED / DELIVERED / UNFINISHED` |
+| `deliveredStageCode` | `delivered_stage_code` | 经营页 | 交付季度 | `SYSTEM_DERIVED` | 玩家在经营页形成交付后回写 |
+
+### 4.6.2 订单模块与经营页映射
+
+| 订单模块字段 | 经营页字段/区块 | 映射规则 |
+|---|---|---|
+| `marketInvestment` 按四个市场汇总 | `beginning.marketBid.marketInvestmentTotal` / 市场投入 | `1年 ~ 最终年` 使用订单模块汇总；`0年` 不适用 |
+| `selectedOrderAmount` 按四个市场汇总 | `beginning.marketBid.selectedOrderTotal` / 订单总额 | `1年 ~ 最终年` 使用订单模块汇总；剩余未选订单不计入 |
+| `selectedOrderAmount` 单笔订单金额 | `quarter.deliverySettlement.salesRevenue` / 交货销售额 | 玩家选择交付季度后，某季度销售收入应匹配订单金额 |
+| `orderDeliveryStatus` | 年度订单页订单状态 | 经营页交付后回写，年末未交付为 `UNFINISHED` |
+
 ### 4.7 `OperatingPayload` 建议结构
 
 说明：
@@ -245,6 +283,8 @@
 | `sg_group_summary_snapshot` | `4.4` | 汇总表正式字段直接对应收入、利润、权益 |
 | `carry_forward_rules` | `4.5` | 跨年承接必须使用本节语义，不直接写死年份表名 |
 | `player-operating` 的 `operatingPayload` | `4.7` | 经营页负载按区块化结构落库和回显 |
+| `player-order` 的市场投入与选单结果 | `4.6.1 / 4.6.2` | 正式年份订单前置流程、市场投入汇总与订单总额来源 |
+| `admin-order` 的订单数量控制与订单池 | `4.6.1` | 管理员订单管理页面和订单池落库字段 |
 
 ---
 

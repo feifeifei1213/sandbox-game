@@ -1,6 +1,6 @@
 # 沙盘经营系统数据库设计文档（正式版）
 
-> 更新日期：2026-03-26  
+> 更新日期：2026-05-18  
 > 适用方式：基于《正式需求文档（首版）》《最小状态机 v0.1》《技术选型细化文档（Go 方向） v0.1》，定义首版正式数据库设计方向，作为后续 MySQL 建表、迁移脚本、Repository 实现和状态机落库的统一依据。  
 > 文档定位：本文件定义表清单、核心字段、关系、约束、索引与变更规则，不替代最终 SQL 脚本。  
 > 说明：当前显示名称已按 `1组 最终版.xlsx` 冻结；数据库字段命名应坚持业务语义，不应直接跟随 Excel 中文标题逐格命名。
@@ -485,6 +485,203 @@
 
 ---
 
+### 4.7 年度订单与市场竞标
+
+#### 4.7.1 `sg_order_import_batch`
+
+用途：记录管理员上传订单推算 Excel 的批次和解析结果。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `file_name` | VARCHAR(255) | 上传文件名 |
+| `file_hash` | VARCHAR(128) | 文件摘要，用于追溯 |
+| `parse_status` | VARCHAR(32) | `PARSED / FAILED / CONFIRMED` |
+| `preview_payload_json` | JSON | 解析预览 |
+| `error_payload_json` | JSON | 错误列表 |
+| `operator_id/operator_name/operate_time` | - | 上传操作人信息 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+说明：
+
+- Excel 文件本身可按附件或文件系统策略另行保存。
+- 本表不替代订单池，只记录解析批次。
+
+#### 4.7.2 `sg_order_generation_config`
+
+用途：按 `年份 + 市场 + 订单类型` 存储订单数量控制。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `year_no` | INT | 年份，正式年份从 `1` 开始 |
+| `market_code` | VARCHAR(32) | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
+| `order_type` | VARCHAR(32) | `AGENCY_INSPECTION / TWO_CABIN_VIP / BUSINESS_VIP / MEMBER_CUSTOM` |
+| `order_count` | INT | 该类订单生成数量 |
+| `source_batch_id` | BIGINT NULL | 来源 Excel 解析批次 |
+| `config_status` | VARCHAR(32) | `DRAFT / CONFIRMED / LOCKED` |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_order_generation_config(year_no, market_code, order_type)`
+- `idx_year_market(year_no, market_code)`
+
+说明：
+
+- 首版只配置订单数量。
+- 均价、波动系数、最小/最大订单数量等复杂参数暂不落入首版配置表；后续需要时再扩展字段或配置 JSON。
+
+#### 4.7.3 `sg_order_pool`
+
+用途：固定订单池。管理员生成后，玩家从中选择订单。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `year_no` | INT | 年份 |
+| `market_code` | VARCHAR(32) | 市场 |
+| `order_type` | VARCHAR(32) | 订单类型 |
+| `order_amount` | DECIMAL(18,2) | 订单金额 |
+| `order_quantity` | DECIMAL(18,2) | 数量 |
+| `unit_price` | DECIMAL(18,2) | 单价 |
+| `account_term` | VARCHAR(64) | 账期 |
+| `pool_status` | VARCHAR(32) | `AVAILABLE / SELECTED / VOID` |
+| `selected_group_id` | BIGINT NULL | 选中小组 |
+| `selected_at` | DATETIME NULL | 选中时间 |
+| `source_batch_id` | BIGINT NULL | 来源 Excel 批次 |
+| `source_row_key` | VARCHAR(128) NULL | 来源行/卡片标识 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `idx_order_pool_year_market(year_no, market_code)`
+- `idx_order_pool_status(pool_status)`
+- `idx_order_pool_selected_group(selected_group_id)`
+
+说明：
+
+- 订单池生成后保存固定值，不在运行时持续依赖 Excel 随机公式。
+- 已开放竞标、已生成顺序或已有玩家选择的年份/市场，不允许覆盖订单池。
+
+#### 4.7.4 `sg_market_bidding_state`
+
+用途：记录每个 `年份 + 市场` 的订单竞标状态。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `year_no` | INT | 年份 |
+| `market_code` | VARCHAR(32) | 市场 |
+| `market_order_status` | VARCHAR(32) | `BID_OPEN / BID_CLOSED / SEQUENCE_READY / SELECTING / COMPLETED / SKIPPED` |
+| `leader_group_id` | BIGINT NULL | 本年该市场优先的市场龙头 |
+| `leader_rule_json` | JSON NULL | 市场龙头计算依据 |
+| `random_seed` | VARCHAR(64) NULL | 随机排序种子或结果摘要 |
+| `opened_at` | DATETIME NULL | 开放投入时间 |
+| `closed_at` | DATETIME NULL | 关闭投入时间 |
+| `completed_at` | DATETIME NULL | 市场选单完成时间 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_market_bidding_state(year_no, market_code)`
+- `idx_market_order_status(market_order_status)`
+
+#### 4.7.5 `sg_group_market_bid`
+
+用途：记录每组在每年每个市场提交的市场投入。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `group_id` | BIGINT | 小组 |
+| `year_no` | INT | 年份 |
+| `market_code` | VARCHAR(32) | 市场 |
+| `market_investment` | DECIMAL(18,2) | 市场投入 |
+| `bid_status` | VARCHAR(32) | `SUBMITTED / LOCKED` |
+| `submitted_at` | DATETIME | 提交时间 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_group_year_market_bid(group_id, year_no, market_code)`
+- `idx_year_market_bid(year_no, market_code)`
+
+说明：
+
+- 提交后不可修改。
+- `market_investment=0` 可保存，但不参与该市场选单。
+
+#### 4.7.6 `sg_market_selection_order`
+
+用途：记录系统生成的市场选单顺序。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `year_no` | INT | 年份 |
+| `market_code` | VARCHAR(32) | 市场 |
+| `sequence_no` | INT | 选单顺序 |
+| `group_id` | BIGINT | 小组 |
+| `market_investment` | DECIMAL(18,2) | 排序时市场投入 |
+| `is_market_leader` | TINYINT(1) | 是否市场龙头优先 |
+| `rank_basis_json` | JSON | 排序依据与随机结果 |
+| `selection_status` | VARCHAR(32) | `WAITING / SELECTED / PASSED` |
+| `selected_order_id` | BIGINT NULL | 该轮选择的订单 |
+| `selected_at` | DATETIME NULL | 选择时间 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_market_sequence(year_no, market_code, sequence_no)`
+- `uk_group_market_sequence(year_no, market_code, group_id)`
+
+#### 4.7.7 `sg_group_order_selection`
+
+用途：记录小组最终选择订单与交付状态。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `group_id` | BIGINT | 小组 |
+| `year_no` | INT | 年份 |
+| `market_code` | VARCHAR(32) | 市场 |
+| `order_id` | BIGINT | 订单 ID |
+| `selection_status` | VARCHAR(32) | `SELECTED` |
+| `delivery_status` | VARCHAR(32) | `SELECTED / DELIVERED / UNFINISHED` |
+| `delivered_stage_code` | VARCHAR(16) NULL | `Q1 / Q2 / Q3 / Q4` |
+| `delivered_at` | DATETIME NULL | 交付确认时间 |
+| `selected_at` | DATETIME | 选择时间 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_group_year_market_selection(group_id, year_no, market_code)`
+- `uk_order_selected(order_id)`
+- `idx_group_year_order_selection(group_id, year_no)`
+
+说明：
+
+- 每组每年每市场最多一个选择记录。
+- 一个订单只能被一个小组选择。
+- 年末仍未交付时更新为 `UNFINISHED`，但首版不阻断财报提交。
+
+---
+
 ## 5. 关系说明（逻辑）
 
 - `sg_group` 1:N `sg_group_year_state`
@@ -496,9 +693,16 @@
 - `sg_group` 1:N `sg_group_summary_snapshot`
 - `sg_group` 1:N `sg_notice`（按目标范围读取）
 - `sg_group` 1:N `sg_group_adjustment`
+- `sg_group` 1:N `sg_group_market_bid`
+- `sg_group` 1:N `sg_market_selection_order`
+- `sg_group` 1:N `sg_group_order_selection`
 - `sg_group` 1:N `sg_admin_unlock_log`
 - `sg_account` N:1 `sg_group`（玩家账号场景）
 - `sg_game_config` 为单实例全局配置表
+- `sg_order_import_batch` 1:N `sg_order_generation_config`
+- `sg_order_import_batch` 1:N `sg_order_pool`
+- `sg_order_pool` 1:0/1 `sg_group_order_selection`
+- `sg_market_bidding_state` 1:N `sg_market_selection_order`
 
 ---
 
@@ -514,6 +718,12 @@
 - `sg_group_summary_snapshot`：`uk_group_year_summary`、`idx_year_no`
 - `sg_notice`：`idx_target_scope_group`、`idx_published_at`、`idx_pinned`
 - `sg_group_adjustment`：`idx_group_year_stage`、`idx_published_at`
+- `sg_order_generation_config`：`uk_order_generation_config`、`idx_year_market`
+- `sg_order_pool`：`idx_order_pool_year_market`、`idx_order_pool_status`
+- `sg_market_bidding_state`：`uk_market_bidding_state`、`idx_market_order_status`
+- `sg_group_market_bid`：`uk_group_year_market_bid`、`idx_year_market_bid`
+- `sg_market_selection_order`：`uk_market_sequence`、`uk_group_market_sequence`
+- `sg_group_order_selection`：`uk_group_year_market_selection`、`uk_order_selected`
 - `sg_admin_unlock_log`：`idx_group_year`（可加）
 - `sg_admin_action_log`：`idx_operate_time`
 
@@ -522,12 +732,15 @@
 - 汇总页查询优先走 `sg_group_summary_snapshot`
 - 页面加载优先走“当前状态表 + 当前草稿/当前财报表”
 - 历史查看、日志查看走提交流水表
+- 年度订单页优先按 `sg_market_bidding_state + sg_group_market_bid + sg_market_selection_order + sg_order_pool + sg_group_order_selection` 组合查询
+- 经营页正式年份订单总额与市场投入优先读取已锁定订单选择与市场投入汇总，不从经营页草稿反推
 
 ### 6.3 不建议的性能做法
 
 - 不建议每次打开汇总页都全量即时重算全部年份
 - 不建议用一个超大 JSON 表承载所有业务数据
 - 不建议完全依赖前端缓存来判断状态
+- 不建议用 Excel 文件作为运行时订单随机引擎；订单池应在管理员确认后固定落库
 
 ---
 
@@ -566,4 +779,5 @@
 - `report_manual_payload_json` 的字段级映射说明
 - 最终 SQL DDL 文件
 - 数据初始化脚本（10 个组 + 1 个管理员）
-
+- 订单模块最终 SQL DDL 与迁移脚本
+- 订单 Excel 解析结果样例与字段级校验规则

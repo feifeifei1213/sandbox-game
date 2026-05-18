@@ -1,6 +1,6 @@
 # 沙盘经营系统接口设计文档（正式版）
 
-> 更新日期：2026-04-02  
+> 更新日期：2026-05-18  
 > 适用方式：基于《正式需求文档（首版）》《最小状态机 v0.1》《技术选型细化文档（Go 方向） v0.1》，定义首版正式业务接口边界，作为后续 Go 后端开发、前端 API 客户端开发和接口测试的统一依据。  
 > 文档定位：本文件定义接口域划分、路径风格、请求/响应结构、核心动作语义、关键错误状态和测试口径。  
 > 说明：本文件已按 `1组 最终版.xlsx` 口径收口；接口域划分、动作语义和结构性字段已经冻结，若后续仅有页面标签细修，应优先更新映射文档，不直接改动接口结构。
@@ -11,7 +11,9 @@
 
 - 首版最小登录接口
 - 玩家端经营页接口
+- 玩家端年度订单接口
 - 玩家端财报页接口
+- 管理员订单管理接口
 - 管理员汇总与控制接口
 - 管理员组数据查看接口
 - 审计日志查询接口
@@ -75,7 +77,15 @@
 
 - `sandbox-game:player-operating:query`
 - `sandbox-game:player-operating:submit-stage`
+- `sandbox-game:player-order:query`
+- `sandbox-game:player-order:submit-market-investment`
+- `sandbox-game:player-order:select-order`
 - `sandbox-game:player-report:submit`
+- `sandbox-game:admin-order:query`
+- `sandbox-game:admin-order:upload-excel`
+- `sandbox-game:admin-order:update-config`
+- `sandbox-game:admin-order:generate-pool`
+- `sandbox-game:admin-order:control-bidding`
 - `sandbox-game:admin-control:query-setup`
 - `sandbox-game:admin-control:initialize-game`
 - `sandbox-game:admin-control:open-next-year`
@@ -172,8 +182,10 @@
 |---|---|
 | `auth` | 登录、当前用户信息、退出登录 |
 | `game-config` | 当前游戏配置、开放年份、规则版本信息 |
+| `player-order` | 玩家年度订单页、市场投入、按顺序选择订单与交付状态查看 |
 | `player-operating` | 玩家经营页读取、草稿保存、阶段提交 |
 | `player-report` | 财报页读取、草稿保存、财报提交 |
+| `admin-order` | 管理员订单 Excel 上传、数量控制、订单池生成、市场竞标控制 |
 | `admin-summary` | 汇总页、最终排名 |
 | `admin-control` | 最终年份设置、开放下一年、初始基线、异常解锁 |
 | `admin-group-data` | 管理员查看任意组任一年经营/财报数据 |
@@ -211,6 +223,28 @@
 - 经营状态：
   - `NORMAL`
   - `BANKRUPT`
+- 市场编码：
+  - `LOCAL`
+  - `REGIONAL`
+  - `NATIONAL`
+  - `GLOBAL`
+- 订单类型：
+  - `AGENCY_INSPECTION`
+  - `TWO_CABIN_VIP`
+  - `BUSINESS_VIP`
+  - `MEMBER_CUSTOM`
+- 市场订单状态：
+  - `NOT_REQUIRED`
+  - `BID_OPEN`
+  - `BID_CLOSED`
+  - `SEQUENCE_READY`
+  - `SELECTING`
+  - `COMPLETED`
+  - `SKIPPED`
+- 订单交付状态：
+  - `SELECTED`
+  - `DELIVERED`
+  - `UNFINISHED`
 
 ### 5.2 已冻结的 Excel 命名映射边界
 
@@ -335,6 +369,8 @@
 
 ### 6.2 `player-operating`
 
+正式年份经营页 `Q1` 提交前，服务端必须校验本组本年订单前置流程已完成。`0年` 不做订单前置校验。
+
 #### 6.2.1 获取经营页视图
 
 - 方法：`GET`
@@ -405,6 +441,7 @@
 - 当前阶段必须与 `stageCode` 匹配
 - 当前阶段手工项完整
 - 当前组未破产
+- 若为正式年份 `Q1` 提交，本组本年订单前置流程必须已完成
 
 成功结果：
 
@@ -416,6 +453,100 @@
 重复提交规则：
 
 - 同一阶段已正式提交后再次提交，返回 `409`
+
+---
+
+### 6.2A `player-order`
+
+#### 6.2A.1 获取年度订单视图
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/player-order/get-year-view?yearNo=1`
+- 权限：`sandbox-game:player-order:query`
+
+返回字段建议：
+
+| 字段 | 说明 |
+|---|---|
+| `groupId` | 当前玩家所属组 |
+| `yearNo` | 年份 |
+| `orderRequired` | 是否需要订单；`0年` 为 `false` |
+| `markets[].marketCode` | 市场编码 |
+| `markets[].marketName` | 市场名称 |
+| `markets[].marketOrderStatus` | 当前市场订单状态 |
+| `markets[].investmentSubmitted` | 本组该市场投入是否已提交 |
+| `markets[].marketInvestment` | 本组该市场投入 |
+| `markets[].canSubmitInvestment` | 是否可提交投入 |
+| `markets[].canSelectOrder` | 当前是否轮到本组选择 |
+| `markets[].selectionSequenceNo` | 本组在该市场选单顺序 |
+| `markets[].availableOrders` | 当前仍可选择订单列表 |
+| `markets[].selectedOrder` | 本组该市场已选订单 |
+| `markets[].deliveryStatus` | 本组已选订单交付状态 |
+
+规则：
+
+- `0年` 返回 `orderRequired=false`，不进入市场选单。
+- 玩家不返回其他组已选订单明细。
+- 已被选择的订单不出现在后续玩家可选列表中。
+
+#### 6.2A.2 提交市场投入
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/player-order/submit-market-investment`
+- 权限：`sandbox-game:player-order:submit-market-investment`
+
+请求体建议：
+
+```json
+{
+  "yearNo": 1,
+  "marketCode": "LOCAL",
+  "marketInvestment": 100
+}
+```
+
+规则：
+
+- 仅正式年份允许提交。
+- 仅在该市场 `BID_OPEN` 时允许提交。
+- 同一组同一年同一市场提交后不可修改；重复提交返回 `409`。
+- 市场投入金额必须大于等于 `0`；为 `0` 时视为不参与该市场选单。
+
+#### 6.2A.3 选择订单
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/player-order/select-order`
+- 权限：`sandbox-game:player-order:select-order`
+
+请求体建议：
+
+```json
+{
+  "yearNo": 1,
+  "marketCode": "LOCAL",
+  "orderId": 10001
+}
+```
+
+规则：
+
+- 仅在该市场处于 `SELECTING` 时允许选择。
+- 必须轮到当前组。
+- 当前组必须已提交该市场正数市场投入。
+- 每组每市场最多选择 `1` 个订单。
+- 订单必须属于当前年份与市场，且状态仍可选。
+- 选择成功后订单锁定，不再对其他组可选。
+- 玩家选择后不可撤销。
+
+返回字段建议：
+
+| 字段 | 说明 |
+|---|---|
+| `selectedOrderId` | 已选订单 ID |
+| `marketCode` | 市场 |
+| `selectionSequenceNo` | 本组顺序 |
+| `nextGroupId` | 下一顺位组；若市场已结束则为空 |
+| `marketOrderStatus` | 选择后的市场状态 |
 
 ---
 
@@ -534,6 +665,153 @@
 
 - 仅在最终年份结果可用时返回有效排名
 - 排名依据：最终年份 `equity` 倒序
+
+---
+
+### 6.4A `admin-order`
+
+#### 6.4A.1 上传并解析订单 Excel
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-order/upload-excel`
+- 权限：`sandbox-game:admin-order:upload-excel`
+
+请求：
+
+- `multipart/form-data`
+- 文件字段：`file`
+
+规则：
+
+- 仅管理员可上传。
+- 来源 Excel 当前为 `道具-订单推算（服务企业）.xlsx` 结构。
+- 系统只读取当前保存值和订单卡片结果，不在运行时保留 Excel 随机公式。
+- 上传后先返回解析预览和错误列表，不应直接覆盖已生效订单池。
+
+#### 6.4A.2 获取订单数量配置
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-order/get-control-config?yearNo=1`
+- 权限：`sandbox-game:admin-order:query`
+
+返回：
+
+- 按 `年份 + 市场 + 订单类型` 返回订单数量配置。
+- 首版不返回均价、波动系数、最小/最大数量等复杂参数。
+
+#### 6.4A.3 更新订单数量配置
+
+- 方法：`PUT`
+- 路径：`/api/v1/sandbox-game/admin-order/update-control-config`
+- 权限：`sandbox-game:admin-order:update-config`
+
+请求体建议：
+
+```json
+{
+  "yearNo": 1,
+  "items": [
+    {
+      "marketCode": "LOCAL",
+      "orderType": "AGENCY_INSPECTION",
+      "orderCount": 8
+    }
+  ]
+}
+```
+
+规则：
+
+- 只能更新尚未开放竞标、尚未生成选单顺序、尚未发生玩家选择的年份/市场。
+- `orderCount` 必须大于等于 `0`。
+
+#### 6.4A.4 生成订单池
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-order/generate-order-pool`
+- 权限：`sandbox-game:admin-order:generate-pool`
+
+请求体建议：
+
+```json
+{
+  "yearNo": 1,
+  "overwrite": true
+}
+```
+
+规则：
+
+- 根据最近一次确认的 Excel 解析结果和订单数量配置生成订单池。
+- 允许覆盖未开始的未来年份/市场订单池。
+- 已开放竞标、已生成顺序或已有选择记录的年份/市场不得覆盖。
+
+#### 6.4A.5 获取订单池
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-order/get-order-pool?yearNo=1&marketCode=LOCAL`
+- 权限：`sandbox-game:admin-order:query`
+
+用途：
+
+- 管理员查看指定年份/市场订单池、订单类型、金额、数量、单价、账期、当前状态与选中组。
+
+#### 6.4A.6 开放市场投入
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-order/open-market-bidding`
+- 权限：`sandbox-game:admin-order:control-bidding`
+
+请求体建议：
+
+```json
+{
+  "yearNo": 1,
+  "marketCode": "LOCAL"
+}
+```
+
+规则：
+
+- 订单池已生成后才允许开放。
+- 同一市场重复开放返回 `409`。
+
+#### 6.4A.7 关闭市场投入并生成选单顺序
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-order/close-market-bidding`
+- 权限：`sandbox-game:admin-order:control-bidding`
+
+请求体建议：
+
+```json
+{
+  "yearNo": 1,
+  "marketCode": "LOCAL"
+}
+```
+
+规则：
+
+- 若没有任何小组在该市场投入，则市场状态进入 `SKIPPED`。
+- `1年` 按该市场当年投入排序，投入相同随机。
+- `2年` 起市场龙头优先，其余小组按当年投入排序，投入相同随机。
+- 随机结果、市场龙头和排序依据必须保存，便于追溯。
+
+#### 6.4A.8 获取市场选单状态
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-order/get-market-selection-status?yearNo=1&marketCode=LOCAL`
+- 权限：`sandbox-game:admin-order:query`
+
+返回：
+
+- 市场状态
+- 市场投入列表
+- 市场龙头
+- 选单顺序
+- 当前轮到的小组
+- 已选订单与未交付状态
 
 ---
 
@@ -1221,6 +1499,61 @@ type AdminActionSummaryResp struct {
 
 ---
 
+### 7.6 年度订单 DTO 草图（Go）
+
+建议集中放在：`internal/http/dto/order_dto.go`
+
+```go
+type MarketCode string
+type OrderType string
+
+type SubmitMarketInvestmentReq struct {
+    YearNo           int     `json:"yearNo" validate:"required,min=1"`
+    MarketCode       string  `json:"marketCode" validate:"required"`
+    MarketInvestment float64 `json:"marketInvestment" validate:"min=0"`
+}
+
+type SelectOrderReq struct {
+    YearNo     int    `json:"yearNo" validate:"required,min=1"`
+    MarketCode string `json:"marketCode" validate:"required"`
+    OrderID    int64  `json:"orderId" validate:"required,min=1"`
+}
+
+type UpdateOrderControlConfigReq struct {
+    YearNo int                    `json:"yearNo" validate:"required,min=1"`
+    Items  []OrderControlItemReq  `json:"items" validate:"required"`
+}
+
+type OrderControlItemReq struct {
+    MarketCode string `json:"marketCode" validate:"required"`
+    OrderType  string `json:"orderType" validate:"required"`
+    OrderCount int    `json:"orderCount" validate:"min=0"`
+}
+```
+
+说明：
+
+- 金额类型在正式实现时建议统一使用项目内 `decimal` 类型，不用 `float64` 作为最终落库口径。
+- 上述 DTO 仅表达接口结构草图，最终字段类型应与现有项目金额类型保持一致。
+
+### 7.7 年度订单错误常量建议
+
+| Go 常量名 | 默认 HTTP | 触发场景 | 默认提示语建议 |
+|---|---|---|---|
+| `ErrOrderNotRequiredForDemoYear` | `422` | `0年` 试图提交订单动作 | `0年不需要订单` |
+| `ErrOrderPoolNotGenerated` | `422` | 订单池未生成就开放竞标或选单 | `订单池尚未生成` |
+| `ErrOrderMarketNotOpen` | `422` | 市场投入未开放 | `该市场暂未开放投入` |
+| `ErrOrderInvestmentSubmitted` | `409` | 重复提交市场投入 | `该市场投入已提交，不能修改` |
+| `ErrOrderMarketNoInvestment` | `422` | 当前组无投入却尝试选单 | `本组未投入该市场，不能选择订单` |
+| `ErrOrderSelectionNotReady` | `422` | 选单顺序未生成 | `该市场尚未进入选单阶段` |
+| `ErrOrderSelectionNotTurn` | `409` | 未轮到当前组 | `当前还未轮到本组选择订单` |
+| `ErrOrderAlreadySelectedInMarket` | `409` | 同市场重复选单 | `本组已在该市场选择订单` |
+| `ErrOrderUnavailable` | `409` | 订单已被选择或不可选 | `该订单已不可选择` |
+| `ErrOrderPoolLocked` | `409` | 已开放/已选单后仍尝试覆盖订单池 | `订单池已进入竞标流程，不能覆盖` |
+| `ErrOrderPrerequisiteIncomplete` | `422` | 正式年份 Q1 提交时订单前置未完成 | `本年订单选择尚未完成` |
+
+---
+
 ## 8. 重复提交与并发处理规则
 
 ### 8.1 草稿保存
@@ -1269,6 +1602,7 @@ type AdminActionSummaryResp struct {
   - 管理员访问无权限域
 - 状态迁移异常：
   - 当前阶段必填项未完成
+  - 正式年份订单前置未完成时提交 Q1
   - 财报平衡失败
   - 已完成年份重复提交财报
   - 下一年已开放后再解锁上一年
@@ -1281,6 +1615,7 @@ type AdminActionSummaryResp struct {
 
 - `OperatingPayload` 的最终字段映射清单
 - `ReportManualPayload` 的最终字段命名说明
+- 订单 Excel 解析字段的完整样例 JSON
 - 详细接口示例 JSON 样例库
 - `.http` 用例文件
 - 异常解锁日志的高级筛选条件与导出策略
