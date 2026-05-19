@@ -36,6 +36,7 @@ const items = computed(() => {
     { to: '/sandbox-game/admin/baseline', label: '初始基线', description: '共享模板录入与提交锁定' },
     { to: '/sandbox-game/admin/group-data', label: '组数据', description: '组与年份查看入口，支持异常解锁' },
     { to: '/sandbox-game/admin/notices', label: '通知与奖惩', description: '发送普通通知并按组下发奖励与罚款' },
+    { to: '/sandbox-game/admin/orders', label: '订单管理', description: '上传订单 Excel，配置标段数量与释放顺序' },
   ]
 })
 </script>

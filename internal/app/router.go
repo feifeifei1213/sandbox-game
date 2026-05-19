@@ -42,6 +42,9 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	adminActionLogRepo := repository.NewAdminActionLogRepository(db)
 	noticeRepo := repository.NewNoticeRepository(db)
 	adjustmentRepo := repository.NewGroupAdjustmentRepository(db)
+	orderImportRepo := repository.NewOrderImportBatchRepository(db)
+	orderConfigRepo := repository.NewOrderGenerationConfigRepository(db)
+	orderPoolRepo := repository.NewOrderPoolRepository(db)
 
 	authService := service.NewAuthService(accountRepo, groupRepo, cfg.Auth)
 	authHandler := handler.NewAuthHandler(authService)
@@ -138,6 +141,18 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminNoticeQueryService,
 		adminNoticeCommandService,
 	)
+	adminOrderQueryService := service.NewAdminOrderQueryService(
+		gameConfigRepo,
+		groupRepo,
+		orderImportRepo,
+		orderConfigRepo,
+		orderPoolRepo,
+	)
+	adminOrderCommandService := service.NewAdminOrderCommandService(db)
+	adminOrderHandler := handler.NewAdminOrderHandler(
+		adminOrderQueryService,
+		adminOrderCommandService,
+	)
 
 	engine.GET("/healthz", healthHandler.GetHealth)
 
@@ -189,7 +204,16 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminNotice.GET("/get-records", adminNoticeHandler.GetRecords)
 		adminNotice.POST("/send-general", adminNoticeHandler.SendGeneral)
 		adminNotice.POST("/send-adjustment", adminNoticeHandler.SendAdjustment)
+
+		adminOrder := protected.Group("/admin-order")
+		adminOrder.GET("/get-control-config", adminOrderHandler.GetControlConfig)
+		adminOrder.POST("/upload-excel", adminOrderHandler.UploadExcel)
+		adminOrder.PUT("/update-control-config", adminOrderHandler.UpdateControlConfig)
+		adminOrder.POST("/generate-order-pool", adminOrderHandler.GenerateOrderPool)
+		adminOrder.GET("/get-order-pool", adminOrderHandler.GetOrderPool)
 	}
+
+	registerFrontendStaticRoutes(engine, cfg, logger)
 
 	return engine
 }

@@ -4,6 +4,10 @@ export type UnlockTargetType = 'OPERATING' | 'REPORT'
 export type UnlockStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEAR_END'
 export type NoticeTargetScope = 'ALL' | 'GROUP'
 export type AdjustmentType = 'REWARD' | 'PENALTY'
+export type OrderMarketCode = 'LOCAL' | 'REGIONAL' | 'NATIONAL' | 'GLOBAL'
+export type AdminOrderType = 'AGENCY_INSPECTION' | 'TWO_CABIN_VIP' | 'BUSINESS_VIP' | 'MEMBER_CUSTOM'
+export type OrderConfigStatus = 'DRAFT' | 'LOCKED'
+export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'VOID'
 
 export interface AdminActionSummary {
   actionCode: string
@@ -238,6 +242,130 @@ export interface SendAdminAdjustmentResult {
   amount: number
   reason: string
   publishedAt: string
+}
+
+export interface ParsedOrderCard {
+  yearNo: number
+  marketCode: OrderMarketCode
+  marketName: string
+  orderType: AdminOrderType
+  orderTypeName: string
+  orderAmount: number
+  orderQuantity: number
+  unitPrice: number
+  accountTerm: number
+  sourceSheetName: string
+  sourceCell: string
+  sourceRowIndex: number
+}
+
+export interface OrderSourceSummary {
+  yearNo: number
+  marketCode: OrderMarketCode
+  marketName: string
+  orderType: AdminOrderType
+  orderTypeName: string
+  availableCount: number
+}
+
+export interface UploadOrderExcelResult {
+  batchId: number
+  originalFileName: string
+  parseStatus: string
+  parsedOrderCount: number
+  warnings: string[]
+  summary: OrderSourceSummary[]
+  previewOrders: ParsedOrderCard[]
+  uploadedAt: string
+}
+
+export interface OrderControlConfigItem {
+  yearNo: number
+  marketCode: OrderMarketCode
+  marketName: string
+  orderType: AdminOrderType
+  orderTypeName: string
+  orderCount: number
+  releaseSequenceNo: number
+  availableCount: number
+  configStatus: OrderConfigStatus
+  generatedCount: number
+}
+
+export interface OrderControlWarning {
+  level: 'INFO' | 'WARN' | 'ERROR' | string
+  message: string
+  marketCode?: OrderMarketCode
+  orderType?: AdminOrderType
+}
+
+export interface OrderControlConfigResult {
+  yearNo: number
+  finalYear: number
+  latestBatchId: number | null
+  latestBatchUploadedAt: string | null
+  items: OrderControlConfigItem[]
+  warnings: OrderControlWarning[]
+}
+
+export interface UpdateOrderControlConfigRequest {
+  yearNo: number
+  items: Array<{
+    marketCode: OrderMarketCode
+    orderType: AdminOrderType
+    orderCount: number
+    releaseSequenceNo: number
+  }>
+}
+
+export interface UpdateOrderControlConfigResult {
+  yearNo: number
+  items: OrderControlConfigItem[]
+  warnings: OrderControlWarning[]
+  updatedAt: string
+  updatedBy: string
+}
+
+export interface GenerateOrderPoolRequest {
+  yearNo: number
+  overwrite: boolean
+  sourceBatchId?: number | null
+}
+
+export interface GenerateOrderPoolResult {
+  yearNo: number
+  sourceBatchId: number
+  generatedCount: number
+  segmentCount: number
+  warnings: OrderControlWarning[]
+  generatedAt: string
+  generatedBy: string
+}
+
+export interface OrderPoolItem {
+  orderId: number
+  yearNo: number
+  marketCode: OrderMarketCode
+  marketName: string
+  orderType: AdminOrderType
+  orderTypeName: string
+  orderAmount: number
+  orderQuantity: number
+  unitPrice: number
+  accountTerm: number
+  poolStatus: OrderPoolStatus
+  selectedGroupId: number | null
+  sourceSheetName: string
+  sourceCell: string
+}
+
+export interface OrderPoolResult {
+  yearNo: number
+  marketCode: OrderMarketCode
+  marketName: string
+  orderType: AdminOrderType
+  orderTypeName: string
+  list: OrderPoolItem[]
 }
 
 export function createEmptyBaselinePayload(): BaselinePayload {

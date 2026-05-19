@@ -77,6 +77,11 @@ const routes: RouteRecordRaw[] = [
         name: 'sandbox-admin-notices',
         component: () => import('@/views/sandbox-game/admin/notice/AdminNoticePage.vue'),
       },
+      {
+        path: 'orders',
+        name: 'sandbox-admin-orders',
+        component: () => import('@/views/sandbox-game/admin/order/AdminOrderPage.vue'),
+      },
     ],
   },
 ]
