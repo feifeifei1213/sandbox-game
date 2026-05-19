@@ -2,9 +2,14 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 
 import {
+  adminSkipCurrentOrderGroup,
+  closeAdminMarketBidding,
   generateAdminOrderPool,
+  getAdminMarketSelectionStatus,
   getAdminOrderControlConfig,
   getAdminOrderPool,
+  openAdminMarketBidding,
+  releaseNextAdminOrderSegment,
   updateAdminOrderControlConfig,
   uploadAdminOrderExcel,
 } from '@/api/sandbox-game/admin-order'
@@ -16,6 +21,7 @@ import type {
   OrderPoolResult,
   UploadOrderExcelResult,
 } from '@/types/sandbox-game-admin'
+import type { AdminMarketSelectionStatus } from '@/types/sandbox-game-order'
 
 type MessageType = 'success' | 'error' | 'info'
 
@@ -43,16 +49,25 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const config = ref<OrderControlConfigResult | null>(null)
   const uploadResult = ref<UploadOrderExcelResult | null>(null)
   const orderPool = ref<OrderPoolResult | null>(null)
+  const marketSelectionStatus = ref<AdminMarketSelectionStatus | null>(null)
   const loading = ref(false)
   const uploading = ref(false)
   const savingConfig = ref(false)
   const generatingPool = ref(false)
   const loadingPool = ref(false)
+  const loadingSelectionStatus = ref(false)
+  const controllingMarket = ref(false)
+  const releasingSegment = ref(false)
+  const skippingGroup = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
 
   const poolFilter = reactive({
     marketCode: 'LOCAL' as OrderMarketCode,
     orderType: 'AGENCY_INSPECTION' as AdminOrderType,
+  })
+  const controlForm = reactive({
+    marketCode: 'LOCAL' as OrderMarketCode,
+    skipReason: '',
   })
 
   const editableItems = ref<OrderControlConfigItem[]>([])
@@ -61,6 +76,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const totalGeneratedCount = computed(() => editableItems.value.reduce((sum, item) => sum + Number(item.generatedCount || 0), 0))
   const hasLockedConfig = computed(() => editableItems.value.some((item) => item.configStatus === 'LOCKED'))
   const sortedItems = computed(() => [...editableItems.value].sort((a, b) => a.releaseSequenceNo - b.releaseSequenceNo))
+  const currentSegment = computed(() => marketSelectionStatus.value?.currentSegment ?? null)
 
   async function bootstrap(yearNo: number) {
     selectedYearNo.value = Math.max(yearNo, 1)
@@ -75,6 +91,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     try {
       const result = await getAdminOrderControlConfig(selectedYearNo.value)
       applyConfig(result)
+      await loadSelectionStatus({ silent: true })
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '获取订单配置失败')
       throw error
@@ -145,6 +162,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       })
       await loadConfig({ silent: true })
       await loadPool({ silent: true })
+      await loadSelectionStatus({ silent: true })
       pageMessage.value = {
         type: 'success',
         text: `${selectedYearNo.value} 年订单池已生成 ${result.generatedCount} 个订单，锁定 ${result.segmentCount} 个标段配置。`,
@@ -172,6 +190,121 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     }
   }
 
+  async function loadSelectionStatus(options?: { silent?: boolean }) {
+    loadingSelectionStatus.value = true
+    if (!options?.silent) {
+      pageMessage.value = null
+    }
+    try {
+      marketSelectionStatus.value = await getAdminMarketSelectionStatus(selectedYearNo.value, controlForm.marketCode)
+    } catch (error) {
+      if (!options?.silent) {
+        pageMessage.value = toErrorMessage(error, '获取市场选单状态失败')
+      }
+      throw error
+    } finally {
+      loadingSelectionStatus.value = false
+    }
+  }
+
+  async function openMarket() {
+    controllingMarket.value = true
+    pageMessage.value = null
+    try {
+      await openAdminMarketBidding({
+        yearNo: selectedYearNo.value,
+        marketCode: controlForm.marketCode,
+      })
+      await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
+      pageMessage.value = {
+        type: 'success',
+        text: `${marketName(controlForm.marketCode)}投入已开放。`,
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '开放市场投入失败')
+      throw error
+    } finally {
+      controllingMarket.value = false
+    }
+  }
+
+  async function closeMarket() {
+    controllingMarket.value = true
+    pageMessage.value = null
+    try {
+      await closeAdminMarketBidding({
+        yearNo: selectedYearNo.value,
+        marketCode: controlForm.marketCode,
+      })
+      await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
+      pageMessage.value = {
+        type: 'success',
+        text: `${marketName(controlForm.marketCode)}投入已关闭，选单顺序已生成或市场已跳过。`,
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '关闭市场投入失败')
+      throw error
+    } finally {
+      controllingMarket.value = false
+    }
+  }
+
+  async function releaseNextSegment() {
+    releasingSegment.value = true
+    pageMessage.value = null
+    try {
+      const result = await releaseNextAdminOrderSegment({
+        yearNo: selectedYearNo.value,
+      })
+      if (result.marketCode) {
+        controlForm.marketCode = result.marketCode
+      }
+      await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
+      pageMessage.value = {
+        type: 'success',
+        text: result.orderTypeName ? `已释放 ${result.marketName} ${result.orderTypeName}。` : '已处理下一个标段。',
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '释放下一个标段失败')
+      throw error
+    } finally {
+      releasingSegment.value = false
+    }
+  }
+
+  async function skipCurrentGroup() {
+    const segment = currentSegment.value
+    if (!segment?.currentGroupId) {
+      pageMessage.value = {
+        type: 'error',
+        text: '当前没有可跳过的小组。',
+      }
+      return
+    }
+    skippingGroup.value = true
+    pageMessage.value = null
+    try {
+      await adminSkipCurrentOrderGroup({
+        yearNo: selectedYearNo.value,
+        marketCode: segment.marketCode,
+        orderType: segment.orderType,
+        groupId: segment.currentGroupId,
+        reason: controlForm.skipReason.trim(),
+      })
+      controlForm.skipReason = ''
+      await loadSelectionStatus({ silent: true })
+      pageMessage.value = {
+        type: 'success',
+        text: '已跳过当前小组。',
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '跳过当前小组失败')
+      throw error
+    } finally {
+      skippingGroup.value = false
+    }
+  }
+
   function applyConfig(result: OrderControlConfigResult) {
     config.value = result
     editableItems.value = result.items.map((item) => ({ ...item }))
@@ -181,32 +314,53 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     selectedYearNo.value = Math.max(yearNo, 1)
   }
 
+  function setControlMarket(marketCode: OrderMarketCode) {
+    controlForm.marketCode = marketCode
+  }
+
   return {
     selectedYearNo,
     config,
     uploadResult,
     orderPool,
+    marketSelectionStatus,
     loading,
     uploading,
     savingConfig,
     generatingPool,
     loadingPool,
+    loadingSelectionStatus,
+    controllingMarket,
+    releasingSegment,
+    skippingGroup,
     pageMessage,
     poolFilter,
+    controlForm,
     editableItems,
     sortedItems,
     totalOrderCount,
     totalGeneratedCount,
     hasLockedConfig,
+    currentSegment,
     bootstrap,
     loadConfig,
     uploadExcel,
     saveConfig,
     generatePool,
     loadPool,
+    loadSelectionStatus,
+    openMarket,
+    closeMarket,
+    releaseNextSegment,
+    skipCurrentGroup,
     setYear,
+    setControlMarket,
   }
 })
+
+function marketName(code: OrderMarketCode) {
+  return MARKET_OPTIONS.find((item) => item.code === code)?.name ?? code
+}
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {
   if (error instanceof Error && error.message) {

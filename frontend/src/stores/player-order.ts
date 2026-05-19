@@ -1,0 +1,260 @@
+import { defineStore } from 'pinia'
+import { computed, reactive, ref } from 'vue'
+
+import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
+import {
+  getPlayerOrderYearView,
+  passPlayerOrderSegment,
+  selectPlayerOrder,
+  submitPlayerMarketInvestment,
+} from '@/api/sandbox-game/player-order'
+import type { CurrentGameConfigResult, YearTabItem, YearTabsResult } from '@/types/sandbox-game'
+import type {
+  OrderMarketCode,
+  OrderTypeCode,
+  PlayerOrderMarketView,
+  PlayerOrderSegmentView,
+  PlayerOrderYearView,
+} from '@/types/sandbox-game-order'
+
+type MessageType = 'success' | 'error' | 'info'
+
+export interface PageMessage {
+  type: MessageType
+  text: string
+}
+
+export const PLAYER_ORDER_MARKETS: Array<{ code: OrderMarketCode; name: string }> = [
+  { code: 'LOCAL', name: '本地市场' },
+  { code: 'REGIONAL', name: '区域市场' },
+  { code: 'NATIONAL', name: '全国市场' },
+  { code: 'GLOBAL', name: '全球市场' },
+]
+
+export const PLAYER_ORDER_TYPES: Array<{ code: OrderTypeCode; name: string }> = [
+  { code: 'AGENCY_INSPECTION', name: '代办过检' },
+  { code: 'TWO_CABIN_VIP', name: '两舱贵宾' },
+  { code: 'BUSINESS_VIP', name: '商务贵宾' },
+  { code: 'MEMBER_CUSTOM', name: '会员定制' },
+]
+
+export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
+  const currentConfig = ref<CurrentGameConfigResult | null>(null)
+  const yearTabs = ref<YearTabItem[]>([])
+  const currentView = ref<PlayerOrderYearView | null>(null)
+  const selectedYear = ref(1)
+  const selectedMarketCode = ref<OrderMarketCode>('LOCAL')
+  const loading = ref(false)
+  const yearViewLoading = ref(false)
+  const submittingInvestment = ref(false)
+  const selectingOrder = ref(false)
+  const passingSegment = ref(false)
+  const pageMessage = ref<PageMessage | null>(null)
+  const investmentDraft = reactive<Record<OrderMarketCode, number | null>>({
+    LOCAL: null,
+    REGIONAL: null,
+    NATIONAL: null,
+    GLOBAL: null,
+  })
+
+  const markets = computed(() => currentView.value?.markets ?? [])
+  const selectedMarket = computed<PlayerOrderMarketView | null>(
+    () => markets.value.find((item) => item.marketCode === selectedMarketCode.value) ?? markets.value[0] ?? null,
+  )
+  const currentSegment = computed<PlayerOrderSegmentView | null>(() => {
+    const segments = selectedMarket.value?.segments ?? []
+    return segments.find((item) => item.segmentStatus === 'SELECTING') ?? segments.find((item) => item.canSelectOrder || item.canPassSegment) ?? null
+  })
+  const selectableSegments = computed(() =>
+    markets.value.flatMap((market) => market.segments).filter((segment) => segment.segmentStatus === 'SELECTING'),
+  )
+  const currentTab = computed(() => yearTabs.value.find((item) => item.yearNo === selectedYear.value) ?? null)
+
+  async function bootstrap(preferredYear?: number) {
+    loading.value = true
+    pageMessage.value = null
+    try {
+      const [config, tabsResult] = await Promise.all([getCurrentGameConfig(), getYearTabs()])
+      currentConfig.value = config
+      yearTabs.value = tabsResult.tabs
+      const nextYear = Math.max(resolveInitialYear(tabsResult, preferredYear), 0)
+      await loadYearView(nextYear, { silent: true })
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '初始化年度订单页失败')
+      throw error
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function refreshTabs() {
+    const tabsResult = await getYearTabs()
+    yearTabs.value = tabsResult.tabs
+    return tabsResult
+  }
+
+  async function loadYearView(yearNo: number, options?: { silent?: boolean }) {
+    yearViewLoading.value = true
+    if (!options?.silent) {
+      pageMessage.value = null
+    }
+    try {
+      const view = await getPlayerOrderYearView(yearNo)
+      currentView.value = view
+      selectedYear.value = yearNo
+      applyInvestmentDraft(view, investmentDraft)
+      const selectedExists = view.markets?.some((item) => item.marketCode === selectedMarketCode.value)
+      if (!selectedExists && view.markets?.[0]) {
+        selectedMarketCode.value = view.markets[0].marketCode
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, `读取 ${yearNo} 年订单页失败`)
+      throw error
+    } finally {
+      yearViewLoading.value = false
+    }
+  }
+
+  async function submitInvestment(marketCode: OrderMarketCode) {
+    submittingInvestment.value = true
+    pageMessage.value = null
+    try {
+      const amount = Number(investmentDraft[marketCode] ?? 0)
+      await submitPlayerMarketInvestment({
+        yearNo: selectedYear.value,
+        marketCode,
+        marketInvestment: Number.isFinite(amount) ? Math.max(amount, 0) : 0,
+      })
+      pageMessage.value = {
+        type: 'success',
+        text: `${marketName(marketCode)}市场投入已提交。`,
+      }
+      await loadYearView(selectedYear.value, { silent: true })
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '提交市场投入失败')
+      throw error
+    } finally {
+      submittingInvestment.value = false
+    }
+  }
+
+  async function selectOrder(segment: PlayerOrderSegmentView, orderId: number) {
+    selectingOrder.value = true
+    pageMessage.value = null
+    try {
+      await selectPlayerOrder({
+        yearNo: selectedYear.value,
+        marketCode: segment.marketCode,
+        orderType: segment.orderType,
+        orderId,
+      })
+      pageMessage.value = {
+        type: 'success',
+        text: `${segment.marketName} ${segment.orderTypeName} 已选择订单 #${orderId}。`,
+      }
+      await loadYearView(selectedYear.value, { silent: true })
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '选择订单失败')
+      throw error
+    } finally {
+      selectingOrder.value = false
+    }
+  }
+
+  async function passSegment(segment: PlayerOrderSegmentView) {
+    passingSegment.value = true
+    pageMessage.value = null
+    try {
+      await passPlayerOrderSegment({
+        yearNo: selectedYear.value,
+        marketCode: segment.marketCode,
+        orderType: segment.orderType,
+      })
+      pageMessage.value = {
+        type: 'success',
+        text: `${segment.marketName} ${segment.orderTypeName} 已放弃。`,
+      }
+      await loadYearView(selectedYear.value, { silent: true })
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '放弃标段失败')
+      throw error
+    } finally {
+      passingSegment.value = false
+    }
+  }
+
+  function setSelectedMarket(marketCode: OrderMarketCode) {
+    selectedMarketCode.value = marketCode
+  }
+
+  function setInvestmentDraft(marketCode: OrderMarketCode, value: number | null) {
+    investmentDraft[marketCode] = value
+  }
+
+  return {
+    currentConfig,
+    yearTabs,
+    currentView,
+    selectedYear,
+    selectedMarketCode,
+    loading,
+    yearViewLoading,
+    submittingInvestment,
+    selectingOrder,
+    passingSegment,
+    pageMessage,
+    investmentDraft,
+    markets,
+    selectedMarket,
+    currentSegment,
+    selectableSegments,
+    currentTab,
+    bootstrap,
+    refreshTabs,
+    loadYearView,
+    submitInvestment,
+    selectOrder,
+    passSegment,
+    setSelectedMarket,
+    setInvestmentDraft,
+  }
+})
+
+function applyInvestmentDraft(view: PlayerOrderYearView, draft: Record<OrderMarketCode, number | null>) {
+  for (const market of view.markets ?? []) {
+    draft[market.marketCode] = market.investmentSubmitted ? market.marketInvestment : draft[market.marketCode] ?? 0
+  }
+}
+
+function resolveInitialYear(result: YearTabsResult, preferredYear?: number) {
+  if (typeof preferredYear === 'number' && Number.isFinite(preferredYear)) {
+    const matched = result.tabs.find((item) => item.yearNo === preferredYear)
+    if (matched?.canEnter) {
+      return preferredYear
+    }
+  }
+
+  const currentOpen = result.tabs.find((item) => item.isCurrentOpenYear && item.yearNo > 0)
+  if (currentOpen?.canEnter) {
+    return currentOpen.yearNo
+  }
+
+  const firstFormal = result.tabs.find((item) => item.canEnter && item.yearNo > 0)
+  if (firstFormal) {
+    return firstFormal.yearNo
+  }
+
+  const firstEnterable = result.tabs.find((item) => item.canEnter)
+  return firstEnterable?.yearNo ?? 0
+}
+
+function marketName(code: OrderMarketCode) {
+  return PLAYER_ORDER_MARKETS.find((item) => item.code === code)?.name ?? code
+}
+
+function toErrorMessage(error: unknown, fallback: string): PageMessage {
+  if (error instanceof Error && error.message) {
+    return { type: 'error', text: error.message }
+  }
+  return { type: 'error', text: fallback }
+}

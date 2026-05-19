@@ -31,10 +31,28 @@ const (
 )
 
 const (
+	OrderSegmentStatusBidOpen        = "BID_OPEN"
+	OrderSegmentStatusBidClosed      = "BID_CLOSED"
+	OrderSegmentStatusSequenceReady  = "SEQUENCE_READY"
 	OrderSegmentStatusWaitingRelease = "WAITING_RELEASE"
 	OrderSegmentStatusSelecting      = "SELECTING"
 	OrderSegmentStatusCompleted      = "COMPLETED"
 	OrderSegmentStatusSkipped        = "SKIPPED"
+)
+
+const (
+	OrderSelectionStatusIneligible   = "INELIGIBLE"
+	OrderSelectionStatusWaiting      = "WAITING"
+	OrderSelectionStatusCurrent      = "CURRENT"
+	OrderSelectionStatusSelected     = "SELECTED"
+	OrderSelectionStatusPassed       = "PASSED"
+	OrderSelectionStatusAdminSkipped = "ADMIN_SKIPPED"
+)
+
+const (
+	OrderDeliveryStatusSelected   = "SELECTED"
+	OrderDeliveryStatusDelivered  = "DELIVERED"
+	OrderDeliveryStatusUnfinished = "UNFINISHED"
 )
 
 func IsValidMarketCode(value string) bool {

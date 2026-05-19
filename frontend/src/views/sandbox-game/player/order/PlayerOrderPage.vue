@@ -1,0 +1,913 @@
+<template>
+  <div class="player-page">
+    <div class="shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Sandbox Game / Player</p>
+          <h1>玩家订单页</h1>
+          <p class="subtext">按管理员释放的市场标段提交投入、查看顺序并选择订单。</p>
+        </div>
+        <div class="header-pills">
+          <span class="pill">组别：{{ currentView?.groupId ?? '--' }}</span>
+          <span class="pill">开放年份：{{ currentConfig?.currentOpenYear ?? '--' }}</span>
+          <span class="pill">最终年份：{{ currentConfig?.finalYear ?? '--' }}</span>
+          <span v-if="currentUser" class="pill">账号：{{ currentUser.username }}</span>
+          <button class="logout-button" type="button" @click="handleLogout">退出登录</button>
+        </div>
+      </header>
+
+      <section class="toolbar-card">
+        <div class="toolbar-top">
+          <YearTabs :tabs="yearTabs" :active-year="selectedYear" @select="handleYearSelect" />
+          <PageModeSwitch active-mode="order" :report-enabled="true" @operating="goOperating" @report="goReport" />
+        </div>
+      </section>
+
+      <section v-if="pageMessage" class="message-bar" :class="pageMessage.type">
+        {{ pageMessage.text }}
+      </section>
+
+      <main class="order-workspace">
+        <section class="status-grid">
+          <article class="status-card">
+            <span>当前年份</span>
+            <strong>{{ selectedYear }} 年</strong>
+          </article>
+          <article class="status-card">
+            <span>订单前置</span>
+            <strong>{{ currentView?.orderRequired === false ? '无需订单' : '正式流程' }}</strong>
+          </article>
+          <article class="status-card">
+            <span>当前标段</span>
+            <strong>{{ activeSegmentTitle }}</strong>
+          </article>
+          <article class="status-card">
+            <span>轮询间隔</span>
+            <strong>{{ pollingText }}</strong>
+          </article>
+        </section>
+
+        <section v-if="loading || yearViewLoading" class="loading-card">正在加载订单页数据...</section>
+
+        <section v-else-if="currentView?.orderRequired === false" class="empty-state">
+          <strong>0 年不需要线上订单</strong>
+          <span>0 年是引导年，可以直接进入经营页熟悉规则。</span>
+        </section>
+
+        <template v-else-if="currentView">
+          <section class="market-strip">
+            <button
+              v-for="market in markets"
+              :key="market.marketCode"
+              type="button"
+              class="market-tab"
+              :class="{ active: market.marketCode === selectedMarketCode }"
+              @click="store.setSelectedMarket(market.marketCode)"
+            >
+              <strong>{{ market.marketName }}</strong>
+              <span>{{ formatSegmentStatus(market.marketBidStatus) }}</span>
+            </button>
+          </section>
+
+          <section v-if="selectedMarket" class="market-layout">
+            <aside class="market-panel">
+              <div class="panel-head compact">
+                <div>
+                  <strong>{{ selectedMarket.marketName }}投入</strong>
+                  <span>{{ selectedMarket.isMarketLeader ? '本组为该市场龙头' : '按市场投入决定参与资格' }}</span>
+                </div>
+              </div>
+              <div class="investment-box">
+                <label>
+                  <span>市场投入</span>
+                  <input
+                    :value="store.investmentDraft[selectedMarket.marketCode] ?? 0"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    :disabled="!selectedMarket.canSubmitInvestment || submittingInvestment"
+                    @input="handleInvestmentInput(selectedMarket.marketCode, $event)"
+                  >
+                </label>
+                <button
+                  type="button"
+                  class="btn primary"
+                  :disabled="!selectedMarket.canSubmitInvestment || submittingInvestment"
+                  @click="handleSubmitInvestment(selectedMarket.marketCode)"
+                >
+                  {{ selectedMarket.investmentSubmitted ? '已提交' : submittingInvestment ? '提交中...' : '提交投入' }}
+                </button>
+                <p class="hint">{{ selectedMarket.investmentSubmitted ? `已提交 ${formatAmount(selectedMarket.marketInvestment)}` : '提交后不能修改。投入 0 时普通小组不参与该市场选单。' }}</p>
+              </div>
+
+              <div class="sequence-box">
+                <strong>当前市场标段</strong>
+                <button
+                  v-for="segment in selectedMarket.segments"
+                  :key="`${segment.marketCode}-${segment.orderType}`"
+                  type="button"
+                  class="segment-row"
+                  :class="{ current: segment.segmentStatus === 'SELECTING' }"
+                >
+                  <span>#{{ segment.releaseSequenceNo }} {{ segment.orderTypeName }}</span>
+                  <em>{{ formatSegmentStatus(segment.segmentStatus) }}</em>
+                </button>
+              </div>
+            </aside>
+
+            <section class="segment-panel">
+              <div class="panel-head">
+                <div>
+                  <strong>{{ currentSegmentTitle }}</strong>
+                  <span>当前释放标段按顺序逐组选择；已被选择的订单会置灰。</span>
+                </div>
+                <button type="button" class="btn" :disabled="yearViewLoading" @click="handleRefresh">
+                  刷新
+                </button>
+              </div>
+
+              <section v-if="!visibleSegment" class="empty-state nested">
+                <strong>当前市场暂无正在选择的标段</strong>
+                <span>等待管理员开放投入、关闭投入并释放对应标段。</span>
+              </section>
+
+              <template v-else>
+                <div class="segment-summary">
+                  <span>释放顺序 #{{ visibleSegment.releaseSequenceNo }}</span>
+                  <span>{{ formatSegmentStatus(visibleSegment.segmentStatus) }}</span>
+                  <span>可选 {{ visibleSegment.availableOrders.length }} 单</span>
+                  <span>已锁定 {{ visibleSegment.lockedOrders.length }} 单</span>
+                </div>
+
+                <div class="sequence-list">
+                  <article
+                    v-for="item in visibleSegment.selectionOrder"
+                    :key="item.groupId"
+                    class="sequence-card"
+                    :class="{ self: item.isSelf, current: item.selectionStatus === 'CURRENT' }"
+                  >
+                    <span>#{{ item.sequenceNo }}</span>
+                    <strong>{{ item.groupName }}</strong>
+                    <em>{{ formatSelectionStatus(item.selectionStatus) }}</em>
+                    <small v-if="item.isMarketLeader">市场龙头</small>
+                  </article>
+                </div>
+
+                <div v-if="visibleSegment.selectedOrder" class="selected-order">
+                  <strong>本组已选订单</strong>
+                  <span>#{{ visibleSegment.selectedOrder.orderId }} · 金额 {{ formatAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
+                </div>
+
+                <section class="order-grid">
+                  <article
+                    v-for="order in visibleSegment.availableOrders"
+                    :key="order.orderId"
+                    class="order-card"
+                  >
+                    <div class="order-title">
+                      <strong>#{{ order.orderId }}</strong>
+                      <span>可选</span>
+                    </div>
+                    <dl>
+                      <div><dt>金额</dt><dd>{{ formatAmount(order.orderAmount) }}</dd></div>
+                      <div><dt>数量</dt><dd>{{ formatAmount(order.orderQuantity) }}</dd></div>
+                      <div><dt>单价</dt><dd>{{ formatAmount(order.unitPrice) }}</dd></div>
+                      <div><dt>账期</dt><dd>{{ order.accountTerm }} 季度</dd></div>
+                    </dl>
+                    <button
+                      type="button"
+                      class="btn primary full"
+                      :disabled="!visibleSegment.canSelectOrder || selectingOrder"
+                      @click="handleSelectOrder(visibleSegment, order.orderId)"
+                    >
+                      {{ selectingOrder ? '选择中...' : '选择订单' }}
+                    </button>
+                  </article>
+                  <article
+                    v-for="order in visibleSegment.lockedOrders"
+                    :key="order.orderId"
+                    class="order-card locked"
+                  >
+                    <div class="order-title">
+                      <strong>#{{ order.orderId }}</strong>
+                      <span>已锁定</span>
+                    </div>
+                    <dl>
+                      <div><dt>金额</dt><dd>{{ formatAmount(order.orderAmount) }}</dd></div>
+                      <div><dt>数量</dt><dd>{{ formatAmount(order.orderQuantity) }}</dd></div>
+                      <div><dt>单价</dt><dd>{{ formatAmount(order.unitPrice) }}</dd></div>
+                      <div><dt>账期</dt><dd>{{ order.accountTerm }} 季度</dd></div>
+                    </dl>
+                    <button type="button" class="btn full" disabled>不可选择</button>
+                  </article>
+                </section>
+
+                <div class="action-line">
+                  <button
+                    type="button"
+                    class="btn danger"
+                    :disabled="!visibleSegment.canPassSegment || passingSegment"
+                    @click="handlePassSegment(visibleSegment)"
+                  >
+                    {{ passingSegment ? '放弃中...' : '放弃本标段' }}
+                  </button>
+                  <span>{{ visibleSegment.canPassSegment ? '当前轮到本组，可选择或放弃。' : '未轮到本组时只能查看。' }}</span>
+                </div>
+              </template>
+            </section>
+          </section>
+        </template>
+
+        <section v-else class="empty-state">
+          <strong>当前没有可展示的订单数据</strong>
+          <span>请确认管理员已生成本年度订单池。</span>
+        </section>
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useRoute, useRouter } from 'vue-router'
+
+import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
+import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
+import { useAuthStore } from '@/stores/auth'
+import { usePlayerOrderStore } from '@/stores/player-order'
+import type { OrderMarketCode, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
+
+const route = useRoute()
+const router = useRouter()
+const store = usePlayerOrderStore()
+const authStore = useAuthStore()
+const {
+  currentConfig,
+  yearTabs,
+  currentView,
+  selectedYear,
+  selectedMarketCode,
+  loading,
+  yearViewLoading,
+  submittingInvestment,
+  selectingOrder,
+  passingSegment,
+  pageMessage,
+  markets,
+  selectedMarket,
+  currentSegment,
+} = storeToRefs(store)
+const { currentUser } = storeToRefs(authStore)
+
+let initialized = false
+let pollTimer = 0
+
+const visibleSegment = computed(() => currentSegment.value ?? selectedMarket.value?.segments[0] ?? null)
+const activeSegmentTitle = computed(() => {
+  const segment = markets.value.flatMap((market) => market.segments).find((item) => item.segmentStatus === 'SELECTING')
+  return segment ? `${segment.marketName} ${segment.orderTypeName}` : '暂无'
+})
+const currentSegmentTitle = computed(() => {
+  if (!visibleSegment.value) {
+    return '标段选单'
+  }
+  return `${visibleSegment.value.marketName} · ${visibleSegment.value.orderTypeName}`
+})
+const pollingText = computed(() => {
+  const seconds = currentView.value?.pollingIntervalSeconds ?? 3
+  return `${seconds} 秒`
+})
+
+onMounted(async () => {
+  await store.bootstrap(readRouteYear())
+  initialized = true
+  if (selectedYear.value !== readRouteYear()) {
+    syncRouteYear(selectedYear.value)
+  }
+  startPolling()
+})
+
+watch(
+  () => route.query.yearNo,
+  async () => {
+    const targetYear = readRouteYear()
+    if (!initialized || targetYear === undefined || targetYear === selectedYear.value) {
+      return
+    }
+    try {
+      await store.loadYearView(targetYear)
+      restartPolling()
+    } catch {
+      syncRouteYear(selectedYear.value)
+    }
+  },
+)
+
+onBeforeUnmount(() => {
+  stopPolling()
+})
+
+function readRouteYear() {
+  const raw = Array.isArray(route.query.yearNo) ? route.query.yearNo[0] : route.query.yearNo
+  if (!raw) {
+    return undefined
+  }
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function syncRouteYear(yearNo: number) {
+  router.replace({
+    path: route.path,
+    query: { ...route.query, yearNo: String(yearNo) },
+  })
+}
+
+function handleYearSelect(yearNo: number) {
+  if (yearNo === selectedYear.value) {
+    return
+  }
+  syncRouteYear(yearNo)
+}
+
+async function handleRefresh() {
+  try {
+    await store.loadYearView(selectedYear.value)
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+function handleInvestmentInput(marketCode: OrderMarketCode, event: Event) {
+  const input = event.target as HTMLInputElement
+  const next = input.value === '' ? 0 : Number(input.value)
+  store.setInvestmentDraft(marketCode, Number.isFinite(next) ? Math.max(next, 0) : 0)
+}
+
+async function handleSubmitInvestment(marketCode: OrderMarketCode) {
+  try {
+    await store.submitInvestment(marketCode)
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleSelectOrder(segment: PlayerOrderSegmentView, orderId: number) {
+  try {
+    await store.selectOrder(segment, orderId)
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handlePassSegment(segment: PlayerOrderSegmentView) {
+  try {
+    await store.passSegment(segment)
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+function startPolling() {
+  stopPolling()
+  const seconds = currentView.value?.pollingIntervalSeconds ?? 3
+  pollTimer = window.setInterval(async () => {
+    if (loading.value || yearViewLoading.value || submittingInvestment.value || selectingOrder.value || passingSegment.value) {
+      return
+    }
+    try {
+      await store.loadYearView(selectedYear.value, { silent: true })
+    } catch {
+      // 自动轮询失败时保留当前页面状态。
+    }
+  }, Math.max(seconds, 1) * 1000)
+}
+
+function restartPolling() {
+  startPolling()
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    window.clearInterval(pollTimer)
+    pollTimer = 0
+  }
+}
+
+function goOperating() {
+  router.push({
+    path: '/sandbox-game/player/operating',
+    query: { yearNo: String(selectedYear.value) },
+  })
+}
+
+function goReport() {
+  router.push({
+    path: '/sandbox-game/player/report',
+    query: { yearNo: String(selectedYear.value) },
+  })
+}
+
+async function handleLogout() {
+  try {
+    await authStore.logout()
+  } finally {
+    await router.replace('/sandbox-game/login')
+  }
+}
+
+function formatAmount(value: number) {
+  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function formatSegmentStatus(value?: string) {
+  const map: Record<string, string> = {
+    BID_OPEN: '投入开放',
+    BID_CLOSED: '投入关闭',
+    SEQUENCE_READY: '顺序已生成',
+    WAITING_RELEASE: '等待释放',
+    SELECTING: '选单中',
+    COMPLETED: '已完成',
+    SKIPPED: '已跳过',
+  }
+  return value ? map[value] ?? value : '未开始'
+}
+
+function formatSelectionStatus(value: string) {
+  const map: Record<string, string> = {
+    INELIGIBLE: '无资格',
+    WAITING: '待选择',
+    CURRENT: '当前选择',
+    SELECTED: '已选择',
+    PASSED: '已放弃',
+    ADMIN_SKIPPED: '管理员跳过',
+  }
+  return map[value] ?? value
+}
+
+function formatDeliveryStatus(value: string) {
+  const map: Record<string, string> = {
+    SELECTED: '待交付',
+    DELIVERED: '已交付',
+    UNFINISHED: '未完成',
+  }
+  return value ? map[value] ?? value : '待交付'
+}
+</script>
+
+<style scoped>
+.player-page {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.shell {
+  width: min(1760px, calc(100vw - 24px));
+  margin: 0 auto;
+  background: var(--shell-bg);
+  border: 1px solid #dbe2ea;
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 18px;
+  background: linear-gradient(180deg, #fbfdff 0%, #eef4fb 100%);
+  border-bottom: 1px solid #dde5ef;
+}
+
+.page-header h1 {
+  margin: 6px 0 8px;
+  font-size: 28px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.subtext {
+  margin: 0;
+  color: var(--muted);
+}
+
+.header-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: flex-start;
+  gap: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.logout-button,
+.btn {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--text);
+}
+
+.logout-button {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+.toolbar-card {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.toolbar-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.message-bar {
+  margin: 16px 18px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+}
+
+.message-bar.success {
+  background: #edfdf3;
+  color: var(--success);
+  border: 1px solid #b7e2c5;
+}
+
+.message-bar.error {
+  background: #fff5f5;
+  color: var(--danger);
+  border: 1px solid #efc4c4;
+}
+
+.message-bar.info {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid #cbdcff;
+}
+
+.order-workspace {
+  display: grid;
+  gap: 16px;
+  padding: 16px 18px 20px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.status-card,
+.market-panel,
+.segment-panel,
+.empty-state,
+.loading-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.status-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.status-card span,
+.hint,
+.panel-head span,
+.action-line span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-card strong {
+  font-size: 18px;
+}
+
+.market-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-tab {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 13px 14px;
+}
+
+.market-tab.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.market-tab span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.market-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f7f9fc;
+}
+
+.panel-head.compact {
+  display: block;
+}
+
+.panel-head strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+
+.investment-box,
+.sequence-box {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.investment-box label {
+  display: grid;
+  gap: 6px;
+}
+
+.investment-box label span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.investment-box input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.btn {
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.btn.danger {
+  background: #fff5f5;
+  color: var(--danger);
+  border-color: #efc4c4;
+}
+
+.btn.full {
+  width: 100%;
+}
+
+.sequence-box {
+  border-top: 1px solid var(--line);
+}
+
+.segment-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.segment-row.current {
+  border-color: var(--success);
+  background: #eefaf2;
+}
+
+.segment-row em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.segment-summary,
+.action-line {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.segment-summary span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.sequence-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.sequence-card {
+  display: grid;
+  gap: 4px;
+  min-height: 92px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.sequence-card.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sequence-card.self {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.sequence-card span,
+.sequence-card em,
+.sequence-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.selected-order {
+  display: grid;
+  gap: 6px;
+  margin: 0 16px 16px;
+  border: 1px solid #b7e2c5;
+  border-radius: 14px;
+  background: #edfdf3;
+  padding: 12px 14px;
+}
+
+.order-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.order-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.order-card.locked {
+  opacity: 0.58;
+  background: #f4f6f9;
+}
+
+.order-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.order-title span {
+  border-radius: 999px;
+  background: #edfdf3;
+  color: var(--success);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.locked .order-title span {
+  background: #e2e8f0;
+  color: var(--muted);
+}
+
+.order-card dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.order-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.order-card dt {
+  color: var(--muted);
+}
+
+.order-card dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.empty-state,
+.loading-card {
+  display: grid;
+  gap: 8px;
+  padding: 28px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty-state strong {
+  color: var(--text);
+}
+
+.empty-state.nested {
+  margin: 16px;
+}
+
+@media (max-width: 1280px) {
+  .market-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .status-grid,
+  .market-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .player-page {
+    padding: 12px;
+  }
+
+  .shell {
+    width: 100%;
+  }
+
+  .page-header,
+  .toolbar-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-pills {
+    justify-content: flex-start;
+  }
+
+  .status-grid,
+  .market-strip {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

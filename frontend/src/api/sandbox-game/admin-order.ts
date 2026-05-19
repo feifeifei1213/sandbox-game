@@ -4,12 +4,12 @@ import type {
   GenerateOrderPoolRequest,
   GenerateOrderPoolResult,
   OrderControlConfigResult,
-  OrderMarketCode,
   OrderPoolResult,
   UpdateOrderControlConfigRequest,
   UpdateOrderControlConfigResult,
   UploadOrderExcelResult,
 } from '@/types/sandbox-game-admin'
+import type { AdminMarketSelectionStatus, AdminOrderControlResult, OrderMarketCode, OrderTypeCode } from '@/types/sandbox-game-order'
 import type { CommonResult } from '@/types/http'
 import { clearStoredAuthSession, getStoredAuthSession } from '@/utils/auth-session'
 
@@ -46,6 +46,48 @@ export function getAdminOrderPool(yearNo: number, marketCode: OrderMarketCode, o
     orderType,
   })
   return request<OrderPoolResult>(`/api/v1/sandbox-game/admin-order/get-order-pool?${params.toString()}`)
+}
+
+export function openAdminMarketBidding(payload: { yearNo: number; marketCode: OrderMarketCode }) {
+  return request<AdminOrderControlResult>('/api/v1/sandbox-game/admin-order/open-market-bidding', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function closeAdminMarketBidding(payload: { yearNo: number; marketCode: OrderMarketCode }) {
+  return request<AdminOrderControlResult>('/api/v1/sandbox-game/admin-order/close-market-bidding', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function getAdminMarketSelectionStatus(yearNo: number, marketCode: OrderMarketCode) {
+  const params = new URLSearchParams({
+    yearNo: String(yearNo),
+    marketCode,
+  })
+  return request<AdminMarketSelectionStatus>(`/api/v1/sandbox-game/admin-order/get-market-selection-status?${params.toString()}`)
+}
+
+export function releaseNextAdminOrderSegment(payload: { yearNo: number }) {
+  return request<AdminOrderControlResult>('/api/v1/sandbox-game/admin-order/release-next-segment', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function adminSkipCurrentOrderGroup(payload: {
+  yearNo: number
+  marketCode: OrderMarketCode
+  orderType: OrderTypeCode
+  groupId: number
+  reason: string
+}) {
+  return request<AdminOrderControlResult>('/api/v1/sandbox-game/admin-order/admin-skip-current-group', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 async function multipartRequest<T>(url: string, body: FormData): Promise<T> {

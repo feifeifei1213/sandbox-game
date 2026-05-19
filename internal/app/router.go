@@ -45,6 +45,10 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	orderImportRepo := repository.NewOrderImportBatchRepository(db)
 	orderConfigRepo := repository.NewOrderGenerationConfigRepository(db)
 	orderPoolRepo := repository.NewOrderPoolRepository(db)
+	marketBidRepo := repository.NewGroupMarketBidRepository(db)
+	marketStateRepo := repository.NewMarketBiddingStateRepository(db)
+	marketSequenceRepo := repository.NewMarketSelectionOrderRepository(db)
+	groupOrderSelectionRepo := repository.NewGroupOrderSelectionRepository(db)
 
 	authService := service.NewAuthService(accountRepo, groupRepo, cfg.Auth)
 	authHandler := handler.NewAuthHandler(authService)
@@ -99,6 +103,21 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		playerReportQueryService,
 		playerReportCommandService,
 	)
+	playerOrderQueryService := service.NewPlayerOrderQueryService(
+		gameConfigRepo,
+		groupRepo,
+		groupYearRepo,
+		marketBidRepo,
+		marketStateRepo,
+		marketSequenceRepo,
+		orderPoolRepo,
+		groupOrderSelectionRepo,
+	)
+	playerOrderCommandService := service.NewPlayerOrderCommandService(db)
+	playerOrderHandler := handler.NewPlayerOrderHandler(
+		playerOrderQueryService,
+		playerOrderCommandService,
+	)
 	adminSummaryQueryService := service.NewAdminSummaryQueryService(
 		gameConfigRepo,
 		groupRepo,
@@ -149,9 +168,20 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		orderPoolRepo,
 	)
 	adminOrderCommandService := service.NewAdminOrderCommandService(db)
+	adminOrderControlQueryService := service.NewAdminOrderControlQueryService(
+		gameConfigRepo,
+		groupRepo,
+		marketBidRepo,
+		marketStateRepo,
+		marketSequenceRepo,
+		orderPoolRepo,
+	)
+	adminOrderControlCommandService := service.NewAdminOrderControlCommandService(db)
 	adminOrderHandler := handler.NewAdminOrderHandler(
 		adminOrderQueryService,
 		adminOrderCommandService,
+		adminOrderControlQueryService,
+		adminOrderControlCommandService,
 	)
 
 	engine.GET("/healthz", healthHandler.GetHealth)
@@ -180,6 +210,12 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		playerReport.GET("/get-view", playerReportHandler.GetView)
 		playerReport.PUT("/save-draft", playerReportHandler.SaveDraft)
 		playerReport.POST("/submit", playerReportHandler.Submit)
+
+		playerOrder := protected.Group("/player-order")
+		playerOrder.GET("/get-year-view", playerOrderHandler.GetYearView)
+		playerOrder.POST("/submit-market-investment", playerOrderHandler.SubmitMarketInvestment)
+		playerOrder.POST("/select-order", playerOrderHandler.SelectOrder)
+		playerOrder.POST("/pass-segment", playerOrderHandler.PassSegment)
 
 		adminSummary := protected.Group("/admin-summary")
 		adminSummary.GET("/get-year-summary", adminSummaryHandler.GetYearSummary)
@@ -211,6 +247,11 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminOrder.PUT("/update-control-config", adminOrderHandler.UpdateControlConfig)
 		adminOrder.POST("/generate-order-pool", adminOrderHandler.GenerateOrderPool)
 		adminOrder.GET("/get-order-pool", adminOrderHandler.GetOrderPool)
+		adminOrder.POST("/open-market-bidding", adminOrderHandler.OpenMarketBidding)
+		adminOrder.POST("/close-market-bidding", adminOrderHandler.CloseMarketBidding)
+		adminOrder.GET("/get-market-selection-status", adminOrderHandler.GetMarketSelectionStatus)
+		adminOrder.POST("/release-next-segment", adminOrderHandler.ReleaseNextSegment)
+		adminOrder.POST("/admin-skip-current-group", adminOrderHandler.AdminSkipCurrentGroup)
 	}
 
 	registerFrontendStaticRoutes(engine, cfg, logger)

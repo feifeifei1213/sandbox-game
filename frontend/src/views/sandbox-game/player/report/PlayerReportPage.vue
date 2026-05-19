@@ -20,7 +20,7 @@
       <section class="toolbar-card">
         <div class="toolbar-top">
           <YearTabs :tabs="activeYearTabs" :active-year="activeSelectedYear" @select="handleYearSelect" />
-          <PageModeSwitch active-mode="report" :report-enabled="true" @operating="goOperating" />
+          <PageModeSwitch active-mode="report" :report-enabled="true" @operating="goOperating" @order="goOrder" />
         </div>
       </section>
 
@@ -447,6 +447,13 @@ function buildPreviewNoticeBoard(yearNo: number) {
 function goOperating() {
   router.push({
     path: '/sandbox-game/player/operating',
+    query: previewMode.value ? { yearNo: String(activeSelectedYear.value), preview: '1' } : { yearNo: String(activeSelectedYear.value) },
+  })
+}
+
+function goOrder() {
+  router.push({
+    path: '/sandbox-game/player/orders',
     query: previewMode.value ? { yearNo: String(activeSelectedYear.value), preview: '1' } : { yearNo: String(activeSelectedYear.value) },
   })
 }

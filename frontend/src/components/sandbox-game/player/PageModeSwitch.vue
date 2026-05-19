@@ -12,6 +12,15 @@
     <button
       type="button"
       class="mode-btn"
+      :class="{ active: activeMode === 'order' }"
+      :disabled="activeMode === 'order' || !orderEnabled"
+      @click="$emit('order')"
+    >
+      订单页
+    </button>
+    <button
+      type="button"
+      class="mode-btn"
       :class="{ active: activeMode === 'report' }"
       :disabled="activeMode === 'report' || !reportEnabled"
       @click="$emit('report')"
@@ -22,13 +31,17 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  activeMode: 'operating' | 'report'
+withDefaults(defineProps<{
+  activeMode: 'operating' | 'order' | 'report'
+  orderEnabled?: boolean
   reportEnabled: boolean
-}>()
+}>(), {
+  orderEnabled: true,
+})
 
 defineEmits<{
   (event: 'operating'): void
+  (event: 'order'): void
   (event: 'report'): void
 }>()
 </script>

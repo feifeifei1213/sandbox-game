@@ -15,17 +15,23 @@ import (
 )
 
 type AdminOrderHandler struct {
-	queryService   *service.AdminOrderQueryService
-	commandService *service.AdminOrderCommandService
+	queryService          *service.AdminOrderQueryService
+	commandService        *service.AdminOrderCommandService
+	controlQueryService   *service.AdminOrderControlQueryService
+	controlCommandService *service.AdminOrderControlCommandService
 }
 
 func NewAdminOrderHandler(
 	queryService *service.AdminOrderQueryService,
 	commandService *service.AdminOrderCommandService,
+	controlQueryService *service.AdminOrderControlQueryService,
+	controlCommandService *service.AdminOrderControlCommandService,
 ) *AdminOrderHandler {
 	return &AdminOrderHandler{
-		queryService:   queryService,
-		commandService: commandService,
+		queryService:          queryService,
+		commandService:        commandService,
+		controlQueryService:   controlQueryService,
+		controlCommandService: controlCommandService,
 	}
 }
 
@@ -235,6 +241,137 @@ func (h *AdminOrderHandler) GetOrderPool(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminOrderHandler) OpenMarketBidding(c *gin.Context) {
+	var req dto.AdminOrderOpenMarketBiddingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "开放市场投入参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 {
+		abortPlayerOrderBadRequest(c, "yearNo 参数不正确", nil)
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权开放市场投入") {
+		return
+	}
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.controlCommandService.OpenMarketBidding(c.Request.Context(), service.OpenMarketBiddingCommand{
+		YearNo:       *req.YearNo,
+		MarketCode:   req.MarketCode,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortOrderError(c, err, "开放市场投入失败")
+		return
+	}
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminOrderHandler) CloseMarketBidding(c *gin.Context) {
+	var req dto.AdminOrderCloseMarketBiddingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "关闭市场投入参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 {
+		abortPlayerOrderBadRequest(c, "yearNo 参数不正确", nil)
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权关闭市场投入") {
+		return
+	}
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.controlCommandService.CloseMarketBidding(c.Request.Context(), service.CloseMarketBiddingCommand{
+		YearNo:       *req.YearNo,
+		MarketCode:   req.MarketCode,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortOrderError(c, err, "关闭市场投入失败")
+		return
+	}
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminOrderHandler) GetMarketSelectionStatus(c *gin.Context) {
+	var req dto.AdminOrderGetMarketSelectionStatusRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "市场选单状态查询参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 {
+		abortPlayerOrderBadRequest(c, "yearNo 参数不正确", nil)
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权查看市场选单状态") {
+		return
+	}
+	result, err := h.controlQueryService.GetMarketSelectionStatus(c.Request.Context(), *req.YearNo, req.MarketCode)
+	if err != nil {
+		abortOrderError(c, err, "获取市场选单状态失败")
+		return
+	}
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminOrderHandler) ReleaseNextSegment(c *gin.Context) {
+	var req dto.AdminOrderReleaseNextSegmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "释放标段参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 {
+		abortPlayerOrderBadRequest(c, "yearNo 参数不正确", nil)
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权释放标段") {
+		return
+	}
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.controlCommandService.ReleaseNextSegment(c.Request.Context(), service.ReleaseNextSegmentCommand{
+		YearNo:       *req.YearNo,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortOrderError(c, err, "释放下一个标段失败")
+		return
+	}
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminOrderHandler) AdminSkipCurrentGroup(c *gin.Context) {
+	var req dto.AdminOrderSkipCurrentGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "管理员跳过参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 || req.GroupID == nil || *req.GroupID <= 0 {
+		abortPlayerOrderBadRequest(c, "yearNo 或 groupId 参数不正确", nil)
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权跳过当前小组") {
+		return
+	}
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.controlCommandService.AdminSkipCurrentGroup(c.Request.Context(), service.AdminSkipCurrentGroupCommand{
+		YearNo:       *req.YearNo,
+		MarketCode:   req.MarketCode,
+		OrderType:    req.OrderType,
+		GroupID:      *req.GroupID,
+		Reason:       req.Reason,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortOrderError(c, err, "跳过当前小组失败")
+		return
+	}
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 

@@ -36,6 +36,15 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/sandbox-game/player/orders',
+    name: 'sandbox-player-orders',
+    component: () => import('@/views/sandbox-game/player/order/PlayerOrderPage.vue'),
+    meta: {
+      requiresAuth: true,
+      roleType: 'GROUP',
+    },
+  },
+  {
     path: '/sandbox-game/admin',
     component: () => import('@/views/sandbox-game/admin/AdminLayout.vue'),
     meta: {

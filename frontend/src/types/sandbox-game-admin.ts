@@ -4,10 +4,11 @@ export type UnlockTargetType = 'OPERATING' | 'REPORT'
 export type UnlockStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEAR_END'
 export type NoticeTargetScope = 'ALL' | 'GROUP'
 export type AdjustmentType = 'REWARD' | 'PENALTY'
-export type OrderMarketCode = 'LOCAL' | 'REGIONAL' | 'NATIONAL' | 'GLOBAL'
-export type AdminOrderType = 'AGENCY_INSPECTION' | 'TWO_CABIN_VIP' | 'BUSINESS_VIP' | 'MEMBER_CUSTOM'
+import type { OrderMarketCode, OrderPoolStatus, OrderTypeCode } from '@/types/sandbox-game-order'
+
+export type { OrderMarketCode, OrderPoolStatus }
+export type AdminOrderType = OrderTypeCode
 export type OrderConfigStatus = 'DRAFT' | 'LOCKED'
-export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'VOID'
 
 export interface AdminActionSummary {
   actionCode: string

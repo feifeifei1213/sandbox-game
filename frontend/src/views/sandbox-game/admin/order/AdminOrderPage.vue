@@ -77,6 +77,122 @@
       <span v-for="warning in config.warnings" :key="`${warning.level}-${warning.message}`">{{ warning.message }}</span>
     </section>
 
+    <section class="panel-card control-panel">
+      <div class="panel-head">
+        <div>
+          <strong>市场竞标控制</strong>
+          <span>按市场开放/关闭投入，关闭后生成该市场下全部标段的选单顺序；标段按释放顺序逐个释放。</span>
+        </div>
+        <button type="button" class="btn" :disabled="loadingSelectionStatus" @click="handleLoadSelectionStatus">
+          {{ loadingSelectionStatus ? '加载中...' : '刷新状态' }}
+        </button>
+      </div>
+
+      <div class="control-grid">
+        <label class="field">
+          <span>控制市场</span>
+          <select v-model="store.controlForm.marketCode" @change="handleControlMarketChange">
+            <option v-for="item in marketOptions" :key="item.code" :value="item.code">{{ item.name }}</option>
+          </select>
+        </label>
+        <div class="control-actions">
+          <button type="button" class="btn" :disabled="controllingMarket" @click="handleOpenMarket">
+            {{ controllingMarket ? '处理中...' : '开放投入' }}
+          </button>
+          <button type="button" class="btn" :disabled="controllingMarket" @click="handleCloseMarket">
+            {{ controllingMarket ? '处理中...' : '关闭并生成顺序' }}
+          </button>
+          <button type="button" class="btn primary" :disabled="releasingSegment" @click="handleReleaseNextSegment">
+            {{ releasingSegment ? '释放中...' : '释放下一个标段' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="selection-overview">
+        <article class="status-mini">
+          <span>市场状态</span>
+          <strong>{{ formatSegmentStatus(marketSelectionStatus?.marketBidStatus) }}</strong>
+        </article>
+        <article class="status-mini">
+          <span>市场龙头</span>
+          <strong>{{ marketSelectionStatus?.leaderGroupId ? `组ID ${marketSelectionStatus.leaderGroupId}` : '--' }}</strong>
+        </article>
+        <article class="status-mini">
+          <span>当前标段</span>
+          <strong>{{ currentSegment ? `${currentSegment.marketName} ${currentSegment.orderTypeName}` : '--' }}</strong>
+        </article>
+        <article class="status-mini">
+          <span>当前小组</span>
+          <strong>{{ currentGroupName }}</strong>
+        </article>
+      </div>
+
+      <div class="skip-row">
+        <input v-model="store.controlForm.skipReason" type="text" placeholder="代跳过原因，必填">
+        <button type="button" class="btn danger" :disabled="!currentSegment?.currentGroupId || skippingGroup" @click="handleSkipCurrentGroup">
+          {{ skippingGroup ? '跳过中...' : '跳过当前小组' }}
+        </button>
+      </div>
+
+      <div class="table-scroll">
+        <table class="selection-table">
+          <thead>
+            <tr>
+              <th>释放顺序</th>
+              <th>市场</th>
+              <th>订单类型</th>
+              <th>标段状态</th>
+              <th>当前组</th>
+              <th>可选</th>
+              <th>已选</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!marketSelectionStatus || marketSelectionStatus.segments.length === 0">
+              <td colspan="7" class="empty-row">当前市场暂无标段状态，请先生成订单池。</td>
+            </tr>
+            <tr v-for="segment in marketSelectionStatus?.segments ?? []" :key="`${segment.marketCode}-${segment.orderType}`">
+              <td>#{{ segment.releaseSequenceNo }}</td>
+              <td>{{ segment.marketName }}</td>
+              <td>{{ segment.orderTypeName }}</td>
+              <td>{{ formatSegmentStatus(segment.segmentStatus) }}</td>
+              <td>{{ formatGroupName(segment.currentGroupId) }}</td>
+              <td class="number-cell">{{ segment.availableCount }}</td>
+              <td class="number-cell">{{ segment.selectedCount }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-scroll sequence-scroll">
+        <table class="selection-table">
+          <thead>
+            <tr>
+              <th>顺序</th>
+              <th>小组</th>
+              <th>市场投入</th>
+              <th>市场龙头</th>
+              <th>状态</th>
+              <th>已选订单</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!currentSegment || currentSegment.selectionOrder.length === 0">
+              <td colspan="6" class="empty-row">当前没有正在选单的标段。</td>
+            </tr>
+            <tr v-for="item in currentSegment?.selectionOrder ?? []" :key="item.groupId">
+              <td>#{{ item.sequenceNo }}</td>
+              <td>{{ item.groupName }}</td>
+              <td class="number-cell">{{ formatAmount(item.marketInvestment) }}</td>
+              <td>{{ item.isMarketLeader ? '是' : '否' }}</td>
+              <td>{{ formatSelectionStatus(item.selectionStatus) }}</td>
+              <td>{{ item.selectedOrderId ? `#${item.selectedOrderId}` : '--' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="panel-card">
       <div class="panel-head">
         <div>
@@ -210,7 +326,13 @@ const {
   savingConfig,
   generatingPool,
   loadingPool,
+  loadingSelectionStatus,
+  controllingMarket,
+  releasingSegment,
+  skippingGroup,
   pageMessage,
+  marketSelectionStatus,
+  currentSegment,
   sortedItems,
   totalOrderCount,
   totalGeneratedCount,
@@ -234,6 +356,7 @@ const latestBatchText = computed(() => {
   }
   return `最新批次 #${config.value.latestBatchId}，上传时间 ${formatDateTime(config.value.latestBatchUploadedAt)}。`
 })
+const currentGroupName = computed(() => formatGroupName(currentSegment.value?.currentGroupId ?? null))
 
 onMounted(async () => {
   try {
@@ -243,6 +366,7 @@ onMounted(async () => {
     const defaultYear = Math.max(shellConfig.value?.currentOpenYear ?? 1, 1)
     await store.bootstrap(defaultYear)
     await store.loadPool({ silent: true })
+    await store.loadSelectionStatus({ silent: true })
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -252,6 +376,7 @@ async function handleYearChange() {
   try {
     await store.loadConfig()
     await store.loadPool({ silent: true })
+    await store.loadSelectionStatus({ silent: true })
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -261,6 +386,7 @@ async function handleRefresh() {
   try {
     await store.loadConfig()
     await store.loadPool({ silent: true })
+    await store.loadSelectionStatus({ silent: true })
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -306,6 +432,54 @@ async function handleLoadPool() {
   }
 }
 
+async function handleLoadSelectionStatus() {
+  try {
+    await store.loadSelectionStatus()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleControlMarketChange() {
+  try {
+    await store.loadSelectionStatus()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleOpenMarket() {
+  try {
+    await store.openMarket()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleCloseMarket() {
+  try {
+    await store.closeMarket()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleReleaseNextSegment() {
+  try {
+    await store.releaseNextSegment()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleSkipCurrentGroup() {
+  try {
+    await store.skipCurrentGroup()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) {
     return '--'
@@ -332,6 +506,39 @@ function formatPoolStatus(value: OrderPoolStatus) {
     return '作废'
   }
   return value
+}
+
+function formatSegmentStatus(value?: string) {
+  const map: Record<string, string> = {
+    BID_OPEN: '投入开放',
+    BID_CLOSED: '投入关闭',
+    SEQUENCE_READY: '顺序已生成',
+    WAITING_RELEASE: '等待释放',
+    SELECTING: '选单中',
+    COMPLETED: '已完成',
+    SKIPPED: '已跳过',
+  }
+  return value ? map[value] ?? value : '--'
+}
+
+function formatSelectionStatus(value: string) {
+  const map: Record<string, string> = {
+    INELIGIBLE: '无资格',
+    WAITING: '待选择',
+    CURRENT: '当前选择',
+    SELECTED: '已选择',
+    PASSED: '已放弃',
+    ADMIN_SKIPPED: '管理员跳过',
+  }
+  return map[value] ?? value
+}
+
+function formatGroupName(groupId?: number | null) {
+  if (!groupId) {
+    return '--'
+  }
+  const bid = marketSelectionStatus.value?.bids.find((item) => item.groupId === groupId)
+  return bid?.groupName ?? `组ID ${groupId}`
 }
 </script>
 
@@ -379,6 +586,12 @@ function formatPoolStatus(value: OrderPoolStatus) {
   color: #ffffff;
   border-color: var(--accent);
   background: var(--accent);
+}
+
+.btn.danger {
+  color: var(--danger);
+  border-color: #efc4c4;
+  background: #fff5f5;
 }
 
 .message-bar {
@@ -601,6 +814,80 @@ function formatPoolStatus(value: OrderPoolStatus) {
   gap: 12px;
 }
 
+.control-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+}
+
+.control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.selection-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.status-mini {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+  padding: 12px;
+}
+
+.status-mini span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-mini strong {
+  font-size: 16px;
+}
+
+.skip-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.skip-row input {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.selection-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.selection-table th,
+.selection-table td {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.selection-table th {
+  background: #f4f6f9;
+  text-align: center;
+}
+
+.sequence-scroll {
+  border-top: 1px solid var(--line);
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -635,7 +922,10 @@ function formatPoolStatus(value: OrderPoolStatus) {
   }
 
   .stats-grid,
-  .pool-filter {
+  .pool-filter,
+  .control-grid,
+  .selection-overview,
+  .skip-row {
     grid-template-columns: 1fr;
   }
 }
