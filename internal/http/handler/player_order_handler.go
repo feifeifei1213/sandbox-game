@@ -135,6 +135,34 @@ func (h *PlayerOrderHandler) PassSegment(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 
+func (h *PlayerOrderHandler) DeliverOrders(c *gin.Context) {
+	var req dto.PlayerOrderDeliverOrdersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "交付订单参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 || len(req.OrderIDs) == 0 {
+		abortPlayerOrderBadRequest(c, "yearNo 或 orderIds 参数不正确", nil)
+		return
+	}
+	identity, ok := requireGroupIdentity(c, "当前身份无权交付订单")
+	if !ok {
+		return
+	}
+	result, err := h.commandService.DeliverOrders(c.Request.Context(), service.DeliverOrdersCommand{
+		GroupID:      *identity.GroupID,
+		YearNo:       *req.YearNo,
+		StageCode:    req.StageCode,
+		OrderIDs:     req.OrderIDs,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortOrderError(c, err, "交付订单失败")
+		return
+	}
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func requireGroupIdentity(c *gin.Context, forbiddenMsg string) (middleware.AuthIdentity, bool) {
 	identity, ok := middleware.GetAuthIdentity(c)
 	if !ok {
@@ -190,7 +218,11 @@ func abortOrderError(c *gin.Context, err error, fallbackMessage string) {
 		errors.Is(err, service.ErrOrderSegmentNotSelecting),
 		errors.Is(err, service.ErrOrderSelectionNotEligible),
 		errors.Is(err, service.ErrOrderCannotSelect),
-		errors.Is(err, service.ErrOrderAdminSkipReasonRequired):
+		errors.Is(err, service.ErrOrderAdminSkipReasonRequired),
+		errors.Is(err, service.ErrOrderDeliveryStageInvalid),
+		errors.Is(err, service.ErrOrderDeliveryOrderInvalid),
+		errors.Is(err, service.ErrOrderDeliveryRevenueMismatch),
+		errors.Is(err, service.ErrOrderPrerequisiteIncomplete):
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusUnprocessableEntity, enum.UnprocessableEntityCode, resolveOrderErrorMessage(err), err))
 	default:
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusInternalServerError, enum.InternalServerErrorCode, fallbackMessage, err))
@@ -237,6 +269,14 @@ func resolveOrderErrorMessage(err error) string {
 		return "该订单不可选择"
 	case errors.Is(err, service.ErrOrderAdminSkipReasonRequired):
 		return "管理员跳过必须选择当前小组并填写原因"
+	case errors.Is(err, service.ErrOrderDeliveryStageInvalid):
+		return "交付季度必须等于当前经营季度"
+	case errors.Is(err, service.ErrOrderDeliveryOrderInvalid):
+		return "只能交付本组本年已选且未交付订单"
+	case errors.Is(err, service.ErrOrderDeliveryRevenueMismatch):
+		return "本季度销售收入必须等于交付订单金额合计"
+	case errors.Is(err, service.ErrOrderPrerequisiteIncomplete):
+		return "本年订单选择尚未完成"
 	default:
 		return "订单流程处理失败"
 	}

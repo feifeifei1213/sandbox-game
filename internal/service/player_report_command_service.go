@@ -75,6 +75,7 @@ type PlayerReportCommandService struct {
 	calculator          *reportrules.Calculator
 	summaryBuilder      *summaryrules.Builder
 	playerNoticeService *PlayerNoticeService
+	orderLinkService    *OrderOperatingLinkService
 }
 
 func NewPlayerReportCommandService(
@@ -86,6 +87,7 @@ func NewPlayerReportCommandService(
 	initialBaseRepo *repository.InitialBaselineRepository,
 	reportRepo *repository.ReportRepository,
 	playerNoticeService *PlayerNoticeService,
+	orderLinkService *OrderOperatingLinkService,
 ) *PlayerReportCommandService {
 	return &PlayerReportCommandService{
 		db:                  db,
@@ -100,6 +102,7 @@ func NewPlayerReportCommandService(
 		calculator:          reportrules.NewCalculator(),
 		summaryBuilder:      summaryrules.NewBuilder(),
 		playerNoticeService: playerNoticeService,
+		orderLinkService:    orderLinkService,
 	}
 }
 
@@ -336,6 +339,13 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 	operatingPayload, err := s.playerNoticeService.OverlayAdjustments(ctx, group.ID, yearState.YearNo, operatingPayload)
 	if err != nil {
 		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
+	if yearState.YearNo > 0 && s.orderLinkService != nil {
+		linkedPayload, _, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, group.ID, yearState.YearNo, operatingPayload)
+		if linkErr != nil {
+			return calcctx.CalculationContext{}, fmt.Errorf("apply order operating values: %w", linkErr)
+		}
+		operatingPayload = linkedPayload
 	}
 
 	if yearState.YearNo == 0 {

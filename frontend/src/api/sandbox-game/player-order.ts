@@ -1,5 +1,7 @@
 import { request } from '@/api/http'
 import type {
+  DeliverOrdersRequest,
+  DeliverOrdersResult,
   PassOrderSegmentRequest,
   PassOrderSegmentResult,
   PlayerOrderYearView,
@@ -29,6 +31,13 @@ export function selectPlayerOrder(payload: SelectOrderRequest) {
 
 export function passPlayerOrderSegment(payload: PassOrderSegmentRequest) {
   return request<PassOrderSegmentResult>('/api/v1/sandbox-game/player-order/pass-segment', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deliverPlayerOrders(payload: DeliverOrdersRequest) {
+  return request<DeliverOrdersResult>('/api/v1/sandbox-game/player-order/deliver-orders', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

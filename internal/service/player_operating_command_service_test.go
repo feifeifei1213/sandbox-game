@@ -203,6 +203,7 @@ func buildPlayerOperatingServices(db *gorm.DB) (*PlayerOperatingCommandService, 
 		initialBaselineRepo,
 		reportRepo,
 		playerNoticeService,
+		nil,
 	)
 	queryService := NewPlayerOperatingQueryService(
 		gameConfigRepo,
@@ -213,6 +214,7 @@ func buildPlayerOperatingServices(db *gorm.DB) (*PlayerOperatingCommandService, 
 		reportRepo,
 		assembler.NewPlayerOperatingAssembler(),
 		playerNoticeService,
+		nil,
 	)
 
 	return commandService, queryService

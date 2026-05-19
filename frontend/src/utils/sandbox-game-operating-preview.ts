@@ -1,7 +1,16 @@
 ﻿import type { OperatingCarryForward, OperatingPayload } from '@/types/sandbox-game'
 
 const quarterSequence = ['Q1', 'Q2', 'Q3', 'Q4'] as const
-const marketProductKeys = ['basicProductTotal', 'standardProductTotal', 'precisionProductTotal', 'intelligentProductTotal'] as const
+const marketProductKeys = [
+  'agencyInspectionTotal',
+  'twoCabinVipTotal',
+  'businessVipTotal',
+  'memberCustomTotal',
+  'basicProductTotal',
+  'standardProductTotal',
+  'precisionProductTotal',
+  'intelligentProductTotal',
+] as const
 
 type QuarterCode = (typeof quarterSequence)[number]
 
@@ -34,7 +43,10 @@ export function buildOperatingPreviewCalculation(params: BuildOperatingPreviewPa
     toNumber(payload.beginning.taxAndPlanning.marketInvestmentTotal),
     toNumber(payload.beginning.taxAndPlanning.marketBidCost),
   )
-  const orderTotal = computeOrderTotal(payload)
+  const orderTotal =
+    payload.beginning.taxAndPlanning.orderLinked === true
+      ? firstNonZero(toNumber(payload.beginning.taxAndPlanning.orderTotal), computeOrderTotal(payload))
+      : computeOrderTotal(payload)
   const shortTermRepayment = sumQuarterField(payload.quarter.shortTermLoan, 'dueRepayment')
   const shortTermInterest = sumQuarterField(payload.quarter.shortTermLoan, 'interest')
   const newShortTermLoan = sumQuarterField(payload.quarter.shortTermLoan, 'newLoan')
@@ -265,6 +277,9 @@ function selectPeriodEndCash(currentStageCode: string | null | undefined, quarte
 function computeOrderTotal(payload: OperatingPayload): number {
   return payload.beginning.marketBid.reduce((sum: number, row) => {
     const typedRow = row as NumericRecord
+    if (payload.beginning.taxAndPlanning.orderLinked === true) {
+      return sum + toNumber(typedRow.orderAmount)
+    }
     const rowTotal = marketProductKeys.reduce((total: number, key) => total + toNumber(typedRow[key]), 0)
     return sum + rowTotal
   }, 0)

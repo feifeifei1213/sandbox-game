@@ -475,6 +475,16 @@ func (r *GroupMarketBidRepository) ListByYearMarket(ctx context.Context, yearNo 
 	return items, nil
 }
 
+func (r *GroupMarketBidRepository) ListByGroupYear(ctx context.Context, groupID int64, yearNo int) ([]entity.GroupMarketBid, error) {
+	var items []entity.GroupMarketBid
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 type MarketSelectionOrderRepository struct {
 	db *gorm.DB
 }
@@ -610,6 +620,96 @@ func (r *GroupOrderSelectionRepository) GetByGroupSegment(ctx context.Context, g
 		return nil, err
 	}
 	return &item, nil
+}
+
+type GroupOrderAmountSummary struct {
+	MarketCode string  `gorm:"column:market_code"`
+	OrderType  string  `gorm:"column:order_type"`
+	Amount     float64 `gorm:"column:amount"`
+}
+
+func (r *GroupOrderSelectionRepository) SumSelectedAmountByGroupYearSegment(ctx context.Context, groupID int64, yearNo int) ([]GroupOrderAmountSummary, error) {
+	var rows []GroupOrderAmountSummary
+	if err := r.db.WithContext(ctx).
+		Table("sg_group_order_selection AS s").
+		Select("s.market_code, s.order_type, COALESCE(SUM(p.order_amount), 0) AS amount").
+		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
+		Where("s.group_id = ? AND s.year_no = ? AND s.selection_status = ?", groupID, yearNo, enum.OrderSelectionStatusSelected).
+		Group("s.market_code, s.order_type").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+type GroupSelectedOrderDetail struct {
+	SelectionID        int64   `gorm:"column:selection_id"`
+	OrderID            int64   `gorm:"column:order_id"`
+	MarketCode         string  `gorm:"column:market_code"`
+	OrderType          string  `gorm:"column:order_type"`
+	DeliveryStatus     string  `gorm:"column:delivery_status"`
+	DeliveredStageCode *string `gorm:"column:delivered_stage_code"`
+	OrderAmount        float64 `gorm:"column:order_amount"`
+}
+
+func (r *GroupOrderSelectionRepository) ListSelectedOrderDetailsForUpdate(ctx context.Context, groupID int64, yearNo int, orderIDs []int64) ([]GroupSelectedOrderDetail, error) {
+	if len(orderIDs) == 0 {
+		return []GroupSelectedOrderDetail{}, nil
+	}
+	var rows []GroupSelectedOrderDetail
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Table("sg_group_order_selection AS s").
+		Select("s.id AS selection_id, s.order_id, s.market_code, s.order_type, s.delivery_status, s.delivered_stage_code, p.order_amount").
+		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
+		Where("s.group_id = ? AND s.year_no = ? AND s.order_id IN ?", groupID, yearNo, orderIDs).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *GroupOrderSelectionRepository) SumDeliveredAmountByStage(ctx context.Context, groupID int64, yearNo int, stageCode string) (float64, error) {
+	type row struct {
+		Amount float64 `gorm:"column:amount"`
+	}
+	var result row
+	if err := r.db.WithContext(ctx).
+		Table("sg_group_order_selection AS s").
+		Select("COALESCE(SUM(p.order_amount), 0) AS amount").
+		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
+		Where("s.group_id = ? AND s.year_no = ? AND s.delivery_status = ? AND s.delivered_stage_code = ?", groupID, yearNo, enum.OrderDeliveryStatusDelivered, stageCode).
+		Scan(&result).Error; err != nil {
+		return 0, err
+	}
+	return result.Amount, nil
+}
+
+func (r *GroupOrderSelectionRepository) MarkDeliveredBySelectionIDs(ctx context.Context, selectionIDs []int64, stageCode string, operatorName string, operateTime time.Time) error {
+	if len(selectionIDs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Model(&entity.GroupOrderSelection{}).
+		Where("id IN ? AND delivery_status = ?", selectionIDs, enum.OrderDeliveryStatusSelected).
+		Updates(map[string]any{
+			"delivery_status":      enum.OrderDeliveryStatusDelivered,
+			"delivered_stage_code": stageCode,
+			"delivered_at":         operateTime,
+			"updater":              operatorName,
+			"update_time":          operateTime,
+		}).Error
+}
+
+func (r *GroupOrderSelectionRepository) MarkUnfinishedByGroupYear(ctx context.Context, groupID int64, yearNo int, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.GroupOrderSelection{}).
+		Where("group_id = ? AND year_no = ? AND delivery_status = ?", groupID, yearNo, enum.OrderDeliveryStatusSelected).
+		Updates(map[string]any{
+			"delivery_status": enum.OrderDeliveryStatusUnfinished,
+			"updater":         operatorName,
+			"update_time":     operateTime,
+		}).Error
 }
 
 func IsRecordNotFound(err error) bool {

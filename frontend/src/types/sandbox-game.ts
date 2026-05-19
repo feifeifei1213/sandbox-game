@@ -1,4 +1,5 @@
 ﻿export type NumericCellValue = number | ''
+export type CellValue = number | string | boolean | null
 export type QuarterValueMap = Record<string, Record<string, NumericCellValue>>
 
 export interface PlayerNoticeItem {
@@ -44,8 +45,8 @@ export interface YearTabsResult {
 
 export interface OperatingPayload {
   beginning: {
-    taxAndPlanning: Record<string, NumericCellValue>
-    marketBid: Array<Record<string, NumericCellValue>>
+    taxAndPlanning: Record<string, CellValue>
+    marketBid: Array<Record<string, CellValue>>
   }
   quarter: {
     shortTermLoan: QuarterValueMap

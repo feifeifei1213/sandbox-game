@@ -31,6 +31,7 @@ type PlayerReportQueryService struct {
 	calculator          *reportrules.Calculator
 	transitionGuard     *state.TransitionGuard
 	playerNoticeService *PlayerNoticeService
+	orderLinkService    *OrderOperatingLinkService
 }
 
 func NewPlayerReportQueryService(
@@ -42,6 +43,7 @@ func NewPlayerReportQueryService(
 	reportRepo *repository.ReportRepository,
 	assembler *assembler.PlayerReportAssembler,
 	playerNoticeService *PlayerNoticeService,
+	orderLinkService *OrderOperatingLinkService,
 ) *PlayerReportQueryService {
 	return &PlayerReportQueryService{
 		gameConfigRepo:      gameConfigRepo,
@@ -54,6 +56,7 @@ func NewPlayerReportQueryService(
 		calculator:          reportrules.NewCalculator(),
 		transitionGuard:     state.NewTransitionGuard(),
 		playerNoticeService: playerNoticeService,
+		orderLinkService:    orderLinkService,
 	}
 }
 
@@ -96,6 +99,13 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
+	if yearNo > 0 && s.orderLinkService != nil {
+		linkedPayload, _, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, groupID, yearNo, operatingPayload)
+		if linkErr != nil {
+			return nil, fmt.Errorf("apply order operating values: %w", linkErr)
+		}
+		operatingPayload = linkedPayload
 	}
 
 	if yearNo == 0 {

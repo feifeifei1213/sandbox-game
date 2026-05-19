@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
 import {
+  deliverPlayerOrders,
   getPlayerOrderYearView,
   passPlayerOrderSegment,
   selectPlayerOrder,
@@ -10,6 +11,7 @@ import {
 } from '@/api/sandbox-game/player-order'
 import type { CurrentGameConfigResult, YearTabItem, YearTabsResult } from '@/types/sandbox-game'
 import type {
+  OrderDeliveryStageCode,
   OrderMarketCode,
   OrderTypeCode,
   PlayerOrderMarketView,
@@ -49,6 +51,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   const submittingInvestment = ref(false)
   const selectingOrder = ref(false)
   const passingSegment = ref(false)
+  const deliveringOrders = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
   const investmentDraft = reactive<Record<OrderMarketCode, number | null>>({
     LOCAL: null,
@@ -183,6 +186,39 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     }
   }
 
+  async function deliverSelectedOrder(segment: PlayerOrderSegmentView, stageCode: OrderDeliveryStageCode) {
+    if (!segment.selectedOrder) {
+      return
+    }
+    await deliverOrders([segment.selectedOrder.orderId], stageCode)
+  }
+
+  async function deliverOrders(orderIds: number[], stageCode: OrderDeliveryStageCode) {
+    const uniqueOrderIds = Array.from(new Set(orderIds.filter((item) => Number.isFinite(item) && item > 0)))
+    if (uniqueOrderIds.length === 0) {
+      return
+    }
+    deliveringOrders.value = true
+    pageMessage.value = null
+    try {
+      await deliverPlayerOrders({
+        yearNo: selectedYear.value,
+        stageCode,
+        orderIds: uniqueOrderIds,
+      })
+      pageMessage.value = {
+        type: 'success',
+        text: `已交付 ${uniqueOrderIds.length} 个订单。`,
+      }
+      await loadYearView(selectedYear.value, { silent: true })
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '交付订单失败')
+      throw error
+    } finally {
+      deliveringOrders.value = false
+    }
+  }
+
   function setSelectedMarket(marketCode: OrderMarketCode) {
     selectedMarketCode.value = marketCode
   }
@@ -202,6 +238,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     submittingInvestment,
     selectingOrder,
     passingSegment,
+    deliveringOrders,
     pageMessage,
     investmentDraft,
     markets,
@@ -215,6 +252,8 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     submitInvestment,
     selectOrder,
     passSegment,
+    deliverSelectedOrder,
+    deliverOrders,
     setSelectedMarket,
     setInvestmentDraft,
   }

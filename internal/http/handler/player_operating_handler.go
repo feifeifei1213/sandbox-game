@@ -256,6 +256,13 @@ func (h *PlayerOperatingHandler) SubmitStage(c *gin.Context) {
 				"当前阶段不满足提交流程要求",
 				err,
 			))
+		case errors.Is(err, service.ErrOrderPrerequisiteIncomplete):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"本年订单选择尚未完成，不能提交 Q1",
+				err,
+			))
 		default:
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,

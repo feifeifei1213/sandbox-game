@@ -19,6 +19,7 @@ export type OrderSelectionStatus =
   | 'ADMIN_SKIPPED'
   | string
 export type OrderDeliveryStatus = 'SELECTED' | 'DELIVERED' | 'UNFINISHED' | string
+export type OrderDeliveryStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4'
 
 export interface PlayerOrderPoolItem {
   orderId: number
@@ -27,6 +28,8 @@ export interface PlayerOrderPoolItem {
   unitPrice: number
   accountTerm: number
   poolStatus: OrderPoolStatus
+  deliveryStatus?: OrderDeliveryStatus
+  deliveredStageCode?: string | null
 }
 
 export interface PlayerOrderSequenceView {
@@ -117,6 +120,21 @@ export interface PassOrderSegmentResult {
   orderType: OrderTypeCode
   nextGroupId: number | null
   segmentStatus: OrderSegmentStatus
+}
+
+export interface DeliverOrdersRequest {
+  yearNo: number
+  stageCode: OrderDeliveryStageCode
+  orderIds: number[]
+}
+
+export interface DeliverOrdersResult {
+  groupId: number
+  yearNo: number
+  stageCode: string
+  orderIds: number[]
+  deliveredAmount: number
+  deliveredAt: string
 }
 
 export interface AdminOrderControlResult {

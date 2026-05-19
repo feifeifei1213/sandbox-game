@@ -64,7 +64,7 @@
             <td v-for="field in marketProductFields" :key="`${region.key}-${field.key}`" :class="editableCellClass('YEAR_START')">
               <input
                 :value="displayCell(marketBidRows[index][field.key])"
-                :disabled="!isScopeEditable('YEAR_START')"
+                :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
                 inputmode="decimal"
                 @input="updateMarketBidField(index, field.key, $event)"
               />
@@ -74,7 +74,7 @@
             <td v-if="index === 0" :class="editableCellClass('YEAR_START')" :rowspan="marketRegions.length">
               <input
                 :value="displayCell(marketInvestmentTotal)"
-                :disabled="!isScopeEditable('YEAR_START')"
+                :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
                 inputmode="decimal"
                 @input="updateMarketInvestmentTotal($event)"
               />
@@ -595,9 +595,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { cloneOperatingPayload, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
+import { cloneOperatingPayload, type CellValue, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
 
-type MarketBidKey = 'basicProductTotal' | 'standardProductTotal' | 'precisionProductTotal' | 'intelligentProductTotal'
+type MarketBidKey =
+  | 'basicProductTotal'
+  | 'standardProductTotal'
+  | 'precisionProductTotal'
+  | 'intelligentProductTotal'
+  | 'agencyInspectionTotal'
+  | 'twoCabinVipTotal'
+  | 'businessVipTotal'
+  | 'memberCustomTotal'
 type MarketBidRow = Record<MarketBidKey | 'orderAmount', NumericCellValue>
 
 const props = defineProps<{
@@ -623,11 +631,13 @@ const marketRegions = [
 ] as const
 
 const marketProductFields = [
-  { key: 'basicProductTotal', label: '基础产品总价' },
-  { key: 'standardProductTotal', label: '标准产品总价' },
-  { key: 'precisionProductTotal', label: '精密产品总价' },
-  { key: 'intelligentProductTotal', label: '智能产品总价' },
+  { key: 'agencyInspectionTotal', label: '代办过检' },
+  { key: 'twoCabinVipTotal', label: '两舱贵宾' },
+  { key: 'businessVipTotal', label: '商务贵宾' },
+  { key: 'memberCustomTotal', label: '会员定制' },
 ] as const satisfies ReadonlyArray<{ key: MarketBidKey; label: string }>
+
+const legacyMarketProductKeys = ['basicProductTotal', 'standardProductTotal', 'precisionProductTotal', 'intelligentProductTotal'] as const satisfies ReadonlyArray<MarketBidKey>
 
 const quarterList = [
   { key: 'q1', label: '第一季度', scope: 'Q1' },
@@ -680,8 +690,9 @@ const extraFields = [
 const materialFieldKeys = materialFields.map((item) => item.key)
 
 const marketBidRows = computed(() => buildFixedMarketBidRows(props.modelValue.beginning.marketBid))
-const marketOrderTotal = computed(() => marketBidRows.value.reduce((total, _row, index) => total + getMarketRowTotal(index), 0))
+const marketOrderTotal = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.orderTotal, props.derivedValues.orderTotal, marketBidRows.value.reduce((total, _row, index) => total + getMarketRowTotal(index), 0)))
 const marketInvestmentTotal = computed(() => getStoredMarketInvestmentValue())
+const marketBidReadonly = computed(() => isOrderLinkedMarketBid())
 const taxPaymentDisplay = computed(() => resolveMetric(props.carryForward?.previousIncomeTax, props.modelValue.beginning.taxAndPlanning.taxPayment))
 const planRevenueDisplay = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.planRevenue, props.derivedValues.orderTotal, marketOrderTotal.value))
 const comprehensiveCostDisplay = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.comprehensiveCostPlan, props.derivedValues.comprehensiveCostTotal))
@@ -865,11 +876,15 @@ function createMarketBidRow(): MarketBidRow {
     standardProductTotal: '',
     precisionProductTotal: '',
     intelligentProductTotal: '',
+    agencyInspectionTotal: '',
+    twoCabinVipTotal: '',
+    businessVipTotal: '',
+    memberCustomTotal: '',
     orderAmount: '',
   }
 }
 
-function buildFixedMarketBidRows(source: Array<Record<string, NumericCellValue>>) {
+function buildFixedMarketBidRows(source: Array<Record<string, CellValue>>) {
   return marketRegions.map((_, index) => ({
     ...createMarketBidRow(),
     ...(source[index] ?? {}),
@@ -878,7 +893,7 @@ function buildFixedMarketBidRows(source: Array<Record<string, NumericCellValue>>
 
 function ensureMarketBidRows(next: OperatingPayload) {
   const normalized = buildFixedMarketBidRows(next.beginning.marketBid)
-  next.beginning.marketBid = normalized.map((item) => ({ ...item })) as Array<Record<string, NumericCellValue>>
+  next.beginning.marketBid = normalized.map((item) => ({ ...item })) as Array<Record<string, CellValue>>
 }
 
 function getStoredMarketInvestmentValue(): NumericCellValue {
@@ -893,9 +908,21 @@ function getStoredMarketInvestmentValue(): NumericCellValue {
   return ''
 }
 
+function isOrderLinkedMarketBid() {
+  return props.modelValue.beginning.taxAndPlanning.orderLinked === true
+}
+
 function getMarketRowTotal(index: number) {
   const row = marketBidRows.value[index]
-  return marketProductFields.reduce((total, field) => total + toNumber(row[field.key]), 0)
+  const explicit = parseNumber(row.orderAmount)
+  if (explicit !== null && isOrderLinkedMarketBid()) {
+    return explicit
+  }
+  const currentTotal = marketProductFields.reduce((total, field) => total + toNumber(row[field.key]), 0)
+  if (currentTotal !== 0) {
+    return currentTotal
+  }
+  return legacyMarketProductKeys.reduce((total, key) => total + toNumber(row[key]), 0)
 }
 
 function syncMarketBidDerived(next: OperatingPayload) {
@@ -903,7 +930,7 @@ function syncMarketBidDerived(next: OperatingPayload) {
 
   let orderTotal = 0
   next.beginning.marketBid.forEach((row) => {
-    const typedRow = row as Record<string, NumericCellValue>
+    const typedRow = row as Record<string, CellValue>
     const rowTotal = marketProductFields.reduce((total, field) => total + toNumber(typedRow[field.key]), 0)
     typedRow.orderAmount = rowTotal
     orderTotal += rowTotal

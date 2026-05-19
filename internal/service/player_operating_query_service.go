@@ -31,6 +31,7 @@ type PlayerOperatingQueryService struct {
 	carryForward        *carryforwardrules.Builder
 	transitionGuard     *state.TransitionGuard
 	playerNoticeService *PlayerNoticeService
+	orderLinkService    *OrderOperatingLinkService
 }
 
 func NewPlayerOperatingQueryService(
@@ -42,6 +43,7 @@ func NewPlayerOperatingQueryService(
 	reportRepo *repository.ReportRepository,
 	assembler *assembler.PlayerOperatingAssembler,
 	playerNoticeService *PlayerNoticeService,
+	orderLinkService *OrderOperatingLinkService,
 ) *PlayerOperatingQueryService {
 	return &PlayerOperatingQueryService{
 		gameConfigRepo:      gameConfigRepo,
@@ -56,6 +58,7 @@ func NewPlayerOperatingQueryService(
 		carryForward:        carryforwardrules.NewBuilder(),
 		transitionGuard:     state.NewTransitionGuard(),
 		playerNoticeService: playerNoticeService,
+		orderLinkService:    orderLinkService,
 	}
 }
 
@@ -95,6 +98,13 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
+	if yearNo > 0 && s.orderLinkService != nil {
+		linkedPayload, _, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, groupID, yearNo, operatingPayload)
+		if linkErr != nil {
+			return nil, fmt.Errorf("apply order operating values: %w", linkErr)
+		}
+		operatingPayload = linkedPayload
 	}
 
 	if yearNo == 0 {

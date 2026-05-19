@@ -53,6 +53,11 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	authService := service.NewAuthService(accountRepo, groupRepo, cfg.Auth)
 	authHandler := handler.NewAuthHandler(authService)
 	playerNoticeService := service.NewPlayerNoticeService(noticeRepo, adjustmentRepo)
+	orderLinkService := service.NewOrderOperatingLinkService(
+		marketBidRepo,
+		marketStateRepo,
+		groupOrderSelectionRepo,
+	)
 	gameConfigQueryService := service.NewGameConfigQueryService(gameConfigRepo, groupRepo, groupYearRepo)
 	gameConfigHandler := handler.NewGameConfigHandler(gameConfigQueryService)
 	playerOperatingQueryService := service.NewPlayerOperatingQueryService(
@@ -64,6 +69,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		reportRepo,
 		playerOperatingAssembler,
 		playerNoticeService,
+		orderLinkService,
 	)
 	playerOperatingCommandService := service.NewPlayerOperatingCommandService(
 		db,
@@ -74,6 +80,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		initialBaseRepo,
 		reportRepo,
 		playerNoticeService,
+		orderLinkService,
 	)
 	playerOperatingHandler := handler.NewPlayerOperatingHandler(
 		playerOperatingQueryService,
@@ -88,6 +95,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		reportRepo,
 		playerReportAssembler,
 		playerNoticeService,
+		orderLinkService,
 	)
 	playerReportCommandService := service.NewPlayerReportCommandService(
 		db,
@@ -98,6 +106,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		initialBaseRepo,
 		reportRepo,
 		playerNoticeService,
+		orderLinkService,
 	)
 	playerReportHandler := handler.NewPlayerReportHandler(
 		playerReportQueryService,
@@ -135,6 +144,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		playerOperatingAssembler,
 		playerReportAssembler,
 		playerNoticeService,
+		orderLinkService,
 	)
 	adminGroupDataHandler := handler.NewAdminGroupDataHandler(adminGroupDataQueryService)
 	adminControlQueryService := service.NewAdminControlQueryService(
@@ -216,6 +226,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		playerOrder.POST("/submit-market-investment", playerOrderHandler.SubmitMarketInvestment)
 		playerOrder.POST("/select-order", playerOrderHandler.SelectOrder)
 		playerOrder.POST("/pass-segment", playerOrderHandler.PassSegment)
+		playerOrder.POST("/deliver-orders", playerOrderHandler.DeliverOrders)
 
 		adminSummary := protected.Group("/admin-summary")
 		adminSummary.GET("/get-year-summary", adminSummaryHandler.GetYearSummary)

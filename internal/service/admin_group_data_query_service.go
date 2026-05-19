@@ -34,6 +34,7 @@ type AdminGroupDataQueryService struct {
 	reportCalculator    *reportrules.Calculator
 	carryForward        *carryforwardrules.Builder
 	playerNoticeService *PlayerNoticeService
+	orderLinkService    *OrderOperatingLinkService
 }
 
 type AdminGroupOption struct {
@@ -57,6 +58,7 @@ func NewAdminGroupDataQueryService(
 	operatingAssembler *assembler.PlayerOperatingAssembler,
 	reportAssembler *assembler.PlayerReportAssembler,
 	playerNoticeService *PlayerNoticeService,
+	orderLinkService *OrderOperatingLinkService,
 ) *AdminGroupDataQueryService {
 	return &AdminGroupDataQueryService{
 		gameConfigRepo:      gameConfigRepo,
@@ -71,6 +73,7 @@ func NewAdminGroupDataQueryService(
 		reportCalculator:    reportrules.NewCalculator(),
 		carryForward:        carryforwardrules.NewBuilder(),
 		playerNoticeService: playerNoticeService,
+		orderLinkService:    orderLinkService,
 	}
 }
 
@@ -221,6 +224,13 @@ func (s *AdminGroupDataQueryService) loadOperatingCalculationContext(ctx context
 	if err != nil {
 		return calcctx.CalculationContext{}, nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
+	if yearNo > 0 && s.orderLinkService != nil {
+		linkedPayload, _, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, groupID, yearNo, operatingPayload)
+		if linkErr != nil {
+			return calcctx.CalculationContext{}, nil, fmt.Errorf("apply order operating values: %w", linkErr)
+		}
+		operatingPayload = linkedPayload
+	}
 	if yearNo == 0 {
 		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaselineRepo, groupID)
 		if baselineErr != nil {
@@ -276,6 +286,13 @@ func (s *AdminGroupDataQueryService) loadReportCalculationContext(ctx context.Co
 	operatingPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, groupID, yearNo, operatingPayload)
 	if err != nil {
 		return calcctx.CalculationContext{}, fmt.Errorf("overlay operating adjustments: %w", err)
+	}
+	if yearNo > 0 && s.orderLinkService != nil {
+		linkedPayload, _, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, groupID, yearNo, operatingPayload)
+		if linkErr != nil {
+			return calcctx.CalculationContext{}, fmt.Errorf("apply order operating values: %w", linkErr)
+		}
+		operatingPayload = linkedPayload
 	}
 	if yearNo == 0 {
 		baselinePayload, baselineErr := loadInitialBaselinePayload(ctx, s.initialBaselineRepo, groupID)

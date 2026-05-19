@@ -154,8 +154,29 @@
                 </div>
 
                 <div v-if="visibleSegment.selectedOrder" class="selected-order">
-                  <strong>本组已选订单</strong>
-                  <span>#{{ visibleSegment.selectedOrder.orderId }} · 金额 {{ formatAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
+                  <div>
+                    <strong>本组已选订单</strong>
+                    <span>#{{ visibleSegment.selectedOrder.orderId }} · 金额 {{ formatAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
+                  </div>
+                  <div v-if="visibleSegment.deliveryStatus === 'SELECTED'" class="delivery-actions">
+                    <select v-model="deliveryStageDraft[visibleSegment.selectedOrder.orderId]">
+                      <option value="Q1">第一季度</option>
+                      <option value="Q2">第二季度</option>
+                      <option value="Q3">第三季度</option>
+                      <option value="Q4">第四季度</option>
+                    </select>
+                    <button
+                      type="button"
+                      class="btn primary"
+                      :disabled="deliveringOrders"
+                      @click="handleDeliverOrder(visibleSegment)"
+                    >
+                      {{ deliveringOrders ? '交付中...' : '交付订单' }}
+                    </button>
+                  </div>
+                  <em v-else-if="visibleSegment.selectedOrder.deliveredStageCode" class="delivery-note">
+                    已在 {{ formatDeliveryStage(visibleSegment.selectedOrder.deliveredStageCode) }} 交付
+                  </em>
                 </div>
 
                 <section class="order-grid">
@@ -215,6 +236,49 @@
                 </div>
               </template>
             </section>
+
+            <section class="delivery-panel">
+              <div class="panel-head">
+                <div>
+                  <strong>本组待交付订单</strong>
+                  <span>同一季度可勾选多个完整订单一次交付。</span>
+                </div>
+              </div>
+              <section v-if="pendingDeliveryOrders.length === 0" class="empty-state nested">
+                <strong>暂无待交付订单</strong>
+                <span>已选订单会在这里集中展示。</span>
+              </section>
+              <template v-else>
+                <div class="delivery-toolbar">
+                  <select v-model="bulkDeliveryStage">
+                    <option value="Q1">第一季度</option>
+                    <option value="Q2">第二季度</option>
+                    <option value="Q3">第三季度</option>
+                    <option value="Q4">第四季度</option>
+                  </select>
+                  <button
+                    type="button"
+                    class="btn primary"
+                    :disabled="selectedDeliveryOrderIds.length === 0 || deliveringOrders"
+                    @click="handleBulkDeliverOrders"
+                  >
+                    {{ deliveringOrders ? '交付中...' : `交付 ${selectedDeliveryOrderIds.length} 单` }}
+                  </button>
+                </div>
+                <div class="delivery-list">
+                  <label
+                    v-for="item in pendingDeliveryOrders"
+                    :key="item.orderId"
+                    class="delivery-row"
+                  >
+                    <input v-model="selectedDeliveryOrderIds" type="checkbox" :value="item.orderId">
+                    <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
+                    <strong>#{{ item.orderId }}</strong>
+                    <em>{{ formatAmount(item.orderAmount) }}</em>
+                  </label>
+                </div>
+              </template>
+            </section>
           </section>
         </template>
 
@@ -228,7 +292,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -236,7 +300,7 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePlayerOrderStore } from '@/stores/player-order'
-import type { OrderMarketCode, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
+import type { OrderDeliveryStageCode, OrderMarketCode, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
 
 const route = useRoute()
 const router = useRouter()
@@ -253,6 +317,7 @@ const {
   submittingInvestment,
   selectingOrder,
   passingSegment,
+  deliveringOrders,
   pageMessage,
   markets,
   selectedMarket,
@@ -262,6 +327,9 @@ const { currentUser } = storeToRefs(authStore)
 
 let initialized = false
 let pollTimer = 0
+const deliveryStageDraft = ref<Record<number, OrderDeliveryStageCode>>({})
+const bulkDeliveryStage = ref<OrderDeliveryStageCode>('Q1')
+const selectedDeliveryOrderIds = ref<number[]>([])
 
 const visibleSegment = computed(() => currentSegment.value ?? selectedMarket.value?.segments[0] ?? null)
 const activeSegmentTitle = computed(() => {
@@ -278,6 +346,18 @@ const pollingText = computed(() => {
   const seconds = currentView.value?.pollingIntervalSeconds ?? 3
   return `${seconds} 秒`
 })
+const pendingDeliveryOrders = computed(() =>
+  markets.value.flatMap((market) =>
+    market.segments
+      .filter((segment) => segment.selectedOrder && segment.deliveryStatus === 'SELECTED')
+      .map((segment) => ({
+        marketName: segment.marketName,
+        orderTypeName: segment.orderTypeName,
+        orderId: segment.selectedOrder!.orderId,
+        orderAmount: segment.selectedOrder!.orderAmount,
+      })),
+  ),
+)
 
 onMounted(async () => {
   await store.bootstrap(readRouteYear())
@@ -369,11 +449,32 @@ async function handlePassSegment(segment: PlayerOrderSegmentView) {
   }
 }
 
+async function handleDeliverOrder(segment: PlayerOrderSegmentView) {
+  if (!segment.selectedOrder) {
+    return
+  }
+  const stageCode = deliveryStageDraft.value[segment.selectedOrder.orderId] ?? 'Q1'
+  try {
+    await store.deliverSelectedOrder(segment, stageCode)
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleBulkDeliverOrders() {
+  try {
+    await store.deliverOrders(selectedDeliveryOrderIds.value, bulkDeliveryStage.value)
+    selectedDeliveryOrderIds.value = []
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
 function startPolling() {
   stopPolling()
   const seconds = currentView.value?.pollingIntervalSeconds ?? 3
   pollTimer = window.setInterval(async () => {
-    if (loading.value || yearViewLoading.value || submittingInvestment.value || selectingOrder.value || passingSegment.value) {
+    if (loading.value || yearViewLoading.value || submittingInvestment.value || selectingOrder.value || passingSegment.value || deliveringOrders.value) {
       return
     }
     try {
@@ -453,6 +554,16 @@ function formatDeliveryStatus(value: string) {
     UNFINISHED: '未完成',
   }
   return value ? map[value] ?? value : '待交付'
+}
+
+function formatDeliveryStage(value: string) {
+  const map: Record<string, string> = {
+    Q1: '第一季度',
+    Q2: '第二季度',
+    Q3: '第三季度',
+    Q4: '第四季度',
+  }
+  return map[value] ?? value
 }
 </script>
 
@@ -788,12 +899,83 @@ function formatDeliveryStatus(value: string) {
 
 .selected-order {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   margin: 0 16px 16px;
   border: 1px solid #b7e2c5;
   border-radius: 14px;
   background: #edfdf3;
   padding: 12px 14px;
+}
+
+.selected-order span {
+  display: block;
+  margin-top: 4px;
+}
+
+.delivery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.delivery-actions select {
+  min-width: 128px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 9px 10px;
+}
+
+.delivery-note {
+  color: var(--success);
+  font-style: normal;
+  font-size: 13px;
+}
+
+.delivery-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.delivery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.delivery-toolbar select {
+  min-width: 128px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 9px 10px;
+}
+
+.delivery-list {
+  display: grid;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.delivery-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.delivery-row em {
+  color: var(--success);
+  font-style: normal;
+  font-weight: 700;
 }
 
 .order-grid {

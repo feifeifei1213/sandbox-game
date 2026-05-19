@@ -76,6 +76,7 @@ type PlayerOperatingCommandService struct {
 	validator           *operatingrules.Validator
 	calculator          *operatingrules.Calculator
 	playerNoticeService *PlayerNoticeService
+	orderLinkService    *OrderOperatingLinkService
 }
 
 func NewPlayerOperatingCommandService(
@@ -87,6 +88,7 @@ func NewPlayerOperatingCommandService(
 	initialBaseRepo *repository.InitialBaselineRepository,
 	reportRepo *repository.ReportRepository,
 	playerNoticeService *PlayerNoticeService,
+	orderLinkService *OrderOperatingLinkService,
 ) *PlayerOperatingCommandService {
 	return &PlayerOperatingCommandService{
 		db:                  db,
@@ -101,6 +103,7 @@ func NewPlayerOperatingCommandService(
 		validator:           operatingrules.NewValidator(),
 		calculator:          operatingrules.NewCalculator(),
 		playerNoticeService: playerNoticeService,
+		orderLinkService:    orderLinkService,
 	}
 }
 
@@ -166,6 +169,13 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
+	if cmd.YearNo > 0 && s.orderLinkService != nil {
+		linkedPayload, _, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
+		if linkErr != nil {
+			return nil, fmt.Errorf("apply order operating values: %w", linkErr)
+		}
+		normalizedPayload = linkedPayload
+	}
 	if cmd.YearNo == 0 && calcContext.InitialBaseline != nil {
 		normalizedPayload = applyInitialBaselineDefaultsToOperatingPayload(normalizedPayload, calcContext.InitialBaseline)
 	}
@@ -211,6 +221,15 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
+	orderPrerequisiteCompleted := cmd.YearNo == 0 || s.orderLinkService == nil
+	if cmd.YearNo > 0 && s.orderLinkService != nil {
+		linkedPayload, values, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
+		if linkErr != nil {
+			return nil, fmt.Errorf("apply order operating values: %w", linkErr)
+		}
+		normalizedPayload = linkedPayload
+		orderPrerequisiteCompleted = values.PrerequisiteCompleted
+	}
 	calcContext := calcctx.NewCalculationContext(*group, *yearState, *gameConfig).
 		WithOperatingPayload(&normalizedPayload)
 
@@ -243,6 +262,9 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	}
 	if !state.IsValidStageCode(cmd.StageCode) {
 		return nil, ErrOperatingStageSubmitInvalid
+	}
+	if cmd.YearNo > 0 && cmd.StageCode == state.StageCodeQ1 && !orderPrerequisiteCompleted {
+		return nil, ErrOrderPrerequisiteIncomplete
 	}
 
 	validation := s.validator.ValidateStageSubmit(calcContext, cmd.StageCode)
@@ -287,6 +309,7 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 		txOperatingRepo := repository.NewOperatingRepository(tx)
 		txYearRepo := repository.NewGroupYearStateRepository(tx)
 		txGroupRepo := repository.NewGroupRepository(tx)
+		txOrderSelectionRepo := repository.NewGroupOrderSelectionRepository(tx)
 
 		if err := txOperatingRepo.UpsertDraft(ctx, repository.UpsertOperatingDraftCommand{
 			GroupID:          cmd.GroupID,
@@ -320,6 +343,11 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 
 		if bankruptTriggered {
 			if err := txGroupRepo.MarkBankrupt(ctx, cmd.GroupID, cmd.YearNo, bankruptReason, cmd.OperatorName); err != nil {
+				return err
+			}
+		}
+		if cmd.YearNo > 0 && cmd.StageCode == state.StageCodeYearEnd {
+			if err := txOrderSelectionRepo.MarkUnfinishedByGroupYear(ctx, cmd.GroupID, cmd.YearNo, cmd.OperatorName, submitTime); err != nil {
 				return err
 			}
 		}

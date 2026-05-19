@@ -23,6 +23,12 @@ type PlayerOrderPassSegmentRequest struct {
 	OrderType  string `json:"orderType" binding:"required"`
 }
 
+type PlayerOrderDeliverOrdersRequest struct {
+	YearNo    *int    `json:"yearNo" binding:"required"`
+	StageCode string  `json:"stageCode" binding:"required"`
+	OrderIDs  []int64 `json:"orderIds" binding:"required"`
+}
+
 type AdminOrderOpenMarketBiddingRequest struct {
 	YearNo     *int   `json:"yearNo" binding:"required"`
 	MarketCode string `json:"marketCode" binding:"required"`
