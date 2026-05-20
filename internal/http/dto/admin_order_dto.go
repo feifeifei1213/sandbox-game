@@ -9,6 +9,16 @@ type AdminOrderUpdateControlConfigRequest struct {
 	Items  []AdminOrderUpdateControlConfigItem `json:"items" binding:"required"`
 }
 
+type AdminOrderUpdateMarketConfigRequest struct {
+	YearNo  *int                               `json:"yearNo" binding:"required"`
+	Markets []AdminOrderUpdateMarketConfigItem `json:"markets" binding:"required"`
+}
+
+type AdminOrderUpdateMarketConfigItem struct {
+	MarketCode string `json:"marketCode" binding:"required"`
+	Enabled    bool   `json:"enabled"`
+}
+
 type AdminOrderUpdateControlConfigItem struct {
 	MarketCode        string `json:"marketCode" binding:"required"`
 	OrderType         string `json:"orderType" binding:"required"`
@@ -33,6 +43,6 @@ type AdminOrderGenerateSelectionSequenceRequest struct {
 
 type AdminOrderGetOrderPoolRequest struct {
 	YearNo     *int   `form:"yearNo" binding:"required"`
-	MarketCode string `form:"marketCode" binding:"required"`
-	OrderType  string `form:"orderType" binding:"required"`
+	MarketCode string `form:"marketCode"`
+	OrderType  string `form:"orderType"`
 }

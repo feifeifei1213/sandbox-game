@@ -9,6 +9,8 @@ import type {
   OrderPoolResult,
   UpdateOrderControlConfigRequest,
   UpdateOrderControlConfigResult,
+  UpdateOrderMarketConfigRequest,
+  UpdateOrderMarketConfigResult,
   UploadOrderExcelResult,
 } from '@/types/sandbox-game-admin'
 import type { AdminMarketSelectionStatus, AdminOrderControlResult, OrderMarketCode, OrderTypeCode } from '@/types/sandbox-game-order'
@@ -29,6 +31,13 @@ export async function uploadAdminOrderExcel(file: File) {
 
 export function updateAdminOrderControlConfig(payload: UpdateOrderControlConfigRequest) {
   return request<UpdateOrderControlConfigResult>('/api/v1/sandbox-game/admin-order/update-control-config', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateAdminOrderMarketConfig(payload: UpdateOrderMarketConfigRequest) {
+  return request<UpdateOrderMarketConfigResult>('/api/v1/sandbox-game/admin-order/update-market-enabled-config', {
     method: 'PUT',
     body: JSON.stringify(payload),
   })
@@ -55,12 +64,16 @@ export function generateAdminSelectionSequence(payload: { yearNo: number }) {
   })
 }
 
-export function getAdminOrderPool(yearNo: number, marketCode: OrderMarketCode, orderType: AdminOrderType) {
+export function getAdminOrderPool(yearNo: number, marketCode?: OrderMarketCode | 'ALL', orderType?: AdminOrderType | 'ALL') {
   const params = new URLSearchParams({
     yearNo: String(yearNo),
-    marketCode,
-    orderType,
   })
+  if (marketCode && marketCode !== 'ALL') {
+    params.set('marketCode', marketCode)
+  }
+  if (orderType && orderType !== 'ALL') {
+    params.set('orderType', orderType)
+  }
   return request<OrderPoolResult>(`/api/v1/sandbox-game/admin-order/get-order-pool?${params.toString()}`)
 }
 

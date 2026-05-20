@@ -118,6 +118,55 @@ func (r *OrderGenerationConfigRepository) UpdateStatusAndBatchByYear(ctx context
 		}).Error
 }
 
+type OrderMarketConfigRepository struct {
+	db *gorm.DB
+}
+
+func NewOrderMarketConfigRepository(db *gorm.DB) *OrderMarketConfigRepository {
+	return &OrderMarketConfigRepository{db: db}
+}
+
+func (r *OrderMarketConfigRepository) ListByYear(ctx context.Context, yearNo int) ([]entity.OrderMarketConfig, error) {
+	var items []entity.OrderMarketConfig
+	if err := r.db.WithContext(ctx).
+		Where("year_no = ?", yearNo).
+		Order("market_code ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *OrderMarketConfigRepository) UpsertBatch(ctx context.Context, items []entity.OrderMarketConfig) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "year_no"},
+			{Name: "market_code"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"market_enabled",
+			"config_status",
+			"locked_batch_id",
+			"updater",
+			"update_time",
+		}),
+	}).Create(&items).Error
+}
+
+func (r *OrderMarketConfigRepository) UpdateStatusAndBatchByYear(ctx context.Context, yearNo int, status string, batchID int64, updater string) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.OrderMarketConfig{}).
+		Where("year_no = ?", yearNo).
+		Updates(map[string]any{
+			"config_status":   status,
+			"locked_batch_id": batchID,
+			"updater":         updater,
+		}).Error
+}
+
 type OrderGenerationBatchRepository struct {
 	db *gorm.DB
 }
@@ -206,6 +255,29 @@ func (r *OrderPoolRepository) ListBySegment(ctx context.Context, yearNo int, mar
 	var items []entity.OrderPool
 	if err := r.db.WithContext(ctx).
 		Where("year_no = ? AND market_code = ? AND order_type = ?", yearNo, marketCode, orderType).
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Order("card_sequence_no ASC").
+		Order("id ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *OrderPoolRepository) ListByYearWithOptionalFilters(ctx context.Context, yearNo int, marketCode string, orderType string) ([]entity.OrderPool, error) {
+	query := r.db.WithContext(ctx).Where("year_no = ?", yearNo)
+	if marketCode != "" {
+		query = query.Where("market_code = ?", marketCode)
+	}
+	if orderType != "" {
+		query = query.Where("order_type = ?", orderType)
+	}
+	var items []entity.OrderPool
+	if err := query.
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Order("card_sequence_no ASC").
 		Order("id ASC").
 		Find(&items).Error; err != nil {
 		return nil, err
@@ -409,6 +481,8 @@ func (r *MarketBiddingStateRepository) ExistsSelectingBefore(ctx context.Context
 		Where("year_no = ? AND release_sequence_no < ? AND segment_status NOT IN ?", yearNo, releaseSequenceNo, []string{
 			enum.OrderSegmentStatusCompleted,
 			enum.OrderSegmentStatusSkipped,
+			enum.OrderSegmentStatusMarketDisabled,
+			enum.OrderSegmentStatusNoOrderConfig,
 		}).
 		Count(&count).Error; err != nil {
 		return false, err

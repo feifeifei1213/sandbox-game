@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,6 +131,7 @@ func openIntegrationMySQL(t *testing.T) *gorm.DB {
 	}
 
 	ensureIntegrationNoticeTables(t, db)
+	ensureIntegrationOrderTables(t, db)
 	return db
 }
 
@@ -179,6 +181,217 @@ func ensureIntegrationNoticeTables(t *testing.T, db *gorm.DB) {
 	for _, statement := range statements {
 		if err := db.Exec(statement).Error; err != nil {
 			t.Fatalf("ensure I2 tables: %v", err)
+		}
+	}
+}
+
+func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS sg_order_import_batch (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			original_file_name VARCHAR(255) NOT NULL,
+			file_size BIGINT NOT NULL DEFAULT 0,
+			parse_status VARCHAR(32) NOT NULL,
+			parsed_order_count INT NOT NULL DEFAULT 0,
+			parse_error_json JSON NOT NULL,
+			parsed_payload_json JSON NOT NULL,
+			uploader_id BIGINT NOT NULL,
+			uploader_name VARCHAR(64) NOT NULL,
+			uploaded_at DATETIME NOT NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY idx_order_import_uploaded_at (uploaded_at),
+			KEY idx_order_import_status (parse_status)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_order_generation_config (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			year_no INT NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			order_type VARCHAR(32) NOT NULL,
+			order_count INT NOT NULL DEFAULT 0,
+			release_sequence_no INT NOT NULL,
+			generation_batch_id BIGINT NULL,
+			source_batch_id BIGINT NULL,
+			config_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_order_generation_config (year_no, market_code, order_type),
+			KEY idx_order_release_sequence (year_no, release_sequence_no)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_order_generation_batch (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			year_no INT NOT NULL,
+			batch_status VARCHAR(32) NOT NULL,
+			formula_version VARCHAR(32) NOT NULL,
+			random_seed VARCHAR(64) NOT NULL,
+			control_snapshot_json JSON NOT NULL,
+			parameter_snapshot_json JSON NOT NULL,
+			order_detail_json JSON NOT NULL,
+			generated_order_count INT NOT NULL DEFAULT 0,
+			generated_by_id BIGINT NOT NULL,
+			generated_by_name VARCHAR(64) NOT NULL,
+			generated_at DATETIME NOT NULL,
+			confirmed_by_id BIGINT NULL,
+			confirmed_by_name VARCHAR(64) NULL,
+			confirmed_at DATETIME NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY idx_order_generation_batch_year (year_no, batch_status)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_order_market_config (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			year_no INT NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			market_enabled TINYINT(1) NOT NULL DEFAULT 0,
+			config_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+			locked_batch_id BIGINT NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_order_market_config (year_no, market_code),
+			KEY idx_order_market_enabled (year_no, market_enabled)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_order_pool (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			year_no INT NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			order_type VARCHAR(32) NOT NULL,
+			segment_code VARCHAR(64) NULL,
+			card_sequence_no INT NULL,
+			business_order_no VARCHAR(64) NULL,
+			order_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+			order_quantity DECIMAL(18,2) NOT NULL DEFAULT 0,
+			unit_price DECIMAL(18,2) NOT NULL DEFAULT 0,
+			account_term INT NOT NULL DEFAULT 0,
+			pool_status VARCHAR(32) NOT NULL DEFAULT 'AVAILABLE',
+			selected_group_id BIGINT NULL,
+			selected_at DATETIME NULL,
+			generation_batch_id BIGINT NULL,
+			source_batch_id BIGINT NULL,
+			source_sheet_name VARCHAR(64) NULL,
+			source_cell VARCHAR(16) NULL,
+			source_row_index INT NULL,
+			source_row_key VARCHAR(128) NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY idx_order_pool_year_market (year_no, market_code, order_type),
+			KEY idx_order_pool_status (pool_status),
+			KEY idx_order_pool_selected_group (selected_group_id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_market_bidding_state (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			year_no INT NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			order_type VARCHAR(32) NOT NULL,
+			segment_code VARCHAR(64) NOT NULL,
+			release_sequence_no INT NOT NULL,
+			segment_status VARCHAR(32) NOT NULL,
+			leader_group_id BIGINT NULL,
+			leader_rule_json JSON NULL,
+			random_seed VARCHAR(64) NULL,
+			current_group_id BIGINT NULL,
+			opened_at DATETIME NULL,
+			closed_at DATETIME NULL,
+			released_at DATETIME NULL,
+			completed_at DATETIME NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_market_bidding_state (year_no, market_code, order_type),
+			KEY idx_segment_release_sequence (year_no, release_sequence_no),
+			KEY idx_segment_status (segment_status)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_group_market_bid (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			group_id BIGINT NOT NULL,
+			year_no INT NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			order_type VARCHAR(32) NOT NULL DEFAULT 'AGENCY_INSPECTION',
+			market_investment DECIMAL(18,2) NOT NULL DEFAULT 0,
+			bid_status VARCHAR(32) NOT NULL DEFAULT 'SUBMITTED',
+			submitted_at DATETIME NOT NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_group_year_segment_bid (group_id, year_no, market_code, order_type),
+			KEY idx_year_segment_bid (year_no, market_code, order_type)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_market_selection_order (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			year_no INT NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			order_type VARCHAR(32) NOT NULL,
+			sequence_no INT NOT NULL,
+			group_id BIGINT NOT NULL,
+			market_investment DECIMAL(18,2) NOT NULL DEFAULT 0,
+			previous_market_order_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+			is_market_leader TINYINT(1) NOT NULL DEFAULT 0,
+			rank_basis_json JSON NOT NULL,
+			selection_status VARCHAR(32) NOT NULL DEFAULT 'WAITING',
+			selected_order_id BIGINT NULL,
+			selected_at DATETIME NULL,
+			skipped_by_admin_id BIGINT NULL,
+			skipped_reason VARCHAR(255) NULL,
+			skipped_at DATETIME NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_market_sequence (year_no, market_code, order_type, sequence_no),
+			UNIQUE KEY uk_group_market_sequence (year_no, market_code, order_type, group_id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_group_order_selection (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			group_id BIGINT NOT NULL,
+			year_no INT NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			order_type VARCHAR(32) NOT NULL,
+			order_id BIGINT NOT NULL,
+			selection_status VARCHAR(32) NOT NULL DEFAULT 'SELECTED',
+			delivery_status VARCHAR(32) NOT NULL DEFAULT 'SELECTED',
+			delivered_stage_code VARCHAR(16) NULL,
+			delivered_at DATETIME NULL,
+			selected_at DATETIME NOT NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_group_year_segment_selection (group_id, year_no, market_code, order_type),
+			UNIQUE KEY uk_order_selected (order_id),
+			KEY idx_group_year_order_selection (group_id, year_no)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+	}
+
+	for _, statement := range statements {
+		if err := db.Exec(statement).Error; err != nil {
+			errText := strings.ToLower(err.Error())
+			if !strings.Contains(errText, "duplicate column name") &&
+				!strings.Contains(err.Error(), "check that column/key exists") &&
+				!strings.Contains(errText, "duplicate key name") {
+				t.Fatalf("ensure order tables: %v", err)
+			}
 		}
 	}
 }

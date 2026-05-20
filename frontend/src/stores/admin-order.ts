@@ -13,12 +13,14 @@ import {
   openAdminMarketBidding,
   releaseNextAdminOrderSegment,
   updateAdminOrderControlConfig,
+  updateAdminOrderMarketConfig,
   uploadAdminOrderExcel,
 } from '@/api/sandbox-game/admin-order'
 import type {
   AdminOrderType,
   OrderControlConfigItem,
   OrderControlConfigResult,
+  OrderMarketConfigItem,
   OrderMarketCode,
   OrderPoolResult,
   UploadOrderExcelResult,
@@ -59,6 +61,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const confirmingPool = ref(false)
   const generatingSequence = ref(false)
   const loadingPool = ref(false)
+  const savingMarketConfig = ref(false)
   const loadingSelectionStatus = ref(false)
   const controllingMarket = ref(false)
   const releasingSegment = ref(false)
@@ -66,8 +69,8 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const pageMessage = ref<PageMessage | null>(null)
 
   const poolFilter = reactive({
-    marketCode: 'LOCAL' as OrderMarketCode,
-    orderType: 'AGENCY_INSPECTION' as AdminOrderType,
+    marketCode: 'ALL' as OrderMarketCode | 'ALL',
+    orderType: 'ALL' as AdminOrderType | 'ALL',
   })
   const controlForm = reactive({
     marketCode: 'LOCAL' as OrderMarketCode,
@@ -75,11 +78,13 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   })
 
   const editableItems = ref<OrderControlConfigItem[]>([])
+  const editableMarketConfigs = ref<OrderMarketConfigItem[]>([])
 
   const totalOrderCount = computed(() => editableItems.value.reduce((sum, item) => sum + Number(item.orderCount || 0), 0))
   const totalGeneratedCount = computed(() => editableItems.value.reduce((sum, item) => sum + Number(item.generatedCount || 0), 0))
   const hasLockedConfig = computed(() => editableItems.value.some((item) => item.configStatus === 'LOCKED'))
   const sortedItems = computed(() => [...editableItems.value].sort((a, b) => a.releaseSequenceNo - b.releaseSequenceNo))
+  const enabledMarketCount = computed(() => editableMarketConfigs.value.filter((item) => item.enabled).length)
   const currentSegment = computed(() => marketSelectionStatus.value?.currentSegment ?? null)
 
   async function bootstrap(yearNo: number) {
@@ -132,7 +137,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         items: editableItems.value.map((item) => ({
           marketCode: item.marketCode,
           orderType: item.orderType,
-          orderCount: Number(item.orderCount || 0),
+          orderCount: item.marketEnabled ? Number(item.orderCount || 0) : 0,
           releaseSequenceNo: Number(item.releaseSequenceNo || 0),
         })),
       })
@@ -147,6 +152,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         canUpdateConfig: config.value?.canUpdateConfig ?? true,
         canGeneratePreview: config.value?.canGeneratePreview ?? true,
         canConfirmPool: config.value?.canConfirmPool ?? false,
+        marketConfigs: config.value?.marketConfigs ?? editableMarketConfigs.value,
         items: result.items,
         warnings: result.warnings,
       })
@@ -159,6 +165,44 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       throw error
     } finally {
       savingConfig.value = false
+    }
+  }
+
+  async function saveMarketConfig() {
+    savingMarketConfig.value = true
+    pageMessage.value = null
+    try {
+      const result = await updateAdminOrderMarketConfig({
+        yearNo: selectedYearNo.value,
+        markets: editableMarketConfigs.value.map((item) => ({
+          marketCode: item.marketCode,
+          enabled: Boolean(item.enabled),
+        })),
+      })
+      applyConfig({
+        yearNo: result.yearNo,
+        finalYear: config.value?.finalYear ?? selectedYearNo.value,
+        latestBatchId: config.value?.latestBatchId ?? null,
+        latestBatchUploadedAt: config.value?.latestBatchUploadedAt ?? null,
+        generationStatus: config.value?.generationStatus ?? 'NOT_GENERATED',
+        latestPreviewBatch: config.value?.latestPreviewBatch ?? null,
+        confirmedBatch: config.value?.confirmedBatch ?? null,
+        canUpdateConfig: config.value?.canUpdateConfig ?? true,
+        canGeneratePreview: config.value?.canGeneratePreview ?? true,
+        canConfirmPool: config.value?.canConfirmPool ?? false,
+        marketConfigs: result.markets,
+        items: result.items,
+        warnings: result.warnings,
+      })
+      pageMessage.value = {
+        type: 'success',
+        text: `市场开启配置已保存，操作人 ${result.updatedBy}。`,
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '保存市场开启配置失败')
+      throw error
+    } finally {
+      savingMarketConfig.value = false
     }
   }
 
@@ -369,7 +413,12 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
 
   function applyConfig(result: OrderControlConfigResult) {
     config.value = result
-    editableItems.value = result.items.map((item) => ({ ...item }))
+    editableMarketConfigs.value = (result.marketConfigs ?? defaultMarketConfigs(result.yearNo)).map((item) => ({ ...item }))
+    const marketEnabledMap = new Map(editableMarketConfigs.value.map((item) => [item.marketCode, item.enabled]))
+    editableItems.value = result.items.map((item) => ({
+      ...item,
+      marketEnabled: item.marketEnabled ?? marketEnabledMap.get(item.marketCode) ?? item.marketCode === 'LOCAL',
+    }))
   }
 
   function setYear(yearNo: number) {
@@ -389,6 +438,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     loading,
     uploading,
     savingConfig,
+    savingMarketConfig,
     generatingPool,
     confirmingPool,
     generatingSequence,
@@ -401,14 +451,17 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     poolFilter,
     controlForm,
     editableItems,
+    editableMarketConfigs,
     sortedItems,
     totalOrderCount,
     totalGeneratedCount,
     hasLockedConfig,
+    enabledMarketCount,
     currentSegment,
     bootstrap,
     loadConfig,
     uploadExcel,
+    saveMarketConfig,
     saveConfig,
     generatePool,
     confirmPool,
@@ -426,6 +479,17 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
 
 function marketName(code: OrderMarketCode) {
   return MARKET_OPTIONS.find((item) => item.code === code)?.name ?? code
+}
+
+function defaultMarketConfigs(yearNo: number): OrderMarketConfigItem[] {
+  return MARKET_OPTIONS.map((item) => ({
+    yearNo,
+    marketCode: item.code,
+    marketName: item.name,
+    enabled: item.code === 'LOCAL',
+    configStatus: 'DRAFT',
+    lockedBatchId: null,
+  }))
 }
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {

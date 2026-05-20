@@ -225,6 +225,7 @@ func abortOrderError(c *gin.Context, err error, fallbackMessage string) {
 		errors.Is(err, service.ErrOrderPoolNotGenerated),
 		errors.Is(err, service.ErrOrderMarketNotOpen),
 		errors.Is(err, service.ErrOrderInvestmentInvalid),
+		errors.Is(err, service.ErrOrderMarketDisabledInvestment),
 		errors.Is(err, service.ErrOrderSegmentNotReady),
 		errors.Is(err, service.ErrOrderSegmentNotSelecting),
 		errors.Is(err, service.ErrOrderSelectionNotEligible),
@@ -264,6 +265,8 @@ func resolveOrderErrorMessage(err error) string {
 		return "本年市场投入已提交，不能修改"
 	case errors.Is(err, service.ErrOrderInvestmentInvalid):
 		return "市场投入必须一次提交完整 16 项且不能为负数"
+	case errors.Is(err, service.ErrOrderMarketDisabledInvestment):
+		return "该市场未开启，市场投入必须填写0"
 	case errors.Is(err, service.ErrOrderSegmentNotReady):
 		return "当前没有可释放标段"
 	case errors.Is(err, service.ErrOrderSegmentNotSelecting):

@@ -1,0 +1,238 @@
+@host = http://127.0.0.1:8080
+@baseUrl = {{host}}/api/v1/sandbox-game
+
+@adminRole = ADMIN
+@adminUserId = 1
+@adminUsername = admin
+
+@groupRole = GROUP
+@groupOneUserId = 101
+@groupOneUsername = group01
+@groupOneId = 1
+@groupTwoUserId = 102
+@groupTwoUsername = group02
+@groupTwoId = 2
+
+@yearNo = 1
+@batchId = 1
+@orderId = 1
+@currentGroupId = 1
+
+### 健康检查
+GET {{host}}/healthz
+
+### 管理员：读取 1 年订单控制台
+GET {{baseUrl}}/admin-order/get-control-config?yearNo={{yearNo}}
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：保存 16 个标段订单数量与释放顺序
+### 说明：订单数量允许 0~15；此示例只让前三个标段有订单，便于联调跳过/释放逻辑
+PUT {{baseUrl}}/admin-order/update-control-config
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "yearNo": {{yearNo}},
+  "items": [
+    { "marketCode": "LOCAL", "orderType": "AGENCY_INSPECTION", "orderCount": 2, "releaseSequenceNo": 1 },
+    { "marketCode": "REGIONAL", "orderType": "AGENCY_INSPECTION", "orderCount": 1, "releaseSequenceNo": 2 },
+    { "marketCode": "LOCAL", "orderType": "TWO_CABIN_VIP", "orderCount": 1, "releaseSequenceNo": 3 },
+    { "marketCode": "LOCAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 4 },
+    { "marketCode": "LOCAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 5 },
+    { "marketCode": "REGIONAL", "orderType": "TWO_CABIN_VIP", "orderCount": 0, "releaseSequenceNo": 6 },
+    { "marketCode": "REGIONAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 7 },
+    { "marketCode": "REGIONAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 8 },
+    { "marketCode": "NATIONAL", "orderType": "AGENCY_INSPECTION", "orderCount": 0, "releaseSequenceNo": 9 },
+    { "marketCode": "NATIONAL", "orderType": "TWO_CABIN_VIP", "orderCount": 0, "releaseSequenceNo": 10 },
+    { "marketCode": "NATIONAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 11 },
+    { "marketCode": "NATIONAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 12 },
+    { "marketCode": "GLOBAL", "orderType": "AGENCY_INSPECTION", "orderCount": 0, "releaseSequenceNo": 13 },
+    { "marketCode": "GLOBAL", "orderType": "TWO_CABIN_VIP", "orderCount": 0, "releaseSequenceNo": 14 },
+    { "marketCode": "GLOBAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 15 },
+    { "marketCode": "GLOBAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 16 }
+  ]
+}
+
+### 管理员：生成预览订单池
+POST {{baseUrl}}/admin-order/generate-preview-pool
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "yearNo": {{yearNo}},
+  "overwrite": true
+}
+
+### 管理员：确认订单池
+### 注意：把上一步返回的 batchId 手工填入顶部 @batchId
+POST {{baseUrl}}/admin-order/confirm-order-pool
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "yearNo": {{yearNo}},
+  "batchId": {{batchId}}
+}
+
+### 管理员：查看本地市场代办过检订单池
+GET {{baseUrl}}/admin-order/get-order-pool?yearNo={{yearNo}}&marketCode=LOCAL&orderType=AGENCY_INSPECTION
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 玩家 1：读取 0 年订单页，预期 orderRequired=false
+GET {{baseUrl}}/player-order/get-year-view?yearNo=0
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupOneUserId}}
+X-Username: {{groupOneUsername}}
+X-Group-Id: {{groupOneId}}
+
+### 玩家 1：提交完整 16 项市场投入
+POST {{baseUrl}}/player-order/submit-market-investments
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupOneUserId}}
+X-Username: {{groupOneUsername}}
+X-Group-Id: {{groupOneId}}
+
+{
+  "yearNo": {{yearNo}},
+  "investments": [
+    { "marketCode": "LOCAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 10 },
+    { "marketCode": "LOCAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 0 },
+    { "marketCode": "LOCAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "LOCAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 }
+  ]
+}
+
+### 玩家 2：提交完整 16 项市场投入
+POST {{baseUrl}}/player-order/submit-market-investments
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupTwoUserId}}
+X-Username: {{groupTwoUsername}}
+X-Group-Id: {{groupTwoId}}
+
+{
+  "yearNo": {{yearNo}},
+  "investments": [
+    { "marketCode": "LOCAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 10 },
+    { "marketCode": "LOCAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 5 },
+    { "marketCode": "LOCAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "LOCAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "REGIONAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "NATIONAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "AGENCY_INSPECTION", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "TWO_CABIN_VIP", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "BUSINESS_VIP", "marketInvestment": 0 },
+    { "marketCode": "GLOBAL", "orderType": "MEMBER_CUSTOM", "marketInvestment": 0 }
+  ]
+}
+
+### 管理员：生成全部标段选单顺序
+POST {{baseUrl}}/admin-order/generate-selection-sequence
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "yearNo": {{yearNo}}
+}
+
+### 管理员：查看本地市场选单状态
+GET {{baseUrl}}/admin-order/get-market-selection-status?yearNo={{yearNo}}&marketCode=LOCAL
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：按释放顺序释放下一个标段
+POST {{baseUrl}}/admin-order/release-next-segment
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "yearNo": {{yearNo}}
+}
+
+### 玩家 1：刷新订单页，确认是否轮到自己
+GET {{baseUrl}}/player-order/get-year-view?yearNo={{yearNo}}
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupOneUserId}}
+X-Username: {{groupOneUsername}}
+X-Group-Id: {{groupOneId}}
+
+### 玩家 1：选择订单
+### 注意：把订单池接口返回的可选订单 ID 手工填入顶部 @orderId
+POST {{baseUrl}}/player-order/select-order
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupOneUserId}}
+X-Username: {{groupOneUsername}}
+X-Group-Id: {{groupOneId}}
+
+{
+  "yearNo": {{yearNo}},
+  "marketCode": "LOCAL",
+  "orderType": "AGENCY_INSPECTION",
+  "orderId": {{orderId}}
+}
+
+### 管理员：代跳过当前小组
+### 注意：把状态接口返回的 currentGroupId 手工填入顶部 @currentGroupId
+POST {{baseUrl}}/admin-order/admin-skip-current-group
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "yearNo": {{yearNo}},
+  "marketCode": "LOCAL",
+  "orderType": "AGENCY_INSPECTION",
+  "groupId": {{currentGroupId}},
+  "reason": "联调演练：当前小组现场放弃"
+}
+
+### 玩家 1：交付订单
+### 前提：当前经营季度为 Q1，且经营草稿中 Q1 销售收入等于本次交付订单金额合计
+POST {{baseUrl}}/player-order/deliver-orders
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupOneUserId}}
+X-Username: {{groupOneUsername}}
+X-Group-Id: {{groupOneId}}
+
+{
+  "yearNo": {{yearNo}},
+  "stageCode": "Q1",
+  "orderIds": [{{orderId}}]
+}

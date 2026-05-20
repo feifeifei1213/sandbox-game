@@ -60,6 +60,7 @@ func buildGeneratedOrderPoolItems(configs []entity.OrderGenerationConfig, batchI
 			unitPrice := roundMoney(amount / float64(quantity))
 			sourceRowKey := fmt.Sprintf("%d_%s_%s_%02d", config.YearNo, config.MarketCode, config.OrderType, index)
 			segmentCode := fmt.Sprintf("%s_%s", config.MarketCode, config.OrderType)
+			businessOrderNo := fmt.Sprintf("CARD-%02d", index)
 			generationBatchID := batchID
 			rowIndex := index
 			item := entity.OrderPool{
@@ -68,6 +69,7 @@ func buildGeneratedOrderPoolItems(configs []entity.OrderGenerationConfig, batchI
 				OrderType:         config.OrderType,
 				SegmentCode:       segmentCode,
 				CardSequenceNo:    index,
+				BusinessOrderNo:   businessOrderNo,
 				OrderAmount:       amount,
 				OrderQuantity:     float64(quantity),
 				UnitPrice:         unitPrice,
@@ -75,7 +77,7 @@ func buildGeneratedOrderPoolItems(configs []entity.OrderGenerationConfig, batchI
 				PoolStatus:        enum.OrderPoolStatusAvailable,
 				GenerationBatchID: &generationBatchID,
 				SourceSheetName:   "系统生成",
-				SourceCell:        fmt.Sprintf("CARD-%02d", index),
+				SourceCell:        businessOrderNo,
 				SourceRowIndex:    &rowIndex,
 				SourceRowKey:      sourceRowKey,
 				BaseEntity: entity.BaseEntity{

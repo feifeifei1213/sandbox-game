@@ -37,6 +37,8 @@ const (
 )
 
 const (
+	OrderSegmentStatusMarketDisabled    = "MARKET_DISABLED"
+	OrderSegmentStatusNoOrderConfig     = "NO_ORDER_CONFIG"
 	OrderSegmentStatusWaitingInvestment = "WAITING_INVESTMENT"
 	OrderSegmentStatusBidOpen           = "BID_OPEN"
 	OrderSegmentStatusBidClosed         = "BID_CLOSED"

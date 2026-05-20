@@ -146,7 +146,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
       })
       pageMessage.value = {
         type: 'success',
-        text: `${segment.marketName} ${segment.orderTypeName} 已选择订单 #${orderId}。`,
+        text: `${segment.marketName} ${segment.orderTypeName} 已选择订单 ${formatOrderNo(segment.availableOrders.find((item) => item.orderId === orderId)?.businessOrderNo, orderId)}。`,
       }
       await loadYearView(selectedYear.value, { silent: true })
     } catch (error) {
@@ -308,6 +308,10 @@ function buildInvestmentPayload(draft: Record<string, number | null>) {
       }
     }),
   )
+}
+
+function formatOrderNo(businessOrderNo: string | undefined, orderId: number) {
+  return businessOrderNo || `#${orderId}`
 }
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {

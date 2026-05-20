@@ -2,6 +2,8 @@ export type OrderMarketCode = 'LOCAL' | 'REGIONAL' | 'NATIONAL' | 'GLOBAL'
 export type OrderTypeCode = 'AGENCY_INSPECTION' | 'TWO_CABIN_VIP' | 'BUSINESS_VIP' | 'MEMBER_CUSTOM'
 export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'VOID'
 export type OrderSegmentStatus =
+  | 'MARKET_DISABLED'
+  | 'NO_ORDER_CONFIG'
   | 'WAITING_INVESTMENT'
   | 'BID_OPEN'
   | 'BID_CLOSED'
@@ -24,6 +26,8 @@ export type OrderDeliveryStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4'
 
 export interface PlayerOrderPoolItem {
   orderId: number
+  businessOrderNo: string
+  cardSequenceNo: number
   orderAmount: number
   orderQuantity: number
   unitPrice: number
@@ -47,6 +51,7 @@ export interface PlayerOrderSegmentView {
   marketName: string
   orderType: OrderTypeCode
   orderTypeName: string
+  marketEnabled: boolean
   marketInvestment: number
   investmentSubmitted: boolean
   releaseSequenceNo: number
@@ -71,6 +76,7 @@ export interface PlayerOrderMarketView {
   canSelectOrder: boolean
   selectionSequenceNo: number | null
   isMarketLeader: boolean
+  marketEnabled: boolean
   segments: PlayerOrderSegmentView[]
 }
 
@@ -176,6 +182,7 @@ export interface AdminSelectionOrderView {
   isMarketLeader: boolean
   selectionStatus: OrderSelectionStatus
   selectedOrderId: number | null
+  selectedOrderNo?: string
 }
 
 export interface AdminOrderSegmentStatus {

@@ -83,7 +83,7 @@ func (s *OrderOperatingLinkService) IsPrerequisiteCompleted(ctx context.Context,
 		return false, nil
 	}
 	for _, item := range states {
-		if item.SegmentStatus != enum.OrderSegmentStatusCompleted && item.SegmentStatus != enum.OrderSegmentStatusSkipped {
+		if !isTerminalOrderSegmentStatus(item.SegmentStatus) {
 			return false, nil
 		}
 	}

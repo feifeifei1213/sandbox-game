@@ -10,9 +10,6 @@
           <option v-for="item in yearOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
         <button type="button" class="btn" :disabled="loading" @click="handleRefresh">刷新</button>
-        <button type="button" class="btn primary" :disabled="savingConfig" @click="handleSaveConfig">
-          {{ savingConfig ? '保存中...' : '保存配置' }}
-        </button>
       </div>
     </header>
 
@@ -34,27 +31,98 @@
         <strong>{{ totalOrderCount }}</strong>
       </article>
       <article class="stat-card">
+        <span>已开启市场</span>
+        <strong>{{ enabledMarketCount }}</strong>
+      </article>
+      <article class="stat-card">
         <span>已生成订单</span>
         <strong>{{ totalGeneratedCount }}</strong>
       </article>
     </section>
 
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <strong>市场开启设置</strong>
+          <span>本地市场默认开启；未开启市场不生成订单、不进入抢单，玩家仍需填写 0。</span>
+        </div>
+        <button type="button" class="btn primary" :disabled="savingMarketConfig || !config?.canUpdateConfig" @click="handleSaveMarketConfig">
+          {{ savingMarketConfig ? '保存中...' : '保存市场' }}
+        </button>
+      </div>
+      <div class="market-config-grid">
+        <label v-for="market in editableMarketConfigs" :key="market.marketCode" class="market-config-item" :class="{ disabled: !market.enabled }">
+          <input v-model="market.enabled" type="checkbox" :disabled="savingMarketConfig || !config?.canUpdateConfig" @change="syncMarketDraftToItems">
+          <span>{{ market.marketName }}</span>
+          <em>{{ market.enabled ? '已开启' : '未开启' }}</em>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <strong>标段数量与释放顺序</strong>
+          <span>有效释放顺序只覆盖已开启且订单数量大于 0 的标段。</span>
+        </div>
+        <button type="button" class="btn primary" :disabled="savingConfig || !config?.canUpdateConfig" @click="handleSaveConfig">
+          {{ savingConfig ? '保存中...' : '保存配置' }}
+        </button>
+      </div>
+
+      <div class="table-scroll">
+        <table class="config-table">
+          <thead>
+            <tr>
+              <th>释放顺序</th>
+              <th>市场</th>
+              <th>订单类型</th>
+              <th>订单数量</th>
+              <th>可生成上限</th>
+              <th>已生成</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="sortedItems.length === 0">
+              <td colspan="7" class="empty-row">暂无订单配置。</td>
+            </tr>
+            <tr v-for="item in sortedItems" :key="`${item.marketCode}-${item.orderType}`" :class="{ 'row-disabled': !item.marketEnabled }">
+              <td>
+                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input">
+              </td>
+              <td>
+                {{ item.marketName }}
+                <span v-if="!item.marketEnabled" class="muted-inline">市场未开启</span>
+              </td>
+              <td>{{ item.orderTypeName }}</td>
+              <td>
+                <input v-model.number="item.orderCount" type="number" min="0" max="15" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input">
+              </td>
+              <td class="number-cell">{{ item.marketEnabled ? item.availableCount : 0 }}</td>
+              <td class="number-cell">{{ item.generatedCount }}</td>
+              <td>
+                <span v-if="!item.marketEnabled" class="status-tag muted">市场未开启</span>
+                <span v-else class="status-tag" :class="item.configStatus === 'LOCKED' ? 'locked' : 'draft'">
+                  {{ item.configStatus === 'LOCKED' ? '已锁定' : '草稿' }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="panel-card generation-panel">
       <div class="panel-head">
         <div>
-          <strong>订单生成控制台</strong>
-          <span>先保存 16 个标段数量与释放顺序，再生成预览；确认后订单池和数量配置锁定。</span>
+          <strong>生成预览</strong>
+          <span>保存市场与标段配置后生成预览；确认后订单池和市场开启状态锁定。</span>
         </div>
       </div>
       <div class="generation-actions">
         <button type="button" class="btn" :disabled="generatingPool || !config?.canGeneratePreview" @click="handleGeneratePool">
           {{ generatingPool ? '生成中...' : '生成/覆盖预览订单池' }}
-        </button>
-        <button type="button" class="btn primary" :disabled="confirmingPool || !config?.canConfirmPool" @click="handleConfirmPool">
-          {{ confirmingPool ? '确认中...' : '确认订单池' }}
-        </button>
-        <button type="button" class="btn primary" :disabled="generatingSequence" @click="handleGenerateSelectionSequence">
-          {{ generatingSequence ? '生成中...' : '生成选单顺序' }}
         </button>
       </div>
       <div class="batch-grid">
@@ -79,6 +147,23 @@
     <section v-if="config?.warnings.length" class="warning-list">
       <strong>数量风险提示</strong>
       <span v-for="warning in config.warnings" :key="`${warning.level}-${warning.message}`">{{ warning.message }}</span>
+    </section>
+
+    <section class="panel-card generation-panel">
+      <div class="panel-head">
+        <div>
+          <strong>确认订单池</strong>
+          <span>确认后订单池固化，玩家可提交 16 项市场投入。</span>
+        </div>
+      </div>
+      <div class="generation-actions">
+        <button type="button" class="btn primary" :disabled="confirmingPool || !config?.canConfirmPool" @click="handleConfirmPool">
+          {{ confirmingPool ? '确认中...' : '确认订单池' }}
+        </button>
+        <button type="button" class="btn primary" :disabled="generatingSequence" @click="handleGenerateSelectionSequence">
+          {{ generatingSequence ? '生成中...' : '生成选单顺序' }}
+        </button>
+      </div>
     </section>
 
     <section class="panel-card control-panel">
@@ -184,54 +269,7 @@
               <td class="number-cell">{{ formatAmount(item.marketInvestment) }}</td>
               <td>{{ item.isMarketLeader ? '是' : '否' }}</td>
               <td>{{ formatSelectionStatus(item.selectionStatus) }}</td>
-              <td>{{ item.selectedOrderId ? `#${item.selectedOrderId}` : '--' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel-card">
-      <div class="panel-head">
-        <div>
-          <strong>标段数量与释放顺序</strong>
-          <span>每个市场 + 订单类型单独开标；开标过程中释放顺序锁定。</span>
-        </div>
-      </div>
-
-      <div class="table-scroll">
-        <table class="config-table">
-          <thead>
-            <tr>
-              <th>释放顺序</th>
-              <th>市场</th>
-              <th>订单类型</th>
-              <th>订单数量</th>
-              <th>Excel 可用</th>
-              <th>已生成</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="sortedItems.length === 0">
-              <td colspan="7" class="empty-row">暂无订单配置。</td>
-            </tr>
-            <tr v-for="item in sortedItems" :key="`${item.marketCode}-${item.orderType}`">
-              <td>
-                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig" class="compact-input">
-              </td>
-              <td>{{ item.marketName }}</td>
-              <td>{{ item.orderTypeName }}</td>
-              <td>
-                <input v-model.number="item.orderCount" type="number" min="0" max="15" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig" class="compact-input">
-              </td>
-              <td class="number-cell">{{ item.availableCount }}</td>
-              <td class="number-cell">{{ item.generatedCount }}</td>
-              <td>
-                <span class="status-tag" :class="item.configStatus === 'LOCKED' ? 'locked' : 'draft'">
-                  {{ item.configStatus === 'LOCKED' ? '已锁定' : '草稿' }}
-                </span>
-              </td>
+              <td>{{ item.selectedOrderNo || (item.selectedOrderId ? `#${item.selectedOrderId}` : '--') }}</td>
             </tr>
           </tbody>
         </table>
@@ -242,7 +280,7 @@
       <div class="panel-head">
         <div>
           <strong>订单池查看</strong>
-          <span>按年份、市场和订单类型查看固定订单池状态。</span>
+          <span>默认查看全部订单，可按市场和订单类型筛选。</span>
         </div>
         <button type="button" class="btn" :disabled="loadingPool" @click="handleLoadPool">
           {{ loadingPool ? '加载中...' : '查看订单池' }}
@@ -253,12 +291,14 @@
         <label class="field">
           <span>市场</span>
           <select v-model="store.poolFilter.marketCode" @change="handleLoadPool">
+            <option value="ALL">全部市场</option>
             <option v-for="item in marketOptions" :key="item.code" :value="item.code">{{ item.name }}</option>
           </select>
         </label>
         <label class="field">
           <span>订单类型</span>
           <select v-model="store.poolFilter.orderType" @change="handleLoadPool">
+            <option value="ALL">全部类型</option>
             <option v-for="item in orderTypeOptions" :key="item.code" :value="item.code">{{ item.name }}</option>
           </select>
         </label>
@@ -268,7 +308,9 @@
         <table class="pool-table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th>订单编号</th>
+              <th>市场</th>
+              <th>订单类型</th>
               <th>金额</th>
               <th>数量</th>
               <th>单价</th>
@@ -280,10 +322,12 @@
           </thead>
           <tbody>
             <tr v-if="!orderPool || orderPool.list.length === 0">
-              <td colspan="8" class="empty-row">当前筛选下没有订单池记录。</td>
+              <td colspan="10" class="empty-row">当前筛选下没有订单池记录。</td>
             </tr>
             <tr v-for="item in orderPool?.list ?? []" :key="item.orderId">
-              <td>#{{ item.orderId }}</td>
+              <td>{{ item.businessOrderNo || `#${item.orderId}` }}</td>
+              <td>{{ item.marketName }}</td>
+              <td>{{ item.orderTypeName }}</td>
               <td class="number-cell">{{ formatAmount(item.orderAmount) }}</td>
               <td class="number-cell">{{ formatAmount(item.orderQuantity) }}</td>
               <td class="number-cell">{{ formatAmount(item.unitPrice) }}</td>
@@ -317,6 +361,7 @@ const {
   orderPool,
   loading,
   savingConfig,
+  savingMarketConfig,
   generatingPool,
   confirmingPool,
   generatingSequence,
@@ -328,8 +373,10 @@ const {
   marketSelectionStatus,
   currentSegment,
   sortedItems,
+  editableMarketConfigs,
   totalOrderCount,
   totalGeneratedCount,
+  enabledMarketCount,
 } = storeToRefs(store)
 
 const marketOptions = MARKET_OPTIONS
@@ -380,9 +427,32 @@ async function handleRefresh() {
 
 async function handleSaveConfig() {
   try {
+    for (const item of sortedItems.value) {
+      if (!item.marketEnabled) {
+        item.orderCount = 0
+      }
+    }
     await store.saveConfig()
   } catch {
     // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleSaveMarketConfig() {
+  try {
+    await store.saveMarketConfig()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+function syncMarketDraftToItems() {
+  const enabledMap = new Map(editableMarketConfigs.value.map((item) => [item.marketCode, item.enabled]))
+  for (const item of sortedItems.value) {
+    item.marketEnabled = enabledMap.get(item.marketCode) ?? item.marketEnabled
+    if (!item.marketEnabled) {
+      item.orderCount = 0
+    }
   }
 }
 
@@ -492,6 +562,8 @@ function formatGenerationStatus(value?: string) {
 function formatSegmentStatus(value?: string) {
   const map: Record<string, string> = {
     WAITING_INVESTMENT: '等待投入',
+    MARKET_DISABLED: '市场未开启',
+    NO_ORDER_CONFIG: '未配置订单',
     BID_OPEN: '投入开放',
     BID_CLOSED: '投入关闭',
     SEQUENCE_READY: '顺序已生成',
@@ -602,7 +674,7 @@ function formatGroupName(groupId?: number | null) {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -773,6 +845,53 @@ function formatGroupName(groupId?: number | null) {
   color: var(--success);
 }
 
+.status-tag.muted {
+  background: #eef2f6;
+  color: var(--muted);
+}
+
+.muted-inline {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.row-disabled {
+  background: #f8fafc;
+  color: var(--muted);
+}
+
+.market-config-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.market-config-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.market-config-item.disabled {
+  background: #f8fafc;
+  color: var(--muted);
+}
+
+.market-config-item em {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .pool-filter {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 240px));
@@ -888,6 +1007,7 @@ function formatGroupName(groupId?: number | null) {
   .stats-grid,
   .batch-grid,
   .pool-filter,
+  .market-config-grid,
   .control-grid,
   .selection-overview,
   .skip-row {

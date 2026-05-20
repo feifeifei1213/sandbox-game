@@ -45,6 +45,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	orderImportRepo := repository.NewOrderImportBatchRepository(db)
 	orderBatchRepo := repository.NewOrderGenerationBatchRepository(db)
 	orderConfigRepo := repository.NewOrderGenerationConfigRepository(db)
+	orderMarketConfigRepo := repository.NewOrderMarketConfigRepository(db)
 	orderPoolRepo := repository.NewOrderPoolRepository(db)
 	marketBidRepo := repository.NewGroupMarketBidRepository(db)
 	marketStateRepo := repository.NewMarketBiddingStateRepository(db)
@@ -178,6 +179,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		orderImportRepo,
 		orderBatchRepo,
 		orderConfigRepo,
+		orderMarketConfigRepo,
 		orderPoolRepo,
 		marketStateRepo,
 	)
@@ -260,6 +262,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminOrder := protected.Group("/admin-order")
 		adminOrder.GET("/get-control-config", adminOrderHandler.GetControlConfig)
 		adminOrder.POST("/upload-excel", adminOrderHandler.UploadExcel)
+		adminOrder.PUT("/update-market-enabled-config", adminOrderHandler.UpdateMarketConfig)
 		adminOrder.PUT("/update-control-config", adminOrderHandler.UpdateControlConfig)
 		adminOrder.POST("/generate-order-pool", adminOrderHandler.GenerateOrderPool)
 		adminOrder.POST("/generate-preview-pool", adminOrderHandler.GenerateOrderPool)

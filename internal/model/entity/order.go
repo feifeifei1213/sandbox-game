@@ -37,6 +37,20 @@ func (OrderGenerationConfig) TableName() string {
 	return "sg_order_generation_config"
 }
 
+type OrderMarketConfig struct {
+	ID            int64  `gorm:"column:id;primaryKey"`
+	YearNo        int    `gorm:"column:year_no"`
+	MarketCode    string `gorm:"column:market_code"`
+	MarketEnabled bool   `gorm:"column:market_enabled"`
+	ConfigStatus  string `gorm:"column:config_status"`
+	LockedBatchID *int64 `gorm:"column:locked_batch_id"`
+	BaseEntity
+}
+
+func (OrderMarketConfig) TableName() string {
+	return "sg_order_market_config"
+}
+
 type OrderGenerationBatch struct {
 	ID                  int64      `gorm:"column:id;primaryKey"`
 	YearNo              int        `gorm:"column:year_no"`
@@ -67,6 +81,7 @@ type OrderPool struct {
 	OrderType         string     `gorm:"column:order_type"`
 	SegmentCode       string     `gorm:"column:segment_code"`
 	CardSequenceNo    int        `gorm:"column:card_sequence_no"`
+	BusinessOrderNo   string     `gorm:"column:business_order_no"`
 	OrderAmount       float64    `gorm:"column:order_amount"`
 	OrderQuantity     float64    `gorm:"column:order_quantity"`
 	UnitPrice         float64    `gorm:"column:unit_price"`

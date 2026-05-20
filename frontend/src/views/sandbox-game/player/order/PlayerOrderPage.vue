@@ -78,7 +78,10 @@
               <div class="investment-grid-head">市场</div>
               <div v-for="orderType in orderTypeOptions" :key="orderType.code" class="investment-grid-head">{{ orderType.name }}</div>
               <template v-for="market in marketOptions" :key="market.code">
-                <div class="investment-market-name">{{ market.name }}</div>
+                <div class="investment-market-name">
+                  {{ market.name }}
+                  <small v-if="isMarketDisabled(market.code)">未开启</small>
+                </div>
                 <label v-for="orderType in orderTypeOptions" :key="`${market.code}-${orderType.code}`" class="investment-cell">
                   <input
                     :value="store.investmentDraft[investmentKey(market.code, orderType.code)] ?? 0"
@@ -175,7 +178,7 @@
                 <div v-if="visibleSegment.selectedOrder" class="selected-order">
                   <div>
                     <strong>本组已选订单</strong>
-                    <span>#{{ visibleSegment.selectedOrder.orderId }} · 金额 {{ formatAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
+                    <span>{{ formatOrderNo(visibleSegment.selectedOrder) }} · 金额 {{ formatAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
                   </div>
                   <div v-if="visibleSegment.deliveryStatus === 'SELECTED'" class="delivery-actions">
                     <select v-model="deliveryStageDraft[visibleSegment.selectedOrder.orderId]">
@@ -205,7 +208,7 @@
                     class="order-card"
                   >
                     <div class="order-title">
-                      <strong>#{{ order.orderId }}</strong>
+                      <strong>{{ formatOrderNo(order) }}</strong>
                       <span>可选</span>
                     </div>
                     <dl>
@@ -229,7 +232,7 @@
                     class="order-card locked"
                   >
                     <div class="order-title">
-                      <strong>#{{ order.orderId }}</strong>
+                      <strong>{{ formatOrderNo(order) }}</strong>
                       <span>已锁定</span>
                     </div>
                     <dl>
@@ -292,7 +295,7 @@
                   >
                     <input v-model="selectedDeliveryOrderIds" type="checkbox" :value="item.orderId">
                     <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
-                    <strong>#{{ item.orderId }}</strong>
+                    <strong>{{ item.businessOrderNo || `#${item.orderId}` }}</strong>
                     <em>{{ formatAmount(item.orderAmount) }}</em>
                   </label>
                 </div>
@@ -319,7 +322,7 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { investmentKey, PLAYER_ORDER_MARKETS, PLAYER_ORDER_TYPES, usePlayerOrderStore } from '@/stores/player-order'
-import type { OrderDeliveryStageCode, OrderMarketCode, OrderTypeCode, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
+import type { OrderDeliveryStageCode, OrderMarketCode, OrderTypeCode, PlayerOrderPoolItem, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
 
 const route = useRoute()
 const router = useRouter()
@@ -375,6 +378,7 @@ const pendingDeliveryOrders = computed(() =>
         marketName: segment.marketName,
         orderTypeName: segment.orderTypeName,
         orderId: segment.selectedOrder!.orderId,
+        businessOrderNo: segment.selectedOrder!.businessOrderNo,
         orderAmount: segment.selectedOrder!.orderAmount,
       })),
   ),
@@ -444,6 +448,11 @@ function handleInvestmentInput(marketCode: OrderMarketCode, orderType: OrderType
   const input = event.target as HTMLInputElement
   const next = input.value === '' ? 0 : Number(input.value)
   store.setInvestmentDraft(marketCode, orderType, Number.isFinite(next) ? Math.max(next, 0) : 0)
+}
+
+function isMarketDisabled(marketCode: OrderMarketCode) {
+  const market = markets.value.find((item) => item.marketCode === marketCode)
+  return market?.marketEnabled === false
 }
 
 async function handleSubmitInvestments() {
@@ -543,8 +552,14 @@ function formatAmount(value: number) {
   return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+function formatOrderNo(order: PlayerOrderPoolItem) {
+  return order.businessOrderNo || `#${order.orderId}`
+}
+
 function formatSegmentStatus(value?: string) {
   const map: Record<string, string> = {
+    MARKET_DISABLED: '市场未开启',
+    NO_ORDER_CONFIG: '未配置订单',
     BID_OPEN: '投入开放',
     WAITING_INVESTMENT: '等待投入',
     BID_CLOSED: '投入关闭',
@@ -773,10 +788,17 @@ function formatDeliveryStage(value: string) {
 .investment-grid-head,
 .investment-market-name {
   display: flex;
+  gap: 6px;
   align-items: center;
   padding: 10px 12px;
   background: #f7f9fc;
   font-weight: 700;
+}
+
+.investment-market-name small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .investment-grid-head {

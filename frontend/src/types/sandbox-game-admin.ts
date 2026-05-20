@@ -286,6 +286,7 @@ export interface OrderControlConfigItem {
   yearNo: number
   marketCode: OrderMarketCode
   marketName: string
+  marketEnabled: boolean
   orderType: AdminOrderType
   orderTypeName: string
   orderCount: number
@@ -293,6 +294,15 @@ export interface OrderControlConfigItem {
   availableCount: number
   configStatus: OrderConfigStatus
   generatedCount: number
+}
+
+export interface OrderMarketConfigItem {
+  yearNo: number
+  marketCode: OrderMarketCode
+  marketName: string
+  enabled: boolean
+  configStatus: OrderConfigStatus
+  lockedBatchId?: number | null
 }
 
 export interface OrderControlWarning {
@@ -325,8 +335,26 @@ export interface OrderControlConfigResult {
   canUpdateConfig: boolean
   canGeneratePreview: boolean
   canConfirmPool: boolean
+  marketConfigs: OrderMarketConfigItem[]
   items: OrderControlConfigItem[]
   warnings: OrderControlWarning[]
+}
+
+export interface UpdateOrderMarketConfigRequest {
+  yearNo: number
+  markets: Array<{
+    marketCode: OrderMarketCode
+    enabled: boolean
+  }>
+}
+
+export interface UpdateOrderMarketConfigResult {
+  yearNo: number
+  markets: OrderMarketConfigItem[]
+  items: OrderControlConfigItem[]
+  warnings: OrderControlWarning[]
+  updatedAt: string
+  updatedBy: string
 }
 
 export interface UpdateOrderControlConfigRequest {
@@ -383,6 +411,8 @@ export interface ConfirmOrderPoolResult {
 
 export interface OrderPoolItem {
   orderId: number
+  businessOrderNo: string
+  cardSequenceNo: number
   yearNo: number
   marketCode: OrderMarketCode
   marketName: string
@@ -400,9 +430,9 @@ export interface OrderPoolItem {
 
 export interface OrderPoolResult {
   yearNo: number
-  marketCode: OrderMarketCode
+  marketCode: OrderMarketCode | ''
   marketName: string
-  orderType: AdminOrderType
+  orderType: AdminOrderType | ''
   orderTypeName: string
   list: OrderPoolItem[]
 }

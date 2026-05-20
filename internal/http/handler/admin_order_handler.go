@@ -171,6 +171,53 @@ func (h *AdminOrderHandler) UpdateControlConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 
+func (h *AdminOrderHandler) UpdateMarketConfig(c *gin.Context) {
+	var req dto.AdminOrderUpdateMarketConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"市场开启配置参数不正确",
+			err,
+		))
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 || len(req.Markets) == 0 {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"yearNo 或 markets 参数不正确",
+			nil,
+		))
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权更新市场开启配置") {
+		return
+	}
+
+	markets := make([]service.UpdateOrderMarketConfigItem, 0, len(req.Markets))
+	for _, item := range req.Markets {
+		markets = append(markets, service.UpdateOrderMarketConfigItem{
+			MarketCode: item.MarketCode,
+			Enabled:    item.Enabled,
+		})
+	}
+
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.commandService.UpdateMarketConfig(c.Request.Context(), service.UpdateOrderMarketConfigCommand{
+		YearNo:       *req.YearNo,
+		Markets:      markets,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortAdminOrderError(c, err, "更新市场开启配置失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *AdminOrderHandler) GenerateOrderPool(c *gin.Context) {
 	var req dto.AdminOrderGeneratePoolRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -460,7 +507,8 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 		))
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceLocked),
 		errors.Is(err, service.ErrAdminOrderPoolLocked),
-		errors.Is(err, service.ErrAdminOrderSequenceAlreadyGenerated):
+		errors.Is(err, service.ErrAdminOrderSequenceAlreadyGenerated),
+		errors.Is(err, service.ErrAdminOrderMarketConfigLocked):
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusConflict,
 			enum.ConflictCode,
@@ -501,6 +549,8 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 
 func resolveAdminOrderErrorMessage(err error) string {
 	switch {
+	case errors.Is(err, service.ErrAdminOrderMarketConfigLocked):
+		return "订单池已确认或标段已进入开标流程，不能修改市场开启状态"
 	case errors.Is(err, service.ErrAdminOrderYearInvalid):
 		return "年份不在可配置订单范围内"
 	case errors.Is(err, service.ErrAdminOrderParseFailed):
