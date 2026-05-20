@@ -25,19 +25,31 @@ const (
 )
 
 const (
+	OrderGenerationBatchStatusPreview   = "PREVIEW"
+	OrderGenerationBatchStatusConfirmed = "CONFIRMED"
+	OrderGenerationBatchStatusVoid      = "VOID"
+)
+
+const (
 	OrderPoolStatusAvailable = "AVAILABLE"
 	OrderPoolStatusSelected  = "SELECTED"
 	OrderPoolStatusVoid      = "VOID"
 )
 
 const (
-	OrderSegmentStatusBidOpen        = "BID_OPEN"
-	OrderSegmentStatusBidClosed      = "BID_CLOSED"
-	OrderSegmentStatusSequenceReady  = "SEQUENCE_READY"
-	OrderSegmentStatusWaitingRelease = "WAITING_RELEASE"
-	OrderSegmentStatusSelecting      = "SELECTING"
-	OrderSegmentStatusCompleted      = "COMPLETED"
-	OrderSegmentStatusSkipped        = "SKIPPED"
+	OrderSegmentStatusWaitingInvestment = "WAITING_INVESTMENT"
+	OrderSegmentStatusBidOpen           = "BID_OPEN"
+	OrderSegmentStatusBidClosed         = "BID_CLOSED"
+	OrderSegmentStatusSequenceReady     = "SEQUENCE_READY"
+	OrderSegmentStatusWaitingRelease    = "WAITING_RELEASE"
+	OrderSegmentStatusSelecting         = "SELECTING"
+	OrderSegmentStatusCompleted         = "COMPLETED"
+	OrderSegmentStatusSkipped           = "SKIPPED"
+)
+
+const (
+	OrderBidStatusSubmitted = "SUBMITTED"
+	OrderBidStatusLocked    = "LOCKED"
 )
 
 const (

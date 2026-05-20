@@ -16,7 +16,7 @@ export function getPlayerOrderYearView(yearNo: number) {
 }
 
 export function submitPlayerMarketInvestment(payload: SubmitMarketInvestmentRequest) {
-  return request<SubmitMarketInvestmentResult>('/api/v1/sandbox-game/player-order/submit-market-investment', {
+  return request<SubmitMarketInvestmentResult>('/api/v1/sandbox-game/player-order/submit-market-investments', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

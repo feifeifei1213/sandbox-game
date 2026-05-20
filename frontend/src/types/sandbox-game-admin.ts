@@ -9,6 +9,8 @@ import type { OrderMarketCode, OrderPoolStatus, OrderTypeCode } from '@/types/sa
 export type { OrderMarketCode, OrderPoolStatus }
 export type AdminOrderType = OrderTypeCode
 export type OrderConfigStatus = 'DRAFT' | 'LOCKED'
+export type OrderGenerationStatus = 'NOT_GENERATED' | 'PREVIEW_GENERATED' | 'POOL_CONFIRMED' | 'SELECTING' | 'COMPLETED' | string
+export type OrderGenerationBatchStatus = 'PREVIEW' | 'CONFIRMED' | 'VOID' | string
 
 export interface AdminActionSummary {
   actionCode: string
@@ -300,11 +302,29 @@ export interface OrderControlWarning {
   orderType?: AdminOrderType
 }
 
+export interface OrderGenerationBatchSummary {
+  batchId: number
+  batchStatus: OrderGenerationBatchStatus
+  formulaVersion: string
+  randomSeed?: string
+  generatedCount: number
+  generatedAt: string
+  generatedBy: string
+  confirmedAt?: string | null
+  confirmedBy?: string | null
+}
+
 export interface OrderControlConfigResult {
   yearNo: number
   finalYear: number
   latestBatchId: number | null
   latestBatchUploadedAt: string | null
+  generationStatus: OrderGenerationStatus
+  latestPreviewBatch: OrderGenerationBatchSummary | null
+  confirmedBatch: OrderGenerationBatchSummary | null
+  canUpdateConfig: boolean
+  canGeneratePreview: boolean
+  canConfirmPool: boolean
   items: OrderControlConfigItem[]
   warnings: OrderControlWarning[]
 }
@@ -335,12 +355,30 @@ export interface GenerateOrderPoolRequest {
 
 export interface GenerateOrderPoolResult {
   yearNo: number
-  sourceBatchId: number
+  sourceBatchId?: number
+  batchId: number
+  batchStatus: OrderGenerationBatchStatus
+  randomSeed: string
+  formulaVersion: string
   generatedCount: number
   segmentCount: number
   warnings: OrderControlWarning[]
   generatedAt: string
   generatedBy: string
+}
+
+export interface ConfirmOrderPoolRequest {
+  yearNo: number
+  batchId: number
+}
+
+export interface ConfirmOrderPoolResult {
+  yearNo: number
+  batchId: number
+  generatedCount: number
+  segmentCount: number
+  confirmedAt: string
+  confirmedBy: string
 }
 
 export interface OrderPoolItem {

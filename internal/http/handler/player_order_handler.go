@@ -60,16 +60,27 @@ func (h *PlayerOrderHandler) SubmitMarketInvestment(c *gin.Context) {
 		abortPlayerOrderBadRequest(c, "yearNo 参数不正确", nil)
 		return
 	}
+	if len(req.Investments) == 0 {
+		abortPlayerOrderBadRequest(c, "investments 参数不正确", nil)
+		return
+	}
 	identity, ok := requireGroupIdentity(c, "当前身份无权提交市场投入")
 	if !ok {
 		return
 	}
+	investments := make([]service.MarketInvestmentInput, 0, len(req.Investments))
+	for _, item := range req.Investments {
+		investments = append(investments, service.MarketInvestmentInput{
+			MarketCode:       item.MarketCode,
+			OrderType:        item.OrderType,
+			MarketInvestment: item.MarketInvestment,
+		})
+	}
 	result, err := h.commandService.SubmitMarketInvestment(c.Request.Context(), service.SubmitMarketInvestmentCommand{
-		GroupID:          *identity.GroupID,
-		YearNo:           *req.YearNo,
-		MarketCode:       req.MarketCode,
-		MarketInvestment: req.MarketInvestment,
-		OperatorName:     identity.Username,
+		GroupID:      *identity.GroupID,
+		YearNo:       *req.YearNo,
+		Investments:  investments,
+		OperatorName: identity.Username,
 	})
 	if err != nil {
 		abortOrderError(c, err, "提交市场投入失败")
@@ -242,17 +253,17 @@ func resolveOrderErrorMessage(err error) string {
 	case errors.Is(err, service.ErrOrderTypeInvalid):
 		return "订单类型不合法"
 	case errors.Is(err, service.ErrOrderPoolNotGenerated):
-		return "订单池尚未生成"
+		return "订单池尚未确认"
 	case errors.Is(err, service.ErrOrderMarketNotOpen):
-		return "该市场暂未开放投入"
+		return "市场投入尚未进入可提交状态"
 	case errors.Is(err, service.ErrOrderMarketAlreadyOpen):
 		return "该市场已开放投入"
 	case errors.Is(err, service.ErrOrderMarketAlreadyClosed):
 		return "该市场投入已关闭，不能重复操作"
 	case errors.Is(err, service.ErrOrderInvestmentAlreadySubmitted):
-		return "该市场投入已提交，不能修改"
+		return "本年市场投入已提交，不能修改"
 	case errors.Is(err, service.ErrOrderInvestmentInvalid):
-		return "市场投入不能为负数"
+		return "市场投入必须一次提交完整 16 项且不能为负数"
 	case errors.Is(err, service.ErrOrderSegmentNotReady):
 		return "当前没有可释放标段"
 	case errors.Is(err, service.ErrOrderSegmentNotSelecting):

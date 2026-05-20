@@ -117,6 +117,8 @@ func resolveMigrationFiles(projectRoot string, action string) ([]string, error) 
 	commonFiles := []string{
 		filepath.Join(projectRoot, "migrations", "mysql", "0001_init.sql"),
 		filepath.Join(projectRoot, "migrations", "mysql", "0003_notice_adjustment.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0005_order_admin.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0006_order_generation_refactor.sql"),
 	}
 
 	switch action {

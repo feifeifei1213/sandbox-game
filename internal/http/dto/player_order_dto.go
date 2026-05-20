@@ -5,8 +5,13 @@ type PlayerOrderGetYearViewRequest struct {
 }
 
 type PlayerOrderSubmitMarketInvestmentRequest struct {
-	YearNo           *int    `json:"yearNo" binding:"required"`
+	YearNo      *int                                   `json:"yearNo" binding:"required"`
+	Investments []PlayerOrderMarketInvestmentInputItem `json:"investments" binding:"required"`
+}
+
+type PlayerOrderMarketInvestmentInputItem struct {
 	MarketCode       string  `json:"marketCode" binding:"required"`
+	OrderType        string  `json:"orderType" binding:"required"`
 	MarketInvestment float64 `json:"marketInvestment"`
 }
 

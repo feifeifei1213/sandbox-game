@@ -17,11 +17,14 @@ import (
 )
 
 const (
-	adminActionCodeUploadOrderExcel  = "UPLOAD_ORDER_EXCEL"
-	adminActionCodeUpdateOrderConfig = "UPDATE_ORDER_CONFIG"
-	adminActionCodeGenerateOrderPool = "GENERATE_ORDER_POOL"
-	defaultOrderReleaseSequenceStart = 1
-	defaultOrderParsePreviewLimit    = 20
+	adminActionCodeUploadOrderExcel     = "UPLOAD_ORDER_EXCEL"
+	adminActionCodeUpdateOrderConfig    = "UPDATE_ORDER_CONFIG"
+	adminActionCodeGenerateOrderPool    = "GENERATE_ORDER_POOL"
+	adminActionCodeGenerateOrderPreview = "GENERATE_ORDER_PREVIEW"
+	adminActionCodeConfirmOrderPool     = "CONFIRM_ORDER_POOL"
+	defaultOrderReleaseSequenceStart    = 1
+	defaultOrderParsePreviewLimit       = 20
+	requiredOrderInvestmentSegmentCount = 16
 )
 
 var (
@@ -35,6 +38,10 @@ var (
 	ErrAdminOrderConfigNotFound            = errors.New("admin order config not found")
 	ErrAdminOrderBatchNotFound             = errors.New("admin order batch not found")
 	ErrAdminOrderSourceInsufficient        = errors.New("admin order source insufficient")
+	ErrAdminOrderPreviewNotFound           = errors.New("admin order preview not found")
+	ErrAdminOrderPoolNotConfirmed          = errors.New("admin order pool not confirmed")
+	ErrAdminOrderInvestmentIncomplete      = errors.New("admin order investment incomplete")
+	ErrAdminOrderSequenceAlreadyGenerated  = errors.New("admin order sequence already generated")
 )
 
 type OrderSegmentDefinition struct {
@@ -85,6 +92,18 @@ type OrderControlConfigItem struct {
 	GeneratedCount    int    `json:"generatedCount"`
 }
 
+type OrderGenerationBatchSummary struct {
+	BatchID        int64   `json:"batchId"`
+	BatchStatus    string  `json:"batchStatus"`
+	FormulaVersion string  `json:"formulaVersion"`
+	RandomSeed     string  `json:"randomSeed,omitempty"`
+	GeneratedCount int     `json:"generatedCount"`
+	GeneratedAt    string  `json:"generatedAt"`
+	GeneratedBy    string  `json:"generatedBy"`
+	ConfirmedAt    *string `json:"confirmedAt,omitempty"`
+	ConfirmedBy    *string `json:"confirmedBy,omitempty"`
+}
+
 type OrderControlWarning struct {
 	Level      string `json:"level"`
 	Message    string `json:"message"`
@@ -93,12 +112,18 @@ type OrderControlWarning struct {
 }
 
 type OrderControlConfigResult struct {
-	YearNo                int                      `json:"yearNo"`
-	FinalYear             int                      `json:"finalYear"`
-	LatestBatchID         *int64                   `json:"latestBatchId"`
-	LatestBatchUploadedAt *string                  `json:"latestBatchUploadedAt"`
-	Items                 []OrderControlConfigItem `json:"items"`
-	Warnings              []OrderControlWarning    `json:"warnings"`
+	YearNo                int                          `json:"yearNo"`
+	FinalYear             int                          `json:"finalYear"`
+	LatestBatchID         *int64                       `json:"latestBatchId"`
+	LatestBatchUploadedAt *string                      `json:"latestBatchUploadedAt"`
+	GenerationStatus      string                       `json:"generationStatus"`
+	LatestPreviewBatch    *OrderGenerationBatchSummary `json:"latestPreviewBatch"`
+	ConfirmedBatch        *OrderGenerationBatchSummary `json:"confirmedBatch"`
+	CanUpdateConfig       bool                         `json:"canUpdateConfig"`
+	CanGeneratePreview    bool                         `json:"canGeneratePreview"`
+	CanConfirmPool        bool                         `json:"canConfirmPool"`
+	Items                 []OrderControlConfigItem     `json:"items"`
+	Warnings              []OrderControlWarning        `json:"warnings"`
 }
 
 type UpdateOrderControlConfigCommand struct {
@@ -133,12 +158,32 @@ type GenerateOrderPoolCommand struct {
 
 type GenerateOrderPoolResult struct {
 	YearNo         int                   `json:"yearNo"`
-	SourceBatchID  int64                 `json:"sourceBatchId"`
+	SourceBatchID  int64                 `json:"sourceBatchId,omitempty"`
+	BatchID        int64                 `json:"batchId"`
+	BatchStatus    string                `json:"batchStatus"`
+	RandomSeed     string                `json:"randomSeed"`
+	FormulaVersion string                `json:"formulaVersion"`
 	GeneratedCount int                   `json:"generatedCount"`
 	SegmentCount   int                   `json:"segmentCount"`
 	Warnings       []OrderControlWarning `json:"warnings"`
 	GeneratedAt    string                `json:"generatedAt"`
 	GeneratedBy    string                `json:"generatedBy"`
+}
+
+type ConfirmOrderPoolCommand struct {
+	YearNo       int
+	BatchID      int64
+	OperatorID   int64
+	OperatorName string
+}
+
+type ConfirmOrderPoolResult struct {
+	YearNo         int    `json:"yearNo"`
+	BatchID        int64  `json:"batchId"`
+	GeneratedCount int    `json:"generatedCount"`
+	SegmentCount   int    `json:"segmentCount"`
+	ConfirmedAt    string `json:"confirmedAt"`
+	ConfirmedBy    string `json:"confirmedBy"`
 }
 
 type OrderPoolItem struct {
@@ -171,23 +216,29 @@ type AdminOrderQueryService struct {
 	gameConfigRepo *repository.GameConfigRepository
 	groupRepo      *repository.GroupRepository
 	importRepo     *repository.OrderImportBatchRepository
+	batchRepo      *repository.OrderGenerationBatchRepository
 	configRepo     *repository.OrderGenerationConfigRepository
 	poolRepo       *repository.OrderPoolRepository
+	stateRepo      *repository.MarketBiddingStateRepository
 }
 
 func NewAdminOrderQueryService(
 	gameConfigRepo *repository.GameConfigRepository,
 	groupRepo *repository.GroupRepository,
 	importRepo *repository.OrderImportBatchRepository,
+	batchRepo *repository.OrderGenerationBatchRepository,
 	configRepo *repository.OrderGenerationConfigRepository,
 	poolRepo *repository.OrderPoolRepository,
+	stateRepo *repository.MarketBiddingStateRepository,
 ) *AdminOrderQueryService {
 	return &AdminOrderQueryService{
 		gameConfigRepo: gameConfigRepo,
 		groupRepo:      groupRepo,
 		importRepo:     importRepo,
+		batchRepo:      batchRepo,
 		configRepo:     configRepo,
 		poolRepo:       poolRepo,
+		stateRepo:      stateRepo,
 	}
 }
 
@@ -199,22 +250,32 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 	if err != nil {
 		return nil, fmt.Errorf("list order configs: %w", err)
 	}
-	latestBatch, batchErr := s.importRepo.FindLatestSuccess(ctx)
-	if batchErr != nil && !repository.IsRecordNotFound(batchErr) {
-		return nil, fmt.Errorf("load latest order batch: %w", batchErr)
-	}
 	var latestBatchID *int64
 	var latestBatchUploadedAt *string
-	sourceCounts := map[string]int{}
+	sourceCounts := defaultOrderSourceCounts(yearNo)
+	latestBatch, batchErr := s.importRepo.FindLatestSuccess(ctx)
 	if batchErr == nil {
 		latestBatchID = &latestBatch.ID
 		uploadedAt := latestBatch.UploadedAt.Format(time.RFC3339)
 		latestBatchUploadedAt = &uploadedAt
-		sourceCounts = summarizeParsedPayload(latestBatch.ParsedPayload)
+	} else if !repository.IsRecordNotFound(batchErr) {
+		return nil, fmt.Errorf("load latest order batch: %w", batchErr)
 	}
 	poolCounts, err := s.countGeneratedByYear(ctx, yearNo)
 	if err != nil {
 		return nil, err
+	}
+	latestPreview, previewErr := s.batchRepo.FindLatestByYearStatuses(ctx, yearNo, []string{enum.OrderGenerationBatchStatusPreview})
+	if previewErr != nil && !repository.IsRecordNotFound(previewErr) {
+		return nil, fmt.Errorf("load latest preview batch: %w", previewErr)
+	}
+	confirmed, confirmedErr := s.batchRepo.FindConfirmedByYear(ctx, yearNo)
+	if confirmedErr != nil && !repository.IsRecordNotFound(confirmedErr) {
+		return nil, fmt.Errorf("load confirmed order batch: %w", confirmedErr)
+	}
+	states, err := s.stateRepo.ListByYear(ctx, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("list order states: %w", err)
 	}
 
 	items := buildControlConfigItems(yearNo, configs, sourceCounts, poolCounts)
@@ -231,6 +292,12 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 		FinalYear:             gameConfig.FinalYear,
 		LatestBatchID:         latestBatchID,
 		LatestBatchUploadedAt: latestBatchUploadedAt,
+		GenerationStatus:      resolveOrderGenerationStatus(latestPreview, confirmed, states),
+		LatestPreviewBatch:    buildOrderGenerationBatchSummary(latestPreview),
+		ConfirmedBatch:        buildOrderGenerationBatchSummary(confirmed),
+		CanUpdateConfig:       confirmed == nil,
+		CanGeneratePreview:    confirmed == nil,
+		CanConfirmPool:        latestPreview != nil && confirmed == nil,
 		Items:                 items,
 		Warnings:              buildOrderControlWarnings(items, int(groupCount)),
 	}, nil
@@ -377,7 +444,7 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		gameConfigRepo := repository.NewGameConfigRepository(tx)
 		groupRepo := repository.NewGroupRepository(tx)
-		importRepo := repository.NewOrderImportBatchRepository(tx)
+		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
 		configRepo := repository.NewOrderGenerationConfigRepository(tx)
 		poolRepo := repository.NewOrderPoolRepository(tx)
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
@@ -397,12 +464,10 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		if started {
 			return ErrAdminOrderReleaseSequenceLocked
 		}
-		selected, err := poolRepo.HasSelectedByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("check selected order pool: %w", err)
-		}
-		if selected {
+		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
 			return ErrAdminOrderPoolLocked
+		} else if !repository.IsRecordNotFound(err) {
+			return fmt.Errorf("load confirmed order batch: %w", err)
 		}
 		if err := poolRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
 			return fmt.Errorf("delete old order pool before config update: %w", err)
@@ -410,16 +475,10 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		if err := stateRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
 			return fmt.Errorf("delete old order segment state before config update: %w", err)
 		}
-
-		latestBatch, batchErr := importRepo.FindLatestSuccess(ctx)
-		var sourceBatchID *int64
-		sourceCounts := map[string]int{}
-		if batchErr == nil {
-			sourceBatchID = &latestBatch.ID
-			sourceCounts = summarizeParsedPayload(latestBatch.ParsedPayload)
-		} else if !repository.IsRecordNotFound(batchErr) {
-			return fmt.Errorf("load latest order batch: %w", batchErr)
+		if err := batchRepo.VoidPreviewByYear(ctx, cmd.YearNo, operatorName, time.Now()); err != nil {
+			return fmt.Errorf("void old preview batch: %w", err)
 		}
+		sourceCounts := defaultOrderSourceCounts(cmd.YearNo)
 
 		now := time.Now()
 		items := make([]entity.OrderGenerationConfig, 0, len(cmd.Items))
@@ -430,7 +489,6 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 				OrderType:         strings.ToUpper(strings.TrimSpace(reqItem.OrderType)),
 				OrderCount:        reqItem.OrderCount,
 				ReleaseSequenceNo: reqItem.ReleaseSequenceNo,
-				SourceBatchID:     sourceBatchID,
 				ConfigStatus:      enum.OrderConfigStatusDraft,
 				BaseEntity: entity.BaseEntity{
 					Creator:    operatorName,
@@ -505,7 +563,7 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 	var result *GenerateOrderPoolResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		gameConfigRepo := repository.NewGameConfigRepository(tx)
-		importRepo := repository.NewOrderImportBatchRepository(tx)
+		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
 		configRepo := repository.NewOrderGenerationConfigRepository(tx)
 		poolRepo := repository.NewOrderPoolRepository(tx)
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
@@ -525,12 +583,10 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 		if started {
 			return ErrAdminOrderPoolLocked
 		}
-		selected, err := poolRepo.HasSelectedByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("check selected order pool: %w", err)
-		}
-		if selected {
+		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
 			return ErrAdminOrderPoolLocked
+		} else if !repository.IsRecordNotFound(err) {
+			return fmt.Errorf("load confirmed order batch: %w", err)
 		}
 		existingCount, err := poolRepo.CountByYear(ctx, cmd.YearNo)
 		if err != nil {
@@ -548,25 +604,63 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 			return ErrAdminOrderConfigNotFound
 		}
 
-		batch, err := loadOrderBatch(ctx, importRepo, cmd.SourceBatchID)
-		if err != nil {
-			return err
-		}
-		var parsed ParsedOrderWorkbook
-		if err := json.Unmarshal(batch.ParsedPayload, &parsed); err != nil {
-			return fmt.Errorf("unmarshal order parsed payload: %w", err)
-		}
-
 		now := time.Now()
-		poolItems, err := buildOrderPoolItemsFromConfig(configs, parsed.Orders, batch.ID, operatorName, now)
-		if err != nil {
-			return err
+		if err := batchRepo.VoidPreviewByYear(ctx, cmd.YearNo, operatorName, now); err != nil {
+			return fmt.Errorf("void old preview batch: %w", err)
 		}
 		if err := poolRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
 			return fmt.Errorf("delete old order pool: %w", err)
 		}
 		if err := stateRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
 			return fmt.Errorf("delete old order segment state: %w", err)
+		}
+		seed := fmt.Sprintf("%d", now.UnixNano())
+		controlSnapshot, err := marshalJSON(configs)
+		if err != nil {
+			return err
+		}
+		params := defaultOrderGenerationParameters()
+		parameterSnapshot, err := marshalJSON(params)
+		if err != nil {
+			return err
+		}
+		batch := &entity.OrderGenerationBatch{
+			YearNo:              cmd.YearNo,
+			BatchStatus:         enum.OrderGenerationBatchStatusPreview,
+			FormulaVersion:      orderGenerationFormulaVersion,
+			RandomSeed:          seed,
+			ControlSnapshot:     controlSnapshot,
+			ParameterSnapshot:   parameterSnapshot,
+			OrderDetail:         []byte("[]"),
+			GeneratedOrderCount: 0,
+			GeneratedByID:       cmd.OperatorID,
+			GeneratedByName:     operatorName,
+			GeneratedAt:         now,
+			BaseEntity: entity.BaseEntity{
+				Creator:    operatorName,
+				CreateTime: now,
+				Updater:    operatorName,
+				UpdateTime: now,
+			},
+		}
+		if err := batchRepo.Create(ctx, batch); err != nil {
+			return fmt.Errorf("create order generation batch: %w", err)
+		}
+		poolItems, details, params, err := buildGeneratedOrderPoolItems(configs, batch.ID, seed, operatorName, now)
+		if err != nil {
+			return err
+		}
+		detailJSON, err := marshalJSON(details)
+		if err != nil {
+			return err
+		}
+		parameterSnapshot, err = marshalJSON(params)
+		if err != nil {
+			return err
+		}
+		batch.ParameterSnapshot = parameterSnapshot
+		if err := batchRepo.UpdateGenerationPayload(ctx, batch.ID, detailJSON, len(poolItems), operatorName, now); err != nil {
+			return fmt.Errorf("update order generation batch payload: %w", err)
 		}
 		if err := poolRepo.CreateBatch(ctx, poolItems); err != nil {
 			return fmt.Errorf("create order pool: %w", err)
@@ -575,14 +669,11 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 		if err := stateRepo.UpsertBatch(ctx, states); err != nil {
 			return fmt.Errorf("create segment states: %w", err)
 		}
-		if err := configRepo.UpdateStatusByYear(ctx, cmd.YearNo, enum.OrderConfigStatusLocked, operatorName); err != nil {
-			return fmt.Errorf("lock order configs: %w", err)
-		}
 
 		targetYearNo := cmd.YearNo
 		actionPayload, err := marshalJSON(map[string]any{
 			"yearNo":         cmd.YearNo,
-			"sourceBatchId":  batch.ID,
+			"batchId":        batch.ID,
 			"generatedCount": len(poolItems),
 			"segmentCount":   len(states),
 			"overwrite":      cmd.Overwrite,
@@ -591,7 +682,7 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 			return err
 		}
 		if err := actionRepo.Create(ctx, &entity.AdminActionLog{
-			ActionCode:    adminActionCodeGenerateOrderPool,
+			ActionCode:    adminActionCodeGenerateOrderPreview,
 			TargetYearNo:  &targetYearNo,
 			ActionPayload: actionPayload,
 			StateBefore:   []byte("{}"),
@@ -605,7 +696,10 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 
 		result = &GenerateOrderPoolResult{
 			YearNo:         cmd.YearNo,
-			SourceBatchID:  batch.ID,
+			BatchID:        batch.ID,
+			BatchStatus:    batch.BatchStatus,
+			RandomSeed:     seed,
+			FormulaVersion: orderGenerationFormulaVersion,
 			GeneratedCount: len(poolItems),
 			SegmentCount:   len(states),
 			Warnings:       nil,
@@ -615,6 +709,96 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("generate order pool transaction: %w", err)
+	}
+	return result, nil
+}
+
+func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd ConfirmOrderPoolCommand) (*ConfirmOrderPoolResult, error) {
+	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
+	if cmd.YearNo < 1 || cmd.BatchID <= 0 {
+		return nil, ErrAdminOrderYearInvalid
+	}
+	var result *ConfirmOrderPoolResult
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		gameConfigRepo := repository.NewGameConfigRepository(tx)
+		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
+		configRepo := repository.NewOrderGenerationConfigRepository(tx)
+		poolRepo := repository.NewOrderPoolRepository(tx)
+		stateRepo := repository.NewMarketBiddingStateRepository(tx)
+		actionRepo := repository.NewAdminActionLogRepository(tx)
+		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
+			return err
+		}
+		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
+			return ErrAdminOrderPoolLocked
+		} else if !repository.IsRecordNotFound(err) {
+			return fmt.Errorf("load confirmed order batch: %w", err)
+		}
+		batch, err := batchRepo.GetByIDForUpdate(ctx, cmd.BatchID)
+		if err != nil {
+			if repository.IsRecordNotFound(err) {
+				return ErrAdminOrderPreviewNotFound
+			}
+			return fmt.Errorf("load preview batch: %w", err)
+		}
+		if batch.YearNo != cmd.YearNo || batch.BatchStatus != enum.OrderGenerationBatchStatusPreview {
+			return ErrAdminOrderPreviewNotFound
+		}
+		started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("check order segment started: %w", err)
+		}
+		if started {
+			return ErrAdminOrderPoolLocked
+		}
+		now := time.Now()
+		if err := batchRepo.Confirm(ctx, batch.ID, cmd.OperatorID, operatorName, now); err != nil {
+			return fmt.Errorf("confirm order batch: %w", err)
+		}
+		if err := configRepo.UpdateStatusAndBatchByYear(ctx, cmd.YearNo, enum.OrderConfigStatusLocked, batch.ID, operatorName); err != nil {
+			return fmt.Errorf("lock order configs: %w", err)
+		}
+		count, err := poolRepo.CountByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("count order pool: %w", err)
+		}
+		states, err := stateRepo.ListByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("list order states: %w", err)
+		}
+		targetYearNo := cmd.YearNo
+		actionPayload, err := marshalJSON(map[string]any{
+			"yearNo":         cmd.YearNo,
+			"batchId":        batch.ID,
+			"generatedCount": count,
+			"segmentCount":   len(states),
+		})
+		if err != nil {
+			return err
+		}
+		if err := actionRepo.Create(ctx, &entity.AdminActionLog{
+			ActionCode:    adminActionCodeConfirmOrderPool,
+			TargetYearNo:  &targetYearNo,
+			ActionPayload: actionPayload,
+			StateBefore:   []byte("{}"),
+			StateAfter:    []byte("{}"),
+			OperatorID:    cmd.OperatorID,
+			OperatorName:  operatorName,
+			OperateTime:   now,
+		}); err != nil {
+			return fmt.Errorf("create admin action log: %w", err)
+		}
+		result = &ConfirmOrderPoolResult{
+			YearNo:         cmd.YearNo,
+			BatchID:        batch.ID,
+			GeneratedCount: int(count),
+			SegmentCount:   len(states),
+			ConfirmedAt:    now.Format(time.RFC3339),
+			ConfirmedBy:    operatorName,
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("confirm order pool transaction: %w", err)
 	}
 	return result, nil
 }
@@ -695,10 +879,10 @@ func buildOrderControlWarnings(items []OrderControlConfigItem, groupCount int) [
 	for _, item := range items {
 		total += item.OrderCount
 		marketTotals[item.MarketCode] += item.OrderCount
-		if item.OrderCount > item.AvailableCount && item.AvailableCount > 0 {
+		if item.AvailableCount > 0 && item.OrderCount > item.AvailableCount {
 			warnings = append(warnings, OrderControlWarning{
 				Level:      "WARN",
-				Message:    fmt.Sprintf("%s-%s 配置数量 %d 大于 Excel 可用订单 %d", item.MarketName, item.OrderTypeName, item.OrderCount, item.AvailableCount),
+				Message:    fmt.Sprintf("%s-%s 配置数量 %d 大于首版单产品最大订单数 %d", item.MarketName, item.OrderTypeName, item.OrderCount, item.AvailableCount),
 				MarketCode: item.MarketCode,
 				OrderType:  item.OrderType,
 			})
@@ -740,7 +924,7 @@ func validateControlConfigCommand(cmd UpdateOrderControlConfigCommand) error {
 	for _, item := range cmd.Items {
 		marketCode := strings.ToUpper(strings.TrimSpace(item.MarketCode))
 		orderType := strings.ToUpper(strings.TrimSpace(item.OrderType))
-		if !enum.IsValidMarketCode(marketCode) || !enum.IsValidOrderType(orderType) || item.OrderCount < 0 || item.ReleaseSequenceNo <= 0 {
+		if !enum.IsValidMarketCode(marketCode) || !enum.IsValidOrderType(orderType) || item.OrderCount < 0 || item.OrderCount > 15 || item.ReleaseSequenceNo <= 0 {
 			return ErrAdminOrderConfigInvalid
 		}
 		key := segmentKey(cmd.YearNo, marketCode, orderType)
@@ -855,7 +1039,7 @@ func (e *OrderSourceInsufficientError) Unwrap() error {
 func buildSegmentStatesFromConfigs(configs []entity.OrderGenerationConfig, operatorName string, now time.Time) []entity.MarketBiddingState {
 	states := make([]entity.MarketBiddingState, 0, len(configs))
 	for _, config := range configs {
-		status := enum.OrderSegmentStatusWaitingRelease
+		status := enum.OrderSegmentStatusWaitingInvestment
 		if config.OrderCount <= 0 {
 			status = enum.OrderSegmentStatusSkipped
 		}
@@ -935,6 +1119,15 @@ func summarizeParsedPayload(raw []byte) map[string]int {
 	return counts
 }
 
+func defaultOrderSourceCounts(yearNo int) map[string]int {
+	params := defaultOrderGenerationParameters()
+	counts := make(map[string]int, len(defaultOrderSegments()))
+	for _, segment := range defaultOrderSegments() {
+		counts[segmentKey(yearNo, segment.MarketCode, segment.OrderType)] = params.MaxCardCount
+	}
+	return counts
+}
+
 func (s *AdminOrderQueryService) countGeneratedByYear(ctx context.Context, yearNo int) (map[string]int, error) {
 	return countGeneratedByYearWithRepo(ctx, s.poolRepo, yearNo)
 }
@@ -968,6 +1161,52 @@ func buildOrderPoolItem(item entity.OrderPool) OrderPoolItem {
 		SourceSheetName: item.SourceSheetName,
 		SourceCell:      item.SourceCell,
 	}
+}
+
+func buildOrderGenerationBatchSummary(item *entity.OrderGenerationBatch) *OrderGenerationBatchSummary {
+	if item == nil {
+		return nil
+	}
+	var confirmedAt *string
+	if item.ConfirmedAt != nil {
+		value := item.ConfirmedAt.Format(time.RFC3339)
+		confirmedAt = &value
+	}
+	return &OrderGenerationBatchSummary{
+		BatchID:        item.ID,
+		BatchStatus:    item.BatchStatus,
+		FormulaVersion: item.FormulaVersion,
+		RandomSeed:     item.RandomSeed,
+		GeneratedCount: item.GeneratedOrderCount,
+		GeneratedAt:    item.GeneratedAt.Format(time.RFC3339),
+		GeneratedBy:    item.GeneratedByName,
+		ConfirmedAt:    confirmedAt,
+		ConfirmedBy:    item.ConfirmedByName,
+	}
+}
+
+func resolveOrderGenerationStatus(preview *entity.OrderGenerationBatch, confirmed *entity.OrderGenerationBatch, states []entity.MarketBiddingState) string {
+	if len(states) > 0 {
+		allFinished := true
+		for _, state := range states {
+			if state.SegmentStatus == enum.OrderSegmentStatusSelecting {
+				return "SELECTING"
+			}
+			if state.SegmentStatus != enum.OrderSegmentStatusCompleted && state.SegmentStatus != enum.OrderSegmentStatusSkipped {
+				allFinished = false
+			}
+		}
+		if allFinished {
+			return "COMPLETED"
+		}
+	}
+	if confirmed != nil {
+		return "POOL_CONFIRMED"
+	}
+	if preview != nil {
+		return "PREVIEW_GENERATED"
+	}
+	return "NOT_GENERATED"
 }
 
 func segmentKey(yearNo int, marketCode string, orderType string) string {

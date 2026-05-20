@@ -43,6 +43,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	noticeRepo := repository.NewNoticeRepository(db)
 	adjustmentRepo := repository.NewGroupAdjustmentRepository(db)
 	orderImportRepo := repository.NewOrderImportBatchRepository(db)
+	orderBatchRepo := repository.NewOrderGenerationBatchRepository(db)
 	orderConfigRepo := repository.NewOrderGenerationConfigRepository(db)
 	orderPoolRepo := repository.NewOrderPoolRepository(db)
 	marketBidRepo := repository.NewGroupMarketBidRepository(db)
@@ -116,6 +117,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		gameConfigRepo,
 		groupRepo,
 		groupYearRepo,
+		orderBatchRepo,
 		marketBidRepo,
 		marketStateRepo,
 		marketSequenceRepo,
@@ -174,8 +176,10 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		gameConfigRepo,
 		groupRepo,
 		orderImportRepo,
+		orderBatchRepo,
 		orderConfigRepo,
 		orderPoolRepo,
+		marketStateRepo,
 	)
 	adminOrderCommandService := service.NewAdminOrderCommandService(db)
 	adminOrderControlQueryService := service.NewAdminOrderControlQueryService(
@@ -224,6 +228,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		playerOrder := protected.Group("/player-order")
 		playerOrder.GET("/get-year-view", playerOrderHandler.GetYearView)
 		playerOrder.POST("/submit-market-investment", playerOrderHandler.SubmitMarketInvestment)
+		playerOrder.POST("/submit-market-investments", playerOrderHandler.SubmitMarketInvestment)
 		playerOrder.POST("/select-order", playerOrderHandler.SelectOrder)
 		playerOrder.POST("/pass-segment", playerOrderHandler.PassSegment)
 		playerOrder.POST("/deliver-orders", playerOrderHandler.DeliverOrders)
@@ -257,6 +262,9 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminOrder.POST("/upload-excel", adminOrderHandler.UploadExcel)
 		adminOrder.PUT("/update-control-config", adminOrderHandler.UpdateControlConfig)
 		adminOrder.POST("/generate-order-pool", adminOrderHandler.GenerateOrderPool)
+		adminOrder.POST("/generate-preview-pool", adminOrderHandler.GenerateOrderPool)
+		adminOrder.POST("/confirm-order-pool", adminOrderHandler.ConfirmOrderPool)
+		adminOrder.POST("/generate-selection-sequence", adminOrderHandler.GenerateSelectionSequence)
 		adminOrder.GET("/get-order-pool", adminOrderHandler.GetOrderPool)
 		adminOrder.POST("/open-market-bidding", adminOrderHandler.OpenMarketBidding)
 		adminOrder.POST("/close-market-bidding", adminOrderHandler.CloseMarketBidding)

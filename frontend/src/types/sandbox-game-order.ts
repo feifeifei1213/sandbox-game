@@ -2,6 +2,7 @@ export type OrderMarketCode = 'LOCAL' | 'REGIONAL' | 'NATIONAL' | 'GLOBAL'
 export type OrderTypeCode = 'AGENCY_INSPECTION' | 'TWO_CABIN_VIP' | 'BUSINESS_VIP' | 'MEMBER_CUSTOM'
 export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'VOID'
 export type OrderSegmentStatus =
+  | 'WAITING_INVESTMENT'
   | 'BID_OPEN'
   | 'BID_CLOSED'
   | 'SEQUENCE_READY'
@@ -46,6 +47,8 @@ export interface PlayerOrderSegmentView {
   marketName: string
   orderType: OrderTypeCode
   orderTypeName: string
+  marketInvestment: number
+  investmentSubmitted: boolean
   releaseSequenceNo: number
   segmentStatus: OrderSegmentStatus
   selectionOrder: PlayerOrderSequenceView[]
@@ -75,21 +78,27 @@ export interface PlayerOrderYearView {
   groupId: number
   yearNo: number
   orderRequired: boolean
+  investmentSubmitted: boolean
+  canSubmitInvestment: boolean
   markets: PlayerOrderMarketView[] | null
   pollingIntervalSeconds: number
 }
 
+export interface MarketInvestmentInput {
+  marketCode: OrderMarketCode
+  orderType: OrderTypeCode
+  marketInvestment: number
+}
+
 export interface SubmitMarketInvestmentRequest {
   yearNo: number
-  marketCode: OrderMarketCode
-  marketInvestment: number
+  investments: MarketInvestmentInput[]
 }
 
 export interface SubmitMarketInvestmentResult {
   groupId: number
   yearNo: number
-  marketCode: OrderMarketCode
-  marketInvestment: number
+  submittedCount: number
   submittedAt: string
 }
 

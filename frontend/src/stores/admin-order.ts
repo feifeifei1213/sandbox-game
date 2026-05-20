@@ -4,6 +4,8 @@ import { computed, reactive, ref } from 'vue'
 import {
   adminSkipCurrentOrderGroup,
   closeAdminMarketBidding,
+  confirmAdminOrderPool,
+  generateAdminSelectionSequence,
   generateAdminOrderPool,
   getAdminMarketSelectionStatus,
   getAdminOrderControlConfig,
@@ -54,6 +56,8 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const uploading = ref(false)
   const savingConfig = ref(false)
   const generatingPool = ref(false)
+  const confirmingPool = ref(false)
+  const generatingSequence = ref(false)
   const loadingPool = ref(false)
   const loadingSelectionStatus = ref(false)
   const controllingMarket = ref(false)
@@ -137,6 +141,12 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         finalYear: config.value?.finalYear ?? selectedYearNo.value,
         latestBatchId: config.value?.latestBatchId ?? null,
         latestBatchUploadedAt: config.value?.latestBatchUploadedAt ?? null,
+        generationStatus: config.value?.generationStatus ?? 'NOT_GENERATED',
+        latestPreviewBatch: config.value?.latestPreviewBatch ?? null,
+        confirmedBatch: config.value?.confirmedBatch ?? null,
+        canUpdateConfig: config.value?.canUpdateConfig ?? true,
+        canGeneratePreview: config.value?.canGeneratePreview ?? true,
+        canConfirmPool: config.value?.canConfirmPool ?? false,
         items: result.items,
         warnings: result.warnings,
       })
@@ -165,13 +175,62 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       await loadSelectionStatus({ silent: true })
       pageMessage.value = {
         type: 'success',
-        text: `${selectedYearNo.value} 年订单池已生成 ${result.generatedCount} 个订单，锁定 ${result.segmentCount} 个标段配置。`,
+        text: `${selectedYearNo.value} 年预览订单池已生成 ${result.generatedCount} 个订单，批次 #${result.batchId}。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '生成订单池失败')
       throw error
     } finally {
       generatingPool.value = false
+    }
+  }
+
+  async function confirmPool() {
+    const batchId = config.value?.latestPreviewBatch?.batchId
+    if (!batchId) {
+      pageMessage.value = {
+        type: 'error',
+        text: '请先生成预览订单池。',
+      }
+      return
+    }
+    confirmingPool.value = true
+    pageMessage.value = null
+    try {
+      const result = await confirmAdminOrderPool({
+        yearNo: selectedYearNo.value,
+        batchId,
+      })
+      await Promise.all([loadConfig({ silent: true }), loadPool({ silent: true }), loadSelectionStatus({ silent: true })])
+      pageMessage.value = {
+        type: 'success',
+        text: `${selectedYearNo.value} 年订单池已确认，固化 ${result.generatedCount} 个订单。`,
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '确认订单池失败')
+      throw error
+    } finally {
+      confirmingPool.value = false
+    }
+  }
+
+  async function generateSelectionSequence() {
+    generatingSequence.value = true
+    pageMessage.value = null
+    try {
+      const result = await generateAdminSelectionSequence({
+        yearNo: selectedYearNo.value,
+      })
+      await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
+      pageMessage.value = {
+        type: 'success',
+        text: `已生成选单顺序，处理 ${result.affectedCount} 个标段。`,
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '生成选单顺序失败')
+      throw error
+    } finally {
+      generatingSequence.value = false
     }
   }
 
@@ -198,10 +257,13 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     try {
       marketSelectionStatus.value = await getAdminMarketSelectionStatus(selectedYearNo.value, controlForm.marketCode)
     } catch (error) {
+      marketSelectionStatus.value = null
       if (!options?.silent) {
         pageMessage.value = toErrorMessage(error, '获取市场选单状态失败')
       }
-      throw error
+      if (!options?.silent) {
+        throw error
+      }
     } finally {
       loadingSelectionStatus.value = false
     }
@@ -328,6 +390,8 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     uploading,
     savingConfig,
     generatingPool,
+    confirmingPool,
+    generatingSequence,
     loadingPool,
     loadingSelectionStatus,
     controllingMarket,
@@ -347,6 +411,8 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     uploadExcel,
     saveConfig,
     generatePool,
+    confirmPool,
+    generateSelectionSequence,
     loadPool,
     loadSelectionStatus,
     openMarket,

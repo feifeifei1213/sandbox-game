@@ -27,6 +27,7 @@ type OrderGenerationConfig struct {
 	OrderType         string `gorm:"column:order_type"`
 	OrderCount        int    `gorm:"column:order_count"`
 	ReleaseSequenceNo int    `gorm:"column:release_sequence_no"`
+	GenerationBatchID *int64 `gorm:"column:generation_batch_id"`
 	SourceBatchID     *int64 `gorm:"column:source_batch_id"`
 	ConfigStatus      string `gorm:"column:config_status"`
 	BaseEntity
@@ -36,21 +37,49 @@ func (OrderGenerationConfig) TableName() string {
 	return "sg_order_generation_config"
 }
 
+type OrderGenerationBatch struct {
+	ID                  int64      `gorm:"column:id;primaryKey"`
+	YearNo              int        `gorm:"column:year_no"`
+	BatchStatus         string     `gorm:"column:batch_status"`
+	FormulaVersion      string     `gorm:"column:formula_version"`
+	RandomSeed          string     `gorm:"column:random_seed"`
+	ControlSnapshot     []byte     `gorm:"column:control_snapshot_json"`
+	ParameterSnapshot   []byte     `gorm:"column:parameter_snapshot_json"`
+	OrderDetail         []byte     `gorm:"column:order_detail_json"`
+	GeneratedOrderCount int        `gorm:"column:generated_order_count"`
+	GeneratedByID       int64      `gorm:"column:generated_by_id"`
+	GeneratedByName     string     `gorm:"column:generated_by_name"`
+	GeneratedAt         time.Time  `gorm:"column:generated_at"`
+	ConfirmedByID       *int64     `gorm:"column:confirmed_by_id"`
+	ConfirmedByName     *string    `gorm:"column:confirmed_by_name"`
+	ConfirmedAt         *time.Time `gorm:"column:confirmed_at"`
+	BaseEntity
+}
+
+func (OrderGenerationBatch) TableName() string {
+	return "sg_order_generation_batch"
+}
+
 type OrderPool struct {
-	ID              int64   `gorm:"column:id;primaryKey"`
-	YearNo          int     `gorm:"column:year_no"`
-	MarketCode      string  `gorm:"column:market_code"`
-	OrderType       string  `gorm:"column:order_type"`
-	OrderAmount     float64 `gorm:"column:order_amount"`
-	OrderQuantity   float64 `gorm:"column:order_quantity"`
-	UnitPrice       float64 `gorm:"column:unit_price"`
-	AccountTerm     int     `gorm:"column:account_term"`
-	PoolStatus      string  `gorm:"column:pool_status"`
-	SelectedGroupID *int64  `gorm:"column:selected_group_id"`
-	SourceBatchID   *int64  `gorm:"column:source_batch_id"`
-	SourceSheetName string  `gorm:"column:source_sheet_name"`
-	SourceCell      string  `gorm:"column:source_cell"`
-	SourceRowIndex  *int    `gorm:"column:source_row_index"`
+	ID                int64      `gorm:"column:id;primaryKey"`
+	YearNo            int        `gorm:"column:year_no"`
+	MarketCode        string     `gorm:"column:market_code"`
+	OrderType         string     `gorm:"column:order_type"`
+	SegmentCode       string     `gorm:"column:segment_code"`
+	CardSequenceNo    int        `gorm:"column:card_sequence_no"`
+	OrderAmount       float64    `gorm:"column:order_amount"`
+	OrderQuantity     float64    `gorm:"column:order_quantity"`
+	UnitPrice         float64    `gorm:"column:unit_price"`
+	AccountTerm       int        `gorm:"column:account_term"`
+	PoolStatus        string     `gorm:"column:pool_status"`
+	SelectedGroupID   *int64     `gorm:"column:selected_group_id"`
+	SelectedAt        *time.Time `gorm:"column:selected_at"`
+	GenerationBatchID *int64     `gorm:"column:generation_batch_id"`
+	SourceBatchID     *int64     `gorm:"column:source_batch_id"`
+	SourceSheetName   string     `gorm:"column:source_sheet_name"`
+	SourceCell        string     `gorm:"column:source_cell"`
+	SourceRowIndex    *int       `gorm:"column:source_row_index"`
+	SourceRowKey      string     `gorm:"column:source_row_key"`
 	BaseEntity
 }
 
@@ -86,7 +115,9 @@ type GroupMarketBid struct {
 	GroupID          int64     `gorm:"column:group_id"`
 	YearNo           int       `gorm:"column:year_no"`
 	MarketCode       string    `gorm:"column:market_code"`
+	OrderType        string    `gorm:"column:order_type"`
 	MarketInvestment float64   `gorm:"column:market_investment"`
+	BidStatus        string    `gorm:"column:bid_status"`
 	SubmittedAt      time.Time `gorm:"column:submitted_at"`
 	BaseEntity
 }

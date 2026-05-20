@@ -22,6 +22,15 @@ type AdminOrderGeneratePoolRequest struct {
 	SourceBatchID *int64 `json:"sourceBatchId"`
 }
 
+type AdminOrderConfirmPoolRequest struct {
+	YearNo  *int   `json:"yearNo" binding:"required"`
+	BatchID *int64 `json:"batchId" binding:"required"`
+}
+
+type AdminOrderGenerateSelectionSequenceRequest struct {
+	YearNo *int `json:"yearNo" binding:"required"`
+}
+
 type AdminOrderGetOrderPoolRequest struct {
 	YearNo     *int   `form:"yearNo" binding:"required"`
 	MarketCode string `form:"marketCode" binding:"required"`

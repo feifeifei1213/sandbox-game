@@ -53,12 +53,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   const passingSegment = ref(false)
   const deliveringOrders = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
-  const investmentDraft = reactive<Record<OrderMarketCode, number | null>>({
-    LOCAL: null,
-    REGIONAL: null,
-    NATIONAL: null,
-    GLOBAL: null,
-  })
+  const investmentDraft = reactive<Record<string, number | null>>(createEmptyInvestmentDraft())
 
   const markets = computed(() => currentView.value?.markets ?? [])
   const selectedMarket = computed<PlayerOrderMarketView | null>(
@@ -118,19 +113,17 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     }
   }
 
-  async function submitInvestment(marketCode: OrderMarketCode) {
+  async function submitInvestments() {
     submittingInvestment.value = true
     pageMessage.value = null
     try {
-      const amount = Number(investmentDraft[marketCode] ?? 0)
       await submitPlayerMarketInvestment({
         yearNo: selectedYear.value,
-        marketCode,
-        marketInvestment: Number.isFinite(amount) ? Math.max(amount, 0) : 0,
+        investments: buildInvestmentPayload(investmentDraft),
       })
       pageMessage.value = {
         type: 'success',
-        text: `${marketName(marketCode)}市场投入已提交。`,
+        text: '16 项市场投入已提交。',
       }
       await loadYearView(selectedYear.value, { silent: true })
     } catch (error) {
@@ -223,8 +216,8 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     selectedMarketCode.value = marketCode
   }
 
-  function setInvestmentDraft(marketCode: OrderMarketCode, value: number | null) {
-    investmentDraft[marketCode] = value
+  function setInvestmentDraft(marketCode: OrderMarketCode, orderType: OrderTypeCode, value: number | null) {
+    investmentDraft[investmentKey(marketCode, orderType)] = value
   }
 
   return {
@@ -249,7 +242,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     bootstrap,
     refreshTabs,
     loadYearView,
-    submitInvestment,
+    submitInvestments,
     selectOrder,
     passSegment,
     deliverSelectedOrder,
@@ -259,9 +252,12 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   }
 })
 
-function applyInvestmentDraft(view: PlayerOrderYearView, draft: Record<OrderMarketCode, number | null>) {
+function applyInvestmentDraft(view: PlayerOrderYearView, draft: Record<string, number | null>) {
   for (const market of view.markets ?? []) {
-    draft[market.marketCode] = market.investmentSubmitted ? market.marketInvestment : draft[market.marketCode] ?? 0
+    for (const segment of market.segments) {
+      const key = investmentKey(segment.marketCode, segment.orderType)
+      draft[key] = segment.investmentSubmitted ? segment.marketInvestment : draft[key] ?? 0
+    }
   }
 }
 
@@ -287,8 +283,31 @@ function resolveInitialYear(result: YearTabsResult, preferredYear?: number) {
   return firstEnterable?.yearNo ?? 0
 }
 
-function marketName(code: OrderMarketCode) {
-  return PLAYER_ORDER_MARKETS.find((item) => item.code === code)?.name ?? code
+export function investmentKey(marketCode: OrderMarketCode, orderType: OrderTypeCode) {
+  return `${marketCode}|${orderType}`
+}
+
+function createEmptyInvestmentDraft() {
+  const result: Record<string, number | null> = {}
+  for (const market of PLAYER_ORDER_MARKETS) {
+    for (const orderType of PLAYER_ORDER_TYPES) {
+      result[investmentKey(market.code, orderType.code)] = null
+    }
+  }
+  return result
+}
+
+function buildInvestmentPayload(draft: Record<string, number | null>) {
+  return PLAYER_ORDER_MARKETS.flatMap((market) =>
+    PLAYER_ORDER_TYPES.map((orderType) => {
+      const raw = Number(draft[investmentKey(market.code, orderType.code)] ?? 0)
+      return {
+        marketCode: market.code,
+        orderType: orderType.code,
+        marketInvestment: Number.isFinite(raw) ? Math.max(raw, 0) : 0,
+      }
+    }),
+  )
 }
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {

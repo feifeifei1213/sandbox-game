@@ -3,7 +3,7 @@
     <header class="hero">
       <div>
         <h2>订单管理</h2>
-        <p>管理员在开标前维护订单 Excel、标段数量、释放顺序，并生成固定订单池。</p>
+        <p>管理员按订单生成规则配置标段数量，生成预览订单池，确认后再生成选单顺序并逐段释放。</p>
       </div>
       <div class="hero-actions">
         <select v-model.number="store.selectedYearNo" class="year-select" :disabled="loading || savingConfig || generatingPool" @change="handleYearChange">
@@ -26,8 +26,8 @@
         <strong>{{ selectedYearNo }}年</strong>
       </article>
       <article class="stat-card">
-        <span>最新 Excel 批次</span>
-        <strong>{{ config?.latestBatchId ? `#${config.latestBatchId}` : '未上传' }}</strong>
+        <span>生成状态</span>
+        <strong>{{ formatGenerationStatus(config?.generationStatus) }}</strong>
       </article>
       <article class="stat-card">
         <span>配置订单数</span>
@@ -39,36 +39,40 @@
       </article>
     </section>
 
-    <section class="panel-card upload-panel">
+    <section class="panel-card generation-panel">
       <div class="panel-head">
         <div>
-          <strong>订单 Excel 上传</strong>
-          <span>上传后只解析订单卡片保存值，不直接覆盖已生成订单池。</span>
+          <strong>订单生成控制台</strong>
+          <span>先保存 16 个标段数量与释放顺序，再生成预览；确认后订单池和数量配置锁定。</span>
         </div>
       </div>
-      <div class="upload-body">
-        <label class="file-picker">
-          <input type="file" accept=".xlsx" :disabled="uploading" @change="handleFileChange">
-          <span>{{ selectedFileName || '选择订单推算 Excel' }}</span>
-        </label>
-        <button type="button" class="btn primary" :disabled="!selectedFile || uploading" @click="handleUpload">
-          {{ uploading ? '上传解析中...' : '上传并解析' }}
+      <div class="generation-actions">
+        <button type="button" class="btn" :disabled="generatingPool || !config?.canGeneratePreview" @click="handleGeneratePool">
+          {{ generatingPool ? '生成中...' : '生成/覆盖预览订单池' }}
         </button>
-        <span class="inline-tip">{{ latestBatchText }}</span>
+        <button type="button" class="btn primary" :disabled="confirmingPool || !config?.canConfirmPool" @click="handleConfirmPool">
+          {{ confirmingPool ? '确认中...' : '确认订单池' }}
+        </button>
+        <button type="button" class="btn primary" :disabled="generatingSequence" @click="handleGenerateSelectionSequence">
+          {{ generatingSequence ? '生成中...' : '生成选单顺序' }}
+        </button>
       </div>
-      <div v-if="uploadResult" class="parse-preview">
-        <div class="preview-head">
-          <strong>解析预览</strong>
-          <span>{{ uploadResult.originalFileName }} · {{ formatDateTime(uploadResult.uploadedAt) }}</span>
-        </div>
-        <div class="summary-chips">
-          <span v-for="item in uploadResult.summary.slice(0, 12)" :key="`${item.yearNo}-${item.marketCode}-${item.orderType}`">
-            {{ item.yearNo }}年 {{ item.marketName }} {{ item.orderTypeName }}：{{ item.availableCount }}
-          </span>
-        </div>
-        <div v-if="uploadResult.warnings.length > 0" class="warning-list compact">
-          <span v-for="warning in uploadResult.warnings" :key="warning">{{ warning }}</span>
-        </div>
+      <div class="batch-grid">
+        <article class="batch-card">
+          <span>预览批次</span>
+          <strong>{{ config?.latestPreviewBatch ? `#${config.latestPreviewBatch.batchId}` : '--' }}</strong>
+          <em>{{ config?.latestPreviewBatch ? `${config.latestPreviewBatch.generatedCount} 单 · ${formatDateTime(config.latestPreviewBatch.generatedAt)}` : '尚未生成预览' }}</em>
+        </article>
+        <article class="batch-card">
+          <span>确认批次</span>
+          <strong>{{ config?.confirmedBatch ? `#${config.confirmedBatch.batchId}` : '--' }}</strong>
+          <em>{{ config?.confirmedBatch?.confirmedAt ? `${config.confirmedBatch.generatedCount} 单 · ${formatDateTime(config.confirmedBatch.confirmedAt)}` : '尚未确认' }}</em>
+        </article>
+        <article class="batch-card">
+          <span>公式版本</span>
+          <strong>{{ config?.latestPreviewBatch?.formulaVersion ?? config?.confirmedBatch?.formulaVersion ?? '--' }}</strong>
+          <em>{{ config?.latestPreviewBatch?.randomSeed ? `Seed ${config.latestPreviewBatch.randomSeed}` : '确认后固化随机种子' }}</em>
+        </article>
       </div>
     </section>
 
@@ -81,7 +85,7 @@
       <div class="panel-head">
         <div>
           <strong>市场竞标控制</strong>
-          <span>按市场开放/关闭投入，关闭后生成该市场下全部标段的选单顺序；标段按释放顺序逐个释放。</span>
+          <span>玩家提交完整 16 项投入后，管理员生成全部标段选单顺序，再按释放顺序逐个释放。</span>
         </div>
         <button type="button" class="btn" :disabled="loadingSelectionStatus" @click="handleLoadSelectionStatus">
           {{ loadingSelectionStatus ? '加载中...' : '刷新状态' }}
@@ -96,12 +100,6 @@
           </select>
         </label>
         <div class="control-actions">
-          <button type="button" class="btn" :disabled="controllingMarket" @click="handleOpenMarket">
-            {{ controllingMarket ? '处理中...' : '开放投入' }}
-          </button>
-          <button type="button" class="btn" :disabled="controllingMarket" @click="handleCloseMarket">
-            {{ controllingMarket ? '处理中...' : '关闭并生成顺序' }}
-          </button>
           <button type="button" class="btn primary" :disabled="releasingSegment" @click="handleReleaseNextSegment">
             {{ releasingSegment ? '释放中...' : '释放下一个标段' }}
           </button>
@@ -199,9 +197,6 @@
           <strong>标段数量与释放顺序</strong>
           <span>每个市场 + 订单类型单独开标；开标过程中释放顺序锁定。</span>
         </div>
-        <button type="button" class="btn" :disabled="generatingPool || totalOrderCount <= 0" @click="handleGeneratePool">
-          {{ generatingPool ? '生成中...' : '生成/覆盖订单池' }}
-        </button>
       </div>
 
       <div class="table-scroll">
@@ -223,12 +218,12 @@
             </tr>
             <tr v-for="item in sortedItems" :key="`${item.marketCode}-${item.orderType}`">
               <td>
-                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" :disabled="savingConfig || generatingPool" class="compact-input">
+                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig" class="compact-input">
               </td>
               <td>{{ item.marketName }}</td>
               <td>{{ item.orderTypeName }}</td>
               <td>
-                <input v-model.number="item.orderCount" type="number" min="0" step="1" :disabled="savingConfig || generatingPool" class="compact-input">
+                <input v-model.number="item.orderCount" type="number" min="0" max="15" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig" class="compact-input">
               </td>
               <td class="number-cell">{{ item.availableCount }}</td>
               <td class="number-cell">{{ item.generatedCount }}</td>
@@ -305,7 +300,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
@@ -319,15 +314,14 @@ const { config: shellConfig } = storeToRefs(shellStore)
 const {
   selectedYearNo,
   config,
-  uploadResult,
   orderPool,
   loading,
-  uploading,
   savingConfig,
   generatingPool,
+  confirmingPool,
+  generatingSequence,
   loadingPool,
   loadingSelectionStatus,
-  controllingMarket,
   releasingSegment,
   skippingGroup,
   pageMessage,
@@ -338,23 +332,15 @@ const {
   totalGeneratedCount,
 } = storeToRefs(store)
 
-const selectedFile = ref<File | null>(null)
 const marketOptions = MARKET_OPTIONS
 const orderTypeOptions = ORDER_TYPE_OPTIONS
 
-const selectedFileName = computed(() => selectedFile.value?.name ?? '')
 const yearOptions = computed(() => {
   const finalYear = Math.max(shellConfig.value?.finalYear ?? config.value?.finalYear ?? 1, 1)
   return Array.from({ length: finalYear }, (_, index) => ({
     value: index + 1,
     label: `${index + 1}年`,
   }))
-})
-const latestBatchText = computed(() => {
-  if (!config.value?.latestBatchId) {
-    return '当前还没有成功解析的订单 Excel。'
-  }
-  return `最新批次 #${config.value.latestBatchId}，上传时间 ${formatDateTime(config.value.latestBatchUploadedAt)}。`
 })
 const currentGroupName = computed(() => formatGroupName(currentSegment.value?.currentGroupId ?? null))
 
@@ -392,22 +378,6 @@ async function handleRefresh() {
   }
 }
 
-function handleFileChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  selectedFile.value = input.files?.[0] ?? null
-}
-
-async function handleUpload() {
-  if (!selectedFile.value) {
-    return
-  }
-  try {
-    await store.uploadExcel(selectedFile.value)
-  } catch {
-    // 页面消息由 store 统一处理。
-  }
-}
-
 async function handleSaveConfig() {
   try {
     await store.saveConfig()
@@ -419,6 +389,22 @@ async function handleSaveConfig() {
 async function handleGeneratePool() {
   try {
     await store.generatePool(true)
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleConfirmPool() {
+  try {
+    await store.confirmPool()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleGenerateSelectionSequence() {
+  try {
+    await store.generateSelectionSequence()
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -443,22 +429,6 @@ async function handleLoadSelectionStatus() {
 async function handleControlMarketChange() {
   try {
     await store.loadSelectionStatus()
-  } catch {
-    // 页面消息由 store 统一处理。
-  }
-}
-
-async function handleOpenMarket() {
-  try {
-    await store.openMarket()
-  } catch {
-    // 页面消息由 store 统一处理。
-  }
-}
-
-async function handleCloseMarket() {
-  try {
-    await store.closeMarket()
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -508,8 +478,20 @@ function formatPoolStatus(value: OrderPoolStatus) {
   return value
 }
 
+function formatGenerationStatus(value?: string) {
+  const map: Record<string, string> = {
+    NOT_GENERATED: '未生成',
+    PREVIEW_GENERATED: '预览已生成',
+    POOL_CONFIRMED: '订单池已确认',
+    SELECTING: '选单中',
+    COMPLETED: '已完成',
+  }
+  return value ? map[value] ?? value : '--'
+}
+
 function formatSegmentStatus(value?: string) {
   const map: Record<string, string> = {
+    WAITING_INVESTMENT: '等待投入',
     BID_OPEN: '投入开放',
     BID_CLOSED: '投入关闭',
     SEQUENCE_READY: '顺序已生成',
@@ -567,7 +549,7 @@ function formatGroupName(groupId?: number | null) {
 }
 
 .hero-actions,
-.upload-body {
+.generation-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -669,58 +651,41 @@ function formatGroupName(groupId?: number | null) {
   font-size: 13px;
 }
 
-.upload-body,
-.parse-preview,
+.generation-actions,
+.batch-grid,
 .pool-filter {
   padding: 16px;
 }
 
-.file-picker {
-  position: relative;
-  display: inline-flex;
-  min-width: 260px;
-}
-
-.file-picker input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.file-picker span {
-  width: 100%;
-  border: 1px dashed var(--line-strong);
-  border-radius: 12px;
-  padding: 10px 14px;
-  background: #fbfcfe;
-  color: var(--muted);
-}
-
-.parse-preview {
+.batch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   border-top: 1px solid var(--line);
 }
 
-.preview-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+.batch-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfcfe;
+  padding: 12px;
 }
 
-.preview-head span {
+.batch-card span,
+.batch-card em {
   color: var(--muted);
   font-size: 13px;
+  font-style: normal;
 }
 
-.summary-chips,
 .warning-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.summary-chips span,
 .warning-list span {
   padding: 7px 10px;
   border-radius: 999px;
@@ -915,13 +880,13 @@ function formatGroupName(groupId?: number | null) {
 
 @media (max-width: 900px) {
   .hero,
-  .panel-head,
-  .preview-head {
+  .panel-head {
     flex-direction: column;
     align-items: flex-start;
   }
 
   .stats-grid,
+  .batch-grid,
   .pool-filter,
   .control-grid,
   .selection-overview,

@@ -211,6 +211,73 @@ func (h *AdminOrderHandler) GenerateOrderPool(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 
+func (h *AdminOrderHandler) ConfirmOrderPool(c *gin.Context) {
+	var req dto.AdminOrderConfirmPoolRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"确认订单池参数不正确",
+			err,
+		))
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 || req.BatchID == nil || *req.BatchID <= 0 {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"yearNo 或 batchId 参数不正确",
+			nil,
+		))
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权确认订单池") {
+		return
+	}
+
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.commandService.ConfirmOrderPool(c.Request.Context(), service.ConfirmOrderPoolCommand{
+		YearNo:       *req.YearNo,
+		BatchID:      *req.BatchID,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortAdminOrderError(c, err, "确认订单池失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminOrderHandler) GenerateSelectionSequence(c *gin.Context) {
+	var req dto.AdminOrderGenerateSelectionSequenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "生成选单顺序参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 {
+		abortPlayerOrderBadRequest(c, "yearNo 参数不正确", nil)
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权生成选单顺序") {
+		return
+	}
+
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.controlCommandService.GenerateSelectionSequence(c.Request.Context(), service.GenerateSelectionSequenceCommand{
+		YearNo:       *req.YearNo,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortAdminOrderError(c, err, "生成选单顺序失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *AdminOrderHandler) GetOrderPool(c *gin.Context) {
 	var req dto.AdminOrderGetOrderPoolRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -392,7 +459,8 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 			err,
 		))
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceLocked),
-		errors.Is(err, service.ErrAdminOrderPoolLocked):
+		errors.Is(err, service.ErrAdminOrderPoolLocked),
+		errors.Is(err, service.ErrAdminOrderSequenceAlreadyGenerated):
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusConflict,
 			enum.ConflictCode,
@@ -400,7 +468,9 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 			err,
 		))
 	case errors.Is(err, service.ErrAdminOrderBatchNotFound),
-		errors.Is(err, service.ErrAdminOrderConfigNotFound):
+		errors.Is(err, service.ErrAdminOrderConfigNotFound),
+		errors.Is(err, service.ErrAdminOrderPreviewNotFound),
+		errors.Is(err, service.ErrAdminOrderPoolNotConfirmed):
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusNotFound,
 			enum.NotFoundCode,
@@ -411,7 +481,8 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 		errors.Is(err, service.ErrAdminOrderParseFailed),
 		errors.Is(err, service.ErrAdminOrderConfigInvalid),
 		errors.Is(err, service.ErrAdminOrderReleaseSequenceDuplicated),
-		errors.Is(err, service.ErrAdminOrderSourceInsufficient):
+		errors.Is(err, service.ErrAdminOrderSourceInsufficient),
+		errors.Is(err, service.ErrAdminOrderInvestmentIncomplete):
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusUnprocessableEntity,
 			enum.UnprocessableEntityCode,
@@ -441,11 +512,19 @@ func resolveAdminOrderErrorMessage(err error) string {
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceLocked):
 		return "该年份已有标段进入开标流程，不能修改释放顺序"
 	case errors.Is(err, service.ErrAdminOrderPoolLocked):
-		return "该年份订单池已开放或已有订单被选择，不能覆盖"
+		return "该年份订单池已确认或已有订单被选择，不能覆盖"
 	case errors.Is(err, service.ErrAdminOrderConfigNotFound):
 		return "请先保存订单数量与标段释放顺序配置"
 	case errors.Is(err, service.ErrAdminOrderBatchNotFound):
-		return "请先上传并成功解析订单 Excel"
+		return "未找到可用订单批次"
+	case errors.Is(err, service.ErrAdminOrderPreviewNotFound):
+		return "请先生成本年度预览订单池"
+	case errors.Is(err, service.ErrAdminOrderPoolNotConfirmed):
+		return "请先确认本年度订单池"
+	case errors.Is(err, service.ErrAdminOrderInvestmentIncomplete):
+		return "仍有未破产小组没有提交完整 16 项市场投入"
+	case errors.Is(err, service.ErrAdminOrderSequenceAlreadyGenerated):
+		return "该年份已生成选单顺序，不能重复生成"
 	case errors.Is(err, service.ErrAdminOrderSourceInsufficient):
 		return err.Error()
 	default:

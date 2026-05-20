@@ -1,6 +1,8 @@
 import { request } from '@/api/http'
 import type {
   AdminOrderType,
+  ConfirmOrderPoolRequest,
+  ConfirmOrderPoolResult,
   GenerateOrderPoolRequest,
   GenerateOrderPoolResult,
   OrderControlConfigResult,
@@ -33,7 +35,21 @@ export function updateAdminOrderControlConfig(payload: UpdateOrderControlConfigR
 }
 
 export function generateAdminOrderPool(payload: GenerateOrderPoolRequest) {
-  return request<GenerateOrderPoolResult>('/api/v1/sandbox-game/admin-order/generate-order-pool', {
+  return request<GenerateOrderPoolResult>('/api/v1/sandbox-game/admin-order/generate-preview-pool', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function confirmAdminOrderPool(payload: ConfirmOrderPoolRequest) {
+  return request<ConfirmOrderPoolResult>('/api/v1/sandbox-game/admin-order/confirm-order-pool', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function generateAdminSelectionSequence(payload: { yearNo: number }) {
+  return request<AdminOrderControlResult>('/api/v1/sandbox-game/admin-order/generate-selection-sequence', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

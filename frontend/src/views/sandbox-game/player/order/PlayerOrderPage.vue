@@ -42,6 +42,10 @@
             <strong>{{ activeSegmentTitle }}</strong>
           </article>
           <article class="status-card">
+            <span>市场投入</span>
+            <strong>{{ currentView?.investmentSubmitted ? '已提交' : currentView?.canSubmitInvestment ? '待提交' : '未开放' }}</strong>
+          </article>
+          <article class="status-card">
             <span>轮询间隔</span>
             <strong>{{ pollingText }}</strong>
           </article>
@@ -55,6 +59,40 @@
         </section>
 
         <template v-else-if="currentView">
+          <section class="investment-panel">
+            <div class="panel-head">
+              <div>
+                <strong>年度市场投入</strong>
+                <span>开标前一次性提交 16 项投入，0 可以提交，提交后不能修改。</span>
+              </div>
+              <button
+                type="button"
+                class="btn primary"
+                :disabled="!currentView.canSubmitInvestment || submittingInvestment"
+                @click="handleSubmitInvestments"
+              >
+                {{ currentView.investmentSubmitted ? '已提交' : submittingInvestment ? '提交中...' : '提交 16 项投入' }}
+              </button>
+            </div>
+            <div class="investment-grid">
+              <div class="investment-grid-head">市场</div>
+              <div v-for="orderType in orderTypeOptions" :key="orderType.code" class="investment-grid-head">{{ orderType.name }}</div>
+              <template v-for="market in marketOptions" :key="market.code">
+                <div class="investment-market-name">{{ market.name }}</div>
+                <label v-for="orderType in orderTypeOptions" :key="`${market.code}-${orderType.code}`" class="investment-cell">
+                  <input
+                    :value="store.investmentDraft[investmentKey(market.code, orderType.code)] ?? 0"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    :disabled="!currentView.canSubmitInvestment || submittingInvestment"
+                    @input="handleInvestmentInput(market.code, orderType.code, $event)"
+                  >
+                </label>
+              </template>
+            </div>
+          </section>
+
           <section class="market-strip">
             <button
               v-for="market in markets"
@@ -73,31 +111,12 @@
             <aside class="market-panel">
               <div class="panel-head compact">
                 <div>
-                  <strong>{{ selectedMarket.marketName }}投入</strong>
-                  <span>{{ selectedMarket.isMarketLeader ? '本组为该市场龙头' : '按市场投入决定参与资格' }}</span>
+                  <strong>{{ selectedMarket.marketName }}状态</strong>
+                  <span>{{ selectedMarket.isMarketLeader ? '本组为该市场龙头' : '按标段投入决定参与资格' }}</span>
                 </div>
               </div>
               <div class="investment-box">
-                <label>
-                  <span>市场投入</span>
-                  <input
-                    :value="store.investmentDraft[selectedMarket.marketCode] ?? 0"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    :disabled="!selectedMarket.canSubmitInvestment || submittingInvestment"
-                    @input="handleInvestmentInput(selectedMarket.marketCode, $event)"
-                  >
-                </label>
-                <button
-                  type="button"
-                  class="btn primary"
-                  :disabled="!selectedMarket.canSubmitInvestment || submittingInvestment"
-                  @click="handleSubmitInvestment(selectedMarket.marketCode)"
-                >
-                  {{ selectedMarket.investmentSubmitted ? '已提交' : submittingInvestment ? '提交中...' : '提交投入' }}
-                </button>
-                <p class="hint">{{ selectedMarket.investmentSubmitted ? `已提交 ${formatAmount(selectedMarket.marketInvestment)}` : '提交后不能修改。投入 0 时普通小组不参与该市场选单。' }}</p>
+                <p class="hint">{{ selectedMarket.investmentSubmitted ? `该市场 4 个标段投入合计 ${formatAmount(selectedMarket.marketInvestment)}` : '等待年度 16 项投入提交。' }}</p>
               </div>
 
               <div class="sequence-box">
@@ -299,8 +318,8 @@ import { useRoute, useRouter } from 'vue-router'
 import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
-import { usePlayerOrderStore } from '@/stores/player-order'
-import type { OrderDeliveryStageCode, OrderMarketCode, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
+import { investmentKey, PLAYER_ORDER_MARKETS, PLAYER_ORDER_TYPES, usePlayerOrderStore } from '@/stores/player-order'
+import type { OrderDeliveryStageCode, OrderMarketCode, OrderTypeCode, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
 
 const route = useRoute()
 const router = useRouter()
@@ -330,6 +349,8 @@ let pollTimer = 0
 const deliveryStageDraft = ref<Record<number, OrderDeliveryStageCode>>({})
 const bulkDeliveryStage = ref<OrderDeliveryStageCode>('Q1')
 const selectedDeliveryOrderIds = ref<number[]>([])
+const marketOptions = PLAYER_ORDER_MARKETS
+const orderTypeOptions = PLAYER_ORDER_TYPES
 
 const visibleSegment = computed(() => currentSegment.value ?? selectedMarket.value?.segments[0] ?? null)
 const activeSegmentTitle = computed(() => {
@@ -419,15 +440,15 @@ async function handleRefresh() {
   }
 }
 
-function handleInvestmentInput(marketCode: OrderMarketCode, event: Event) {
+function handleInvestmentInput(marketCode: OrderMarketCode, orderType: OrderTypeCode, event: Event) {
   const input = event.target as HTMLInputElement
   const next = input.value === '' ? 0 : Number(input.value)
-  store.setInvestmentDraft(marketCode, Number.isFinite(next) ? Math.max(next, 0) : 0)
+  store.setInvestmentDraft(marketCode, orderType, Number.isFinite(next) ? Math.max(next, 0) : 0)
 }
 
-async function handleSubmitInvestment(marketCode: OrderMarketCode) {
+async function handleSubmitInvestments() {
   try {
-    await store.submitInvestment(marketCode)
+    await store.submitInvestments()
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -525,6 +546,7 @@ function formatAmount(value: number) {
 function formatSegmentStatus(value?: string) {
   const map: Record<string, string> = {
     BID_OPEN: '投入开放',
+    WAITING_INVESTMENT: '等待投入',
     BID_CLOSED: '投入关闭',
     SEQUENCE_READY: '顺序已生成',
     WAITING_RELEASE: '等待释放',
@@ -724,6 +746,58 @@ function formatDeliveryStage(value: string) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.investment-panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.investment-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(4, minmax(120px, 1fr));
+  gap: 0;
+  padding: 16px;
+}
+
+.investment-grid-head,
+.investment-market-name,
+.investment-cell {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  margin: -1px 0 0 -1px;
+}
+
+.investment-grid-head,
+.investment-market-name {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f7f9fc;
+  font-weight: 700;
+}
+
+.investment-grid-head {
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.investment-cell {
+  display: flex;
+  align-items: center;
+  padding: 7px;
+  background: #ffffff;
+}
+
+.investment-cell input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
 }
 
 .market-tab {
@@ -1065,6 +1139,11 @@ function formatDeliveryStage(value: string) {
   .status-grid,
   .market-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .investment-grid {
+    overflow-x: auto;
+    grid-template-columns: 110px repeat(4, 130px);
   }
 }
 

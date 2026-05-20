@@ -107,6 +107,93 @@ func (r *OrderGenerationConfigRepository) UpdateStatusByYear(ctx context.Context
 		}).Error
 }
 
+func (r *OrderGenerationConfigRepository) UpdateStatusAndBatchByYear(ctx context.Context, yearNo int, status string, batchID int64, updater string) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.OrderGenerationConfig{}).
+		Where("year_no = ?", yearNo).
+		Updates(map[string]any{
+			"config_status":       status,
+			"generation_batch_id": batchID,
+			"updater":             updater,
+		}).Error
+}
+
+type OrderGenerationBatchRepository struct {
+	db *gorm.DB
+}
+
+func NewOrderGenerationBatchRepository(db *gorm.DB) *OrderGenerationBatchRepository {
+	return &OrderGenerationBatchRepository{db: db}
+}
+
+func (r *OrderGenerationBatchRepository) Create(ctx context.Context, item *entity.OrderGenerationBatch) error {
+	return r.db.WithContext(ctx).Create(item).Error
+}
+
+func (r *OrderGenerationBatchRepository) GetByIDForUpdate(ctx context.Context, id int64) (*entity.OrderGenerationBatch, error) {
+	var item entity.OrderGenerationBatch
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", id).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *OrderGenerationBatchRepository) FindLatestByYearStatuses(ctx context.Context, yearNo int, statuses []string) (*entity.OrderGenerationBatch, error) {
+	var item entity.OrderGenerationBatch
+	if err := r.db.WithContext(ctx).
+		Where("year_no = ? AND batch_status IN ?", yearNo, statuses).
+		Order("generated_at DESC").
+		Order("id DESC").
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *OrderGenerationBatchRepository) FindConfirmedByYear(ctx context.Context, yearNo int) (*entity.OrderGenerationBatch, error) {
+	return r.FindLatestByYearStatuses(ctx, yearNo, []string{enum.OrderGenerationBatchStatusConfirmed})
+}
+
+func (r *OrderGenerationBatchRepository) VoidPreviewByYear(ctx context.Context, yearNo int, updater string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.OrderGenerationBatch{}).
+		Where("year_no = ? AND batch_status = ?", yearNo, enum.OrderGenerationBatchStatusPreview).
+		Updates(map[string]any{
+			"batch_status": enum.OrderGenerationBatchStatusVoid,
+			"updater":      updater,
+			"update_time":  operateTime,
+		}).Error
+}
+
+func (r *OrderGenerationBatchRepository) Confirm(ctx context.Context, id int64, operatorID int64, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.OrderGenerationBatch{}).
+		Where("id = ? AND batch_status = ?", id, enum.OrderGenerationBatchStatusPreview).
+		Updates(map[string]any{
+			"batch_status":      enum.OrderGenerationBatchStatusConfirmed,
+			"confirmed_by_id":   operatorID,
+			"confirmed_by_name": operatorName,
+			"confirmed_at":      operateTime,
+			"updater":           operatorName,
+			"update_time":       operateTime,
+		}).Error
+}
+
+func (r *OrderGenerationBatchRepository) UpdateGenerationPayload(ctx context.Context, id int64, detail []byte, generatedCount int, updater string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.OrderGenerationBatch{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"order_detail_json":     detail,
+			"generated_order_count": generatedCount,
+			"updater":               updater,
+			"update_time":           operateTime,
+		}).Error
+}
+
 type OrderPoolRepository struct {
 	db *gorm.DB
 }
@@ -209,6 +296,7 @@ func (r *OrderPoolRepository) MarkSelected(ctx context.Context, orderID int64, g
 		Updates(map[string]any{
 			"pool_status":       enum.OrderPoolStatusSelected,
 			"selected_group_id": groupID,
+			"selected_at":       operateTime,
 			"updater":           operatorName,
 			"update_time":       operateTime,
 		}).Error
@@ -354,7 +442,7 @@ func (r *MarketBiddingStateRepository) UpdateMarketStatus(ctx context.Context, y
 func (r *MarketBiddingStateRepository) MarkMarketSequenceReady(ctx context.Context, yearNo int, marketCode string, leaderGroupID *int64, leaderRule []byte, randomSeed string, operatorName string, operateTime time.Time) (int64, error) {
 	tx := r.db.WithContext(ctx).
 		Model(&entity.MarketBiddingState{}).
-		Where("year_no = ? AND market_code = ? AND segment_status = ?", yearNo, marketCode, enum.OrderSegmentStatusBidClosed).
+		Where("year_no = ? AND market_code = ? AND segment_status IN ?", yearNo, marketCode, []string{enum.OrderSegmentStatusBidClosed, enum.OrderSegmentStatusWaitingInvestment}).
 		Updates(map[string]any{
 			"segment_status":   enum.OrderSegmentStatusSequenceReady,
 			"leader_group_id":  leaderGroupID,
@@ -369,7 +457,7 @@ func (r *MarketBiddingStateRepository) MarkMarketSequenceReady(ctx context.Conte
 func (r *MarketBiddingStateRepository) MarkMarketSkipped(ctx context.Context, yearNo int, marketCode string, operatorName string, operateTime time.Time) (int64, error) {
 	tx := r.db.WithContext(ctx).
 		Model(&entity.MarketBiddingState{}).
-		Where("year_no = ? AND market_code = ? AND segment_status = ?", yearNo, marketCode, enum.OrderSegmentStatusBidClosed).
+		Where("year_no = ? AND market_code = ? AND segment_status IN ?", yearNo, marketCode, []string{enum.OrderSegmentStatusBidClosed, enum.OrderSegmentStatusWaitingInvestment}).
 		Updates(map[string]any{
 			"segment_status": enum.OrderSegmentStatusSkipped,
 			"completed_at":   operateTime,
@@ -377,6 +465,35 @@ func (r *MarketBiddingStateRepository) MarkMarketSkipped(ctx context.Context, ye
 			"update_time":    operateTime,
 		})
 	return tx.RowsAffected, tx.Error
+}
+
+func (r *MarketBiddingStateRepository) MarkSegmentSequenceReady(ctx context.Context, id int64, leaderGroupID *int64, leaderRule []byte, randomSeed string, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.MarketBiddingState{}).
+		Where("id = ? AND segment_status = ?", id, enum.OrderSegmentStatusWaitingInvestment).
+		Updates(map[string]any{
+			"segment_status":   enum.OrderSegmentStatusSequenceReady,
+			"leader_group_id":  leaderGroupID,
+			"leader_rule_json": leaderRule,
+			"random_seed":      randomSeed,
+			"updater":          operatorName,
+			"update_time":      operateTime,
+		}).Error
+}
+
+func (r *MarketBiddingStateRepository) MarkSegmentSkipped(ctx context.Context, id int64, leaderGroupID *int64, leaderRule []byte, randomSeed string, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.MarketBiddingState{}).
+		Where("id = ? AND segment_status = ?", id, enum.OrderSegmentStatusWaitingInvestment).
+		Updates(map[string]any{
+			"segment_status":   enum.OrderSegmentStatusSkipped,
+			"leader_group_id":  leaderGroupID,
+			"leader_rule_json": leaderRule,
+			"random_seed":      randomSeed,
+			"completed_at":     operateTime,
+			"updater":          operatorName,
+			"update_time":      operateTime,
+		}).Error
 }
 
 func (r *MarketBiddingStateRepository) ReleaseSegment(ctx context.Context, id int64, currentGroupID *int64, operatorName string, operateTime time.Time) error {
@@ -450,6 +567,7 @@ func (r *GroupMarketBidRepository) Upsert(ctx context.Context, item *entity.Grou
 			{Name: "group_id"},
 			{Name: "year_no"},
 			{Name: "market_code"},
+			{Name: "order_type"},
 		},
 		DoNothing: true,
 	}).Create(item).Error
@@ -459,6 +577,16 @@ func (r *GroupMarketBidRepository) GetByGroupYearMarket(ctx context.Context, gro
 	var item entity.GroupMarketBid
 	if err := r.db.WithContext(ctx).
 		Where("group_id = ? AND year_no = ? AND market_code = ?", groupID, yearNo, marketCode).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GroupMarketBidRepository) GetByGroupYearSegment(ctx context.Context, groupID int64, yearNo int, marketCode string, orderType string) (*entity.GroupMarketBid, error) {
+	var item entity.GroupMarketBid
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no = ? AND market_code = ? AND order_type = ?", groupID, yearNo, marketCode, orderType).
 		First(&item).Error; err != nil {
 		return nil, err
 	}
@@ -475,6 +603,16 @@ func (r *GroupMarketBidRepository) ListByYearMarket(ctx context.Context, yearNo 
 	return items, nil
 }
 
+func (r *GroupMarketBidRepository) ListByYearSegment(ctx context.Context, yearNo int, marketCode string, orderType string) ([]entity.GroupMarketBid, error) {
+	var items []entity.GroupMarketBid
+	if err := r.db.WithContext(ctx).
+		Where("year_no = ? AND market_code = ? AND order_type = ?", yearNo, marketCode, orderType).
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *GroupMarketBidRepository) ListByGroupYear(ctx context.Context, groupID int64, yearNo int) ([]entity.GroupMarketBid, error) {
 	var items []entity.GroupMarketBid
 	if err := r.db.WithContext(ctx).
@@ -483,6 +621,45 @@ func (r *GroupMarketBidRepository) ListByGroupYear(ctx context.Context, groupID 
 		return nil, err
 	}
 	return items, nil
+}
+
+func (r *GroupMarketBidRepository) CreateBatch(ctx context.Context, items []entity.GroupMarketBid) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).CreateInBatches(&items, 100).Error
+}
+
+func (r *GroupMarketBidRepository) CountByGroupYear(ctx context.Context, groupID int64, yearNo int) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.GroupMarketBid{}).
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *GroupMarketBidRepository) CountSubmittedSegmentsByYear(ctx context.Context, yearNo int) (map[int64]int, error) {
+	type row struct {
+		GroupID int64 `gorm:"column:group_id"`
+		Count   int   `gorm:"column:count"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Model(&entity.GroupMarketBid{}).
+		Select("group_id, COUNT(*) AS count").
+		Where("year_no = ?", yearNo).
+		Group("group_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[int64]int, len(rows))
+	for _, item := range rows {
+		result[item.GroupID] = item.Count
+	}
+	return result, nil
 }
 
 type MarketSelectionOrderRepository struct {
@@ -502,6 +679,10 @@ func (r *MarketSelectionOrderRepository) CreateBatch(ctx context.Context, items 
 
 func (r *MarketSelectionOrderRepository) DeleteByYearMarket(ctx context.Context, yearNo int, marketCode string) error {
 	return r.db.WithContext(ctx).Where("year_no = ? AND market_code = ?", yearNo, marketCode).Delete(&entity.MarketSelectionOrder{}).Error
+}
+
+func (r *MarketSelectionOrderRepository) DeleteByYear(ctx context.Context, yearNo int) error {
+	return r.db.WithContext(ctx).Where("year_no = ?", yearNo).Delete(&entity.MarketSelectionOrder{}).Error
 }
 
 func (r *MarketSelectionOrderRepository) ListBySegment(ctx context.Context, yearNo int, marketCode string, orderType string) ([]entity.MarketSelectionOrder, error) {
