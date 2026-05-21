@@ -197,18 +197,24 @@
 
 - 订单推算来源为 `道具-订单推算（服务企业）.xlsx`。
 - 系统按该 Excel 的公式链实现订单生成器，Excel 作为规则依据，不作为运行时订单池上传结果。
-- 首版管理员先配置当年市场开启状态，再配置 `年份 + 市场 + 订单类型` 的订单卡片数量，系统生成预览订单池，确认后保存为固定业务数据。
+- 多年订单数量控制台固定覆盖 `1年~8年 × 四个市场 × 四类产品`，是市场预测和年度订单池的共同订单数量来源。
+- 市场预测固定按 `1~3年 / 4~5年 / 6~8年` 三段展示，不受管理员配置的最终年份裁剪。
+- 首版管理员先维护多年订单数量控制台；每年开始前再配置当年市场开启状态，系统读取该年已开启市场的控制台数量生成预览订单池，确认后保存为固定业务数据。
 - 本地市场默认开启，区域/全国/全球默认关闭；未开启市场不生成订单、不进入抢单，但玩家仍需在投入表中手动填写 `0`。
 - 生成批次需保存随机种子、公式版本、控制台参数快照和公式参数快照，用于复盘与审计。
 
 | 系统字段名 | 数据库存储名 | 来源/页面 | 当前显示名 | 类型 | 说明 |
 |---|---|---|---|---|---|
 | `orderYearNo` | `year_no` | 订单池 | 年份 | `SYSTEM_DERIVED` | 订单所属年份，`1年 ~ 最终年` |
+| `forecastYearNo` | `year_no` | 多年订单数量控制台/市场预测 | 预测年份 | `ADMIN_INPUT + SYSTEM_DERIVED` | 固定 `1~8年`，不受最终年份裁剪 |
+| `forecastStageCode` | `forecast_stage_code` | 市场预测 | 预测阶段 | `SYSTEM_DERIVED` | `YEAR_1_3 / YEAR_4_5 / YEAR_6_8` |
+| `forecastOrderCount` | `order_count` | 多年订单数量控制台 | 订单数量控制 | `ADMIN_INPUT` | `1~8年 × 市场 × 订单类型` 的订单卡片数量，范围 `0~15` |
+| `forecastNarrative` | `narrative` | 市场预测 | 市场预测说明 | `ADMIN_INPUT` | Excel 右侧说明文字，玩家端只读展示 |
 | `marketCode` | `market_code` | 订单池/年度订单页 | 市场 | `ADMIN_INPUT + PLAYER_INPUT` | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
-| `marketEnabled` | `market_enabled` | 管理员订单管理/年度订单页 | 市场开启 | `ADMIN_INPUT + SYSTEM_DERIVED` | 本地市场默认开启，其他市场默认关闭；未开启市场投入必须为 `0` |
+| `marketEnabled` | `market_enabled` | 管理员订单管理/年度订单页 | 市场开启 | `ADMIN_INPUT + SYSTEM_DERIVED` | 本地市场默认开启，其他市场默认关闭；市场开启以管理员当年手动状态为准，不随控制台数量自动开启；未开启市场投入必须为 `0` |
 | `orderType` | `order_type` | 订单池/年度订单页 | 订单类型 | `ADMIN_INPUT + SYSTEM_DERIVED` | `代办过检 / 两舱贵宾 / 商务贵宾 / 会员定制` |
 | `segmentCode` | `segment_code` | 订单池/年度订单页 | 标段 | `SYSTEM_DERIVED` | `市场 + 订单类型` 的组合编码 |
-| `releaseSequenceNo` | `release_sequence_no` | 管理员订单管理 | 标段释放顺序 | `ADMIN_INPUT` | 管理员配置同一年内标段开标先后 |
+| `releaseSequenceNo` | `release_sequence_no` | 管理员订单管理 | 标段释放顺序 | `ADMIN_INPUT` | 管理员配置同一年内标段开标先后；当年订单数量从多年控制台只读带入 |
 | `generationBatchId` | `generation_batch_id` | 订单池 | 订单生成批次 | `SYSTEM_DERIVED` | 系统按 Excel 公式链生成订单池后固化的批次 ID |
 | `formulaVersion` | `formula_version` | 订单生成批次 | 公式版本 | `SYSTEM_DERIVED` | 订单生成规则版本 |
 | `randomSeed` | `random_seed` | 订单生成批次 | 随机种子 | `SYSTEM_DERIVED` | 后台复盘字段，首版页面可不展示 |

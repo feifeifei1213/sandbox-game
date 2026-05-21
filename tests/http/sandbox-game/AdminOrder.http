@@ -21,14 +21,38 @@
 ### 健康检查
 GET {{host}}/healthz
 
-### 管理员：读取 1 年订单控制台
+### 管理员：读取多年订单数量控制台
+GET {{baseUrl}}/admin-order/get-forecast-control
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+### 管理员：保存多年订单数量控制台
+### 说明：订单数量主来源在这里；年度标段配置只保存释放顺序
+PUT {{baseUrl}}/admin-order/update-forecast-control
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "items": [
+    { "yearNo": 1, "marketCode": "LOCAL", "orderType": "AGENCY_INSPECTION", "orderCount": 2 },
+    { "yearNo": 1, "marketCode": "LOCAL", "orderType": "TWO_CABIN_VIP", "orderCount": 1 },
+    { "yearNo": 1, "marketCode": "REGIONAL", "orderType": "AGENCY_INSPECTION", "orderCount": 1 }
+  ],
+  "narratives": [
+    { "forecastStageCode": "YEAR_1_3", "marketCode": "LOCAL", "content": "本地市场首阶段需求稳定。" }
+  ]
+}
+
+### 管理员：读取 1 年年度标段配置
 GET {{baseUrl}}/admin-order/get-control-config?yearNo={{yearNo}}
 X-Role-Type: {{adminRole}}
 X-User-Id: {{adminUserId}}
 X-Username: {{adminUsername}}
 
-### 管理员：保存 16 个标段订单数量与释放顺序
-### 说明：订单数量允许 0~15；此示例只让前三个标段有订单，便于联调跳过/释放逻辑
+### 管理员：保存 16 个标段释放顺序
 PUT {{baseUrl}}/admin-order/update-control-config
 Content-Type: application/json
 X-Role-Type: {{adminRole}}
@@ -38,22 +62,22 @@ X-Username: {{adminUsername}}
 {
   "yearNo": {{yearNo}},
   "items": [
-    { "marketCode": "LOCAL", "orderType": "AGENCY_INSPECTION", "orderCount": 2, "releaseSequenceNo": 1 },
-    { "marketCode": "REGIONAL", "orderType": "AGENCY_INSPECTION", "orderCount": 1, "releaseSequenceNo": 2 },
-    { "marketCode": "LOCAL", "orderType": "TWO_CABIN_VIP", "orderCount": 1, "releaseSequenceNo": 3 },
-    { "marketCode": "LOCAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 4 },
-    { "marketCode": "LOCAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 5 },
-    { "marketCode": "REGIONAL", "orderType": "TWO_CABIN_VIP", "orderCount": 0, "releaseSequenceNo": 6 },
-    { "marketCode": "REGIONAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 7 },
-    { "marketCode": "REGIONAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 8 },
-    { "marketCode": "NATIONAL", "orderType": "AGENCY_INSPECTION", "orderCount": 0, "releaseSequenceNo": 9 },
-    { "marketCode": "NATIONAL", "orderType": "TWO_CABIN_VIP", "orderCount": 0, "releaseSequenceNo": 10 },
-    { "marketCode": "NATIONAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 11 },
-    { "marketCode": "NATIONAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 12 },
-    { "marketCode": "GLOBAL", "orderType": "AGENCY_INSPECTION", "orderCount": 0, "releaseSequenceNo": 13 },
-    { "marketCode": "GLOBAL", "orderType": "TWO_CABIN_VIP", "orderCount": 0, "releaseSequenceNo": 14 },
-    { "marketCode": "GLOBAL", "orderType": "BUSINESS_VIP", "orderCount": 0, "releaseSequenceNo": 15 },
-    { "marketCode": "GLOBAL", "orderType": "MEMBER_CUSTOM", "orderCount": 0, "releaseSequenceNo": 16 }
+    { "marketCode": "LOCAL", "orderType": "AGENCY_INSPECTION", "releaseSequenceNo": 1 },
+    { "marketCode": "REGIONAL", "orderType": "AGENCY_INSPECTION", "releaseSequenceNo": 2 },
+    { "marketCode": "LOCAL", "orderType": "TWO_CABIN_VIP", "releaseSequenceNo": 3 },
+    { "marketCode": "LOCAL", "orderType": "BUSINESS_VIP", "releaseSequenceNo": 4 },
+    { "marketCode": "LOCAL", "orderType": "MEMBER_CUSTOM", "releaseSequenceNo": 5 },
+    { "marketCode": "REGIONAL", "orderType": "TWO_CABIN_VIP", "releaseSequenceNo": 6 },
+    { "marketCode": "REGIONAL", "orderType": "BUSINESS_VIP", "releaseSequenceNo": 7 },
+    { "marketCode": "REGIONAL", "orderType": "MEMBER_CUSTOM", "releaseSequenceNo": 8 },
+    { "marketCode": "NATIONAL", "orderType": "AGENCY_INSPECTION", "releaseSequenceNo": 9 },
+    { "marketCode": "NATIONAL", "orderType": "TWO_CABIN_VIP", "releaseSequenceNo": 10 },
+    { "marketCode": "NATIONAL", "orderType": "BUSINESS_VIP", "releaseSequenceNo": 11 },
+    { "marketCode": "NATIONAL", "orderType": "MEMBER_CUSTOM", "releaseSequenceNo": 12 },
+    { "marketCode": "GLOBAL", "orderType": "AGENCY_INSPECTION", "releaseSequenceNo": 13 },
+    { "marketCode": "GLOBAL", "orderType": "TWO_CABIN_VIP", "releaseSequenceNo": 14 },
+    { "marketCode": "GLOBAL", "orderType": "BUSINESS_VIP", "releaseSequenceNo": 15 },
+    { "marketCode": "GLOBAL", "orderType": "MEMBER_CUSTOM", "releaseSequenceNo": 16 }
   ]
 }
 
@@ -90,6 +114,13 @@ X-Username: {{adminUsername}}
 
 ### 玩家 1：读取 0 年订单页，预期 orderRequired=false
 GET {{baseUrl}}/player-order/get-year-view?yearNo=0
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupOneUserId}}
+X-Username: {{groupOneUsername}}
+X-Group-Id: {{groupOneId}}
+
+### 玩家 1：读取市场预测
+GET {{baseUrl}}/player-order/get-market-forecast
 X-Role-Type: {{groupRole}}
 X-User-Id: {{groupOneUserId}}
 X-Username: {{groupOneUsername}}

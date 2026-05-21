@@ -4,6 +4,7 @@ import { computed, reactive, ref } from 'vue'
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
 import {
   deliverPlayerOrders,
+  getPlayerMarketForecast,
   getPlayerOrderYearView,
   passPlayerOrderSegment,
   selectPlayerOrder,
@@ -13,6 +14,7 @@ import type { CurrentGameConfigResult, YearTabItem, YearTabsResult } from '@/typ
 import type {
   OrderDeliveryStageCode,
   OrderMarketCode,
+  OrderMarketForecastResult,
   OrderTypeCode,
   PlayerOrderMarketView,
   PlayerOrderSegmentView,
@@ -44,6 +46,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   const currentConfig = ref<CurrentGameConfigResult | null>(null)
   const yearTabs = ref<YearTabItem[]>([])
   const currentView = ref<PlayerOrderYearView | null>(null)
+  const marketForecast = ref<OrderMarketForecastResult | null>(null)
   const selectedYear = ref(1)
   const selectedMarketCode = ref<OrderMarketCode>('LOCAL')
   const loading = ref(false)
@@ -72,9 +75,10 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     loading.value = true
     pageMessage.value = null
     try {
-      const [config, tabsResult] = await Promise.all([getCurrentGameConfig(), getYearTabs()])
+      const [config, tabsResult, forecast] = await Promise.all([getCurrentGameConfig(), getYearTabs(), getPlayerMarketForecast()])
       currentConfig.value = config
       yearTabs.value = tabsResult.tabs
+      marketForecast.value = forecast
       const nextYear = Math.max(resolveInitialYear(tabsResult, preferredYear), 0)
       await loadYearView(nextYear, { silent: true })
     } catch (error) {
@@ -224,6 +228,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     currentConfig,
     yearTabs,
     currentView,
+    marketForecast,
     selectedYear,
     selectedMarketCode,
     loading,

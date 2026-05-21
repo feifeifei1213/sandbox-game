@@ -6,9 +6,12 @@ import type {
   GenerateOrderPoolRequest,
   GenerateOrderPoolResult,
   OrderControlConfigResult,
+  OrderForecastControlResult,
   OrderPoolResult,
   UpdateOrderControlConfigRequest,
   UpdateOrderControlConfigResult,
+  UpdateOrderForecastControlRequest,
+  UpdateOrderForecastControlResult,
   UpdateOrderMarketConfigRequest,
   UpdateOrderMarketConfigResult,
   UploadOrderExcelResult,
@@ -23,10 +26,21 @@ export function getAdminOrderControlConfig(yearNo: number) {
   return request<OrderControlConfigResult>(`/api/v1/sandbox-game/admin-order/get-control-config?yearNo=${yearNo}`)
 }
 
+export function getAdminOrderForecastControl() {
+  return request<OrderForecastControlResult>('/api/v1/sandbox-game/admin-order/get-forecast-control')
+}
+
 export async function uploadAdminOrderExcel(file: File) {
   const form = new FormData()
   form.append('file', file)
   return multipartRequest<UploadOrderExcelResult>('/api/v1/sandbox-game/admin-order/upload-excel', form)
+}
+
+export function updateAdminOrderForecastControl(payload: UpdateOrderForecastControlRequest) {
+  return request<UpdateOrderForecastControlResult>('/api/v1/sandbox-game/admin-order/update-forecast-control', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function updateAdminOrderControlConfig(payload: UpdateOrderControlConfigRequest) {

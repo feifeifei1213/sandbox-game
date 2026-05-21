@@ -8,11 +8,13 @@ import {
   generateAdminSelectionSequence,
   generateAdminOrderPool,
   getAdminMarketSelectionStatus,
+  getAdminOrderForecastControl,
   getAdminOrderControlConfig,
   getAdminOrderPool,
   openAdminMarketBidding,
   releaseNextAdminOrderSegment,
   updateAdminOrderControlConfig,
+  updateAdminOrderForecastControl,
   updateAdminOrderMarketConfig,
   uploadAdminOrderExcel,
 } from '@/api/sandbox-game/admin-order'
@@ -20,6 +22,9 @@ import type {
   AdminOrderType,
   OrderControlConfigItem,
   OrderControlConfigResult,
+  OrderForecastControlItem,
+  OrderForecastControlResult,
+  OrderForecastNarrativeItem,
   OrderMarketConfigItem,
   OrderMarketCode,
   OrderPoolResult,
@@ -51,12 +56,14 @@ export const ORDER_TYPE_OPTIONS: Array<{ code: AdminOrderType; name: string }> =
 export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const selectedYearNo = ref(1)
   const config = ref<OrderControlConfigResult | null>(null)
+  const forecastControl = ref<OrderForecastControlResult | null>(null)
   const uploadResult = ref<UploadOrderExcelResult | null>(null)
   const orderPool = ref<OrderPoolResult | null>(null)
   const marketSelectionStatus = ref<AdminMarketSelectionStatus | null>(null)
   const loading = ref(false)
   const uploading = ref(false)
   const savingConfig = ref(false)
+  const savingForecastControl = ref(false)
   const generatingPool = ref(false)
   const confirmingPool = ref(false)
   const generatingSequence = ref(false)
@@ -78,18 +85,34 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   })
 
   const editableItems = ref<OrderControlConfigItem[]>([])
+  const editableForecastItems = ref<OrderForecastControlItem[]>([])
+  const editableForecastNarratives = ref<OrderForecastNarrativeItem[]>([])
   const editableMarketConfigs = ref<OrderMarketConfigItem[]>([])
 
   const totalOrderCount = computed(() => editableItems.value.reduce((sum, item) => sum + Number(item.orderCount || 0), 0))
   const totalGeneratedCount = computed(() => editableItems.value.reduce((sum, item) => sum + Number(item.generatedCount || 0), 0))
   const hasLockedConfig = computed(() => editableItems.value.some((item) => item.configStatus === 'LOCKED'))
   const sortedItems = computed(() => [...editableItems.value].sort((a, b) => a.releaseSequenceNo - b.releaseSequenceNo))
+  const forecastStages = computed(() => forecastControl.value?.forecast.stages ?? config.value?.forecast.stages ?? [])
   const enabledMarketCount = computed(() => editableMarketConfigs.value.filter((item) => item.enabled).length)
   const currentSegment = computed(() => marketSelectionStatus.value?.currentSegment ?? null)
 
   async function bootstrap(yearNo: number) {
     selectedYearNo.value = Math.max(yearNo, 1)
-    await loadConfig()
+    await Promise.all([loadForecastControl({ silent: true }), loadConfig()])
+  }
+
+  async function loadForecastControl(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      pageMessage.value = null
+    }
+    try {
+      const result = await getAdminOrderForecastControl()
+      applyForecastControl(result)
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '获取订单数量控制台失败')
+      throw error
+    }
   }
 
   async function loadConfig(options?: { silent?: boolean }) {
@@ -137,7 +160,6 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         items: editableItems.value.map((item) => ({
           marketCode: item.marketCode,
           orderType: item.orderType,
-          orderCount: item.marketEnabled ? Number(item.orderCount || 0) : 0,
           releaseSequenceNo: Number(item.releaseSequenceNo || 0),
         })),
       })
@@ -146,6 +168,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         finalYear: config.value?.finalYear ?? selectedYearNo.value,
         latestBatchId: config.value?.latestBatchId ?? null,
         latestBatchUploadedAt: config.value?.latestBatchUploadedAt ?? null,
+        forecast: forecastControl.value?.forecast ?? config.value?.forecast ?? { formulaVersion: '', stages: [] },
         generationStatus: config.value?.generationStatus ?? 'NOT_GENERATED',
         latestPreviewBatch: config.value?.latestPreviewBatch ?? null,
         confirmedBatch: config.value?.confirmedBatch ?? null,
@@ -168,6 +191,37 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     }
   }
 
+  async function saveForecastControl() {
+    savingForecastControl.value = true
+    pageMessage.value = null
+    try {
+      const result = await updateAdminOrderForecastControl({
+        items: editableForecastItems.value.map((item) => ({
+          yearNo: item.yearNo,
+          marketCode: item.marketCode,
+          orderType: item.orderType,
+          orderCount: Number(item.orderCount || 0),
+        })),
+        narratives: editableForecastNarratives.value.map((item) => ({
+          forecastStageCode: item.forecastStageCode,
+          marketCode: item.marketCode,
+          content: item.content,
+        })),
+      })
+      applyForecastControl(result)
+      await loadConfig({ silent: true })
+      pageMessage.value = {
+        type: 'success',
+        text: `多年订单数量控制台已保存，操作人 ${result.updatedBy}。`,
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '保存多年订单数量控制台失败')
+      throw error
+    } finally {
+      savingForecastControl.value = false
+    }
+  }
+
   async function saveMarketConfig() {
     savingMarketConfig.value = true
     pageMessage.value = null
@@ -184,6 +238,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         finalYear: config.value?.finalYear ?? selectedYearNo.value,
         latestBatchId: config.value?.latestBatchId ?? null,
         latestBatchUploadedAt: config.value?.latestBatchUploadedAt ?? null,
+        forecast: forecastControl.value?.forecast ?? config.value?.forecast ?? { formulaVersion: '', stages: [] },
         generationStatus: config.value?.generationStatus ?? 'NOT_GENERATED',
         latestPreviewBatch: config.value?.latestPreviewBatch ?? null,
         confirmedBatch: config.value?.confirmedBatch ?? null,
@@ -421,6 +476,12 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     }))
   }
 
+  function applyForecastControl(result: OrderForecastControlResult) {
+    forecastControl.value = result
+    editableForecastItems.value = (result.items ?? []).map((item) => ({ ...item }))
+    editableForecastNarratives.value = (result.narratives ?? []).map((item) => ({ ...item }))
+  }
+
   function setYear(yearNo: number) {
     selectedYearNo.value = Math.max(yearNo, 1)
   }
@@ -432,12 +493,14 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   return {
     selectedYearNo,
     config,
+    forecastControl,
     uploadResult,
     orderPool,
     marketSelectionStatus,
     loading,
     uploading,
     savingConfig,
+    savingForecastControl,
     savingMarketConfig,
     generatingPool,
     confirmingPool,
@@ -451,17 +514,22 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     poolFilter,
     controlForm,
     editableItems,
+    editableForecastItems,
+    editableForecastNarratives,
     editableMarketConfigs,
     sortedItems,
+    forecastStages,
     totalOrderCount,
     totalGeneratedCount,
     hasLockedConfig,
     enabledMarketCount,
     currentSegment,
     bootstrap,
+    loadForecastControl,
     loadConfig,
     uploadExcel,
     saveMarketConfig,
+    saveForecastControl,
     saveConfig,
     generatePool,
     confirmPool,

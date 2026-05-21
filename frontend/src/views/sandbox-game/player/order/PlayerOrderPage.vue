@@ -59,6 +59,38 @@
         </section>
 
         <template v-else-if="currentView">
+          <section v-if="marketForecast" class="forecast-panel">
+            <div class="panel-head">
+              <div>
+                <strong>市场预测</strong>
+                <span>订单预测按 1~3年、4~5年、6~8年展示，供开标前判断投入方向。</span>
+              </div>
+              <span class="formula-pill">{{ marketForecast.formulaVersion || '--' }}</span>
+            </div>
+            <div class="forecast-stage-grid">
+              <article v-for="stage in marketForecast.stages" :key="stage.forecastStageCode" class="forecast-stage-card">
+                <header>
+                  <strong>{{ stage.forecastStageName }}</strong>
+                  <span>{{ stage.yearRange }}</span>
+                </header>
+                <div class="forecast-market-grid">
+                  <section v-for="market in stage.markets" :key="market.marketCode" class="forecast-market-card">
+                    <div class="forecast-market-head">
+                      <strong>{{ market.marketName }}</strong>
+                      <span>{{ formatAmount(stageMarketAmount(market)) }}</span>
+                    </div>
+                    <p v-if="market.narrative">{{ market.narrative }}</p>
+                    <div class="forecast-years">
+                      <span v-for="year in market.years" :key="year.yearNo">
+                        {{ year.yearNo }}年 {{ year.totalOrderCount }}单 / {{ formatAmount(year.totalForecastAmount) }}
+                      </span>
+                    </div>
+                  </section>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <section class="investment-panel">
             <div class="panel-head">
               <div>
@@ -322,7 +354,7 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { investmentKey, PLAYER_ORDER_MARKETS, PLAYER_ORDER_TYPES, usePlayerOrderStore } from '@/stores/player-order'
-import type { OrderDeliveryStageCode, OrderMarketCode, OrderTypeCode, PlayerOrderPoolItem, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
+import type { OrderDeliveryStageCode, OrderMarketCode, OrderMarketForecastMarket, OrderTypeCode, PlayerOrderPoolItem, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
 
 const route = useRoute()
 const router = useRouter()
@@ -332,6 +364,7 @@ const {
   currentConfig,
   yearTabs,
   currentView,
+  marketForecast,
   selectedYear,
   selectedMarketCode,
   loading,
@@ -552,6 +585,10 @@ function formatAmount(value: number) {
   return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+function stageMarketAmount(market: OrderMarketForecastMarket) {
+  return market.years.reduce((sum, year) => sum + Number(year.totalForecastAmount || 0), 0)
+}
+
 function formatOrderNo(order: PlayerOrderPoolItem) {
   return order.businessOrderNo || `#${order.orderId}`
 }
@@ -768,6 +805,92 @@ function formatDeliveryStage(value: string) {
   border-radius: 16px;
   background: #ffffff;
   overflow: hidden;
+}
+
+.forecast-panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.formula-pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 7px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.forecast-stage-grid {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.forecast-stage-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfcfe;
+  overflow: hidden;
+}
+
+.forecast-stage-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.forecast-stage-card header span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.forecast-market-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.forecast-market-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 11px 12px;
+}
+
+.forecast-market-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.forecast-market-head span {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.forecast-market-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.forecast-years {
+  display: grid;
+  gap: 5px;
+}
+
+.forecast-years span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .investment-grid {
@@ -1159,7 +1282,8 @@ function formatDeliveryStage(value: string) {
   }
 
   .status-grid,
-  .market-strip {
+  .market-strip,
+  .forecast-market-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1189,7 +1313,8 @@ function formatDeliveryStage(value: string) {
   }
 
   .status-grid,
-  .market-strip {
+  .market-strip,
+  .forecast-market-grid {
     grid-template-columns: 1fr;
   }
 }

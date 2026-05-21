@@ -118,6 +118,97 @@ func (r *OrderGenerationConfigRepository) UpdateStatusAndBatchByYear(ctx context
 		}).Error
 }
 
+type OrderForecastControlRepository struct {
+	db *gorm.DB
+}
+
+func NewOrderForecastControlRepository(db *gorm.DB) *OrderForecastControlRepository {
+	return &OrderForecastControlRepository{db: db}
+}
+
+func (r *OrderForecastControlRepository) ListAll(ctx context.Context) ([]entity.OrderForecastControl, error) {
+	var items []entity.OrderForecastControl
+	if err := r.db.WithContext(ctx).
+		Order("year_no ASC").
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *OrderForecastControlRepository) ListByYear(ctx context.Context, yearNo int) ([]entity.OrderForecastControl, error) {
+	var items []entity.OrderForecastControl
+	if err := r.db.WithContext(ctx).
+		Where("year_no = ?", yearNo).
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *OrderForecastControlRepository) UpsertBatch(ctx context.Context, items []entity.OrderForecastControl) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "year_no"},
+			{Name: "market_code"},
+			{Name: "order_type"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"forecast_stage_code",
+			"order_count",
+			"updater",
+			"update_time",
+		}),
+	}).Create(&items).Error
+}
+
+type OrderMarketForecastRepository struct {
+	db *gorm.DB
+}
+
+func NewOrderMarketForecastRepository(db *gorm.DB) *OrderMarketForecastRepository {
+	return &OrderMarketForecastRepository{db: db}
+}
+
+func (r *OrderMarketForecastRepository) ListAll(ctx context.Context) ([]entity.OrderMarketForecast, error) {
+	var items []entity.OrderMarketForecast
+	if err := r.db.WithContext(ctx).
+		Order("forecast_stage_code ASC").
+		Order("market_code ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *OrderMarketForecastRepository) UpsertBatch(ctx context.Context, items []entity.OrderMarketForecast) error {
+	if len(items) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "forecast_stage_code"},
+			{Name: "market_code"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"forecast_data_json",
+			"narrative",
+			"formula_version",
+			"random_seed",
+			"control_snapshot_json",
+			"updater",
+			"update_time",
+		}),
+	}).Create(&items).Error
+}
+
 type OrderMarketConfigRepository struct {
 	db *gorm.DB
 }

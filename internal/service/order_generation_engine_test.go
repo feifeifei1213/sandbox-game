@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -27,27 +28,39 @@ func TestPlayerOrderYearViewForDemoYearDoesNotRequireOrders(t *testing.T) {
 	}
 }
 
-func TestValidateControlConfigCommandEnforcesOrderCountAndReleaseSequence(t *testing.T) {
+func TestValidateForecastControlCommandEnforcesOrderCountAndReleaseSequence(t *testing.T) {
 	valid := UpdateOrderControlConfigCommand{
 		YearNo: 1,
 		Items:  buildTestControlConfigItems(1, map[string]int{testOrderSegmentKey(enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 15}),
 	}
 	if err := validateControlConfigCommand(valid); err != nil {
-		t.Fatalf("expected valid 0~15 order config, got %v", err)
+		t.Fatalf("expected valid release sequence config, got %v", err)
 	}
 
-	invalidCount := valid
-	invalidCount.Items = append([]UpdateOrderControlConfigItem(nil), valid.Items...)
-	invalidCount.Items[0].OrderCount = 16
-	if err := validateControlConfigCommand(invalidCount); !errors.Is(err, ErrAdminOrderConfigInvalid) {
-		t.Fatalf("expected order count > 15 to be invalid, got %v", err)
+	forecast := UpdateOrderForecastControlCommand{
+		Items: buildTestForecastControlItems(map[string]int{
+			testForecastSegmentKey(1, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 15,
+		}),
+	}
+	if err := validateForecastControlCommand(forecast); err != nil {
+		t.Fatalf("expected valid 0~15 forecast control count, got %v", err)
+	}
+
+	invalidForecast := forecast
+	invalidForecast.Items = append([]UpdateOrderForecastControlItem(nil), forecast.Items...)
+	invalidForecast.Items[0].OrderCount = 16
+	if err := validateForecastControlCommand(invalidForecast); !errors.Is(err, ErrAdminOrderForecastControlInvalid) {
+		t.Fatalf("expected forecast order count > 15 to be invalid, got %v", err)
 	}
 
 	duplicatedEffectiveSequence := valid
 	duplicatedEffectiveSequence.Items = append([]UpdateOrderControlConfigItem(nil), valid.Items...)
-	duplicatedEffectiveSequence.Items[1].OrderCount = 1
 	duplicatedEffectiveSequence.Items[1].ReleaseSequenceNo = duplicatedEffectiveSequence.Items[0].ReleaseSequenceNo
-	if err := validateEffectiveReleaseSequences(duplicatedEffectiveSequence.Items, buildMarketEnabledMap(nil)); !errors.Is(err, ErrAdminOrderReleaseSequenceDuplicated) {
+	forecastCounts := forecastControlCountMap(1, []entity.OrderForecastControl{
+		{YearNo: 1, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, OrderCount: 1},
+		{YearNo: 1, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeTwoCabinVIP, OrderCount: 1},
+	})
+	if err := validateEffectiveReleaseSequences(duplicatedEffectiveSequence.Items, buildMarketEnabledMap(nil), forecastCounts, 1); !errors.Is(err, ErrAdminOrderReleaseSequenceDuplicated) {
 		t.Fatalf("expected duplicated effective release sequence to be rejected, got %v", err)
 	}
 }
@@ -199,6 +212,21 @@ func buildTestControlConfigItems(yearNo int, counts map[string]int) []UpdateOrde
 	return items
 }
 
+func buildTestForecastControlItems(counts map[string]int) []UpdateOrderForecastControlItem {
+	items := make([]UpdateOrderForecastControlItem, 0, forecastControlMaxYear*len(defaultOrderSegments()))
+	for yearNo := forecastControlMinYear; yearNo <= forecastControlMaxYear; yearNo++ {
+		for _, segment := range defaultOrderSegments() {
+			items = append(items, UpdateOrderForecastControlItem{
+				YearNo:     yearNo,
+				MarketCode: segment.MarketCode,
+				OrderType:  segment.OrderType,
+				OrderCount: counts[testForecastSegmentKey(yearNo, segment.MarketCode, segment.OrderType)],
+			})
+		}
+	}
+	return items
+}
+
 func buildTestMarketInvestments(resolve func(segment OrderSegmentDefinition) float64) []MarketInvestmentInput {
 	inputs := make([]MarketInvestmentInput, 0, len(defaultOrderSegments()))
 	for _, segment := range defaultOrderSegments() {
@@ -213,4 +241,8 @@ func buildTestMarketInvestments(resolve func(segment OrderSegmentDefinition) flo
 
 func testOrderSegmentKey(marketCode string, orderType string) string {
 	return marketCode + "|" + orderType
+}
+
+func testForecastSegmentKey(yearNo int, marketCode string, orderType string) string {
+	return fmt.Sprintf("%d|%s|%s", yearNo, marketCode, orderType)
 }

@@ -68,6 +68,20 @@ func (h *AdminOrderHandler) GetControlConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 
+func (h *AdminOrderHandler) GetForecastControl(c *gin.Context) {
+	if !ensureAdminIdentity(c, "当前身份无权查看订单数量控制台") {
+		return
+	}
+
+	result, err := h.queryService.GetForecastControl(c.Request.Context())
+	if err != nil {
+		abortAdminOrderError(c, err, "获取订单数量控制台失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *AdminOrderHandler) UploadExcel(c *gin.Context) {
 	if !ensureAdminIdentity(c, "当前身份无权上传订单 Excel") {
 		return
@@ -116,6 +130,63 @@ func (h *AdminOrderHandler) UploadExcel(c *gin.Context) {
 	})
 	if err != nil {
 		abortAdminOrderError(c, err, "上传订单 Excel 失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *AdminOrderHandler) UpdateForecastControl(c *gin.Context) {
+	var req dto.AdminOrderUpdateForecastControlRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"订单数量控制台参数不正确",
+			err,
+		))
+		return
+	}
+	if len(req.Items) == 0 {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"items 参数不正确",
+			nil,
+		))
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权更新订单数量控制台") {
+		return
+	}
+
+	items := make([]service.UpdateOrderForecastControlItem, 0, len(req.Items))
+	for _, item := range req.Items {
+		items = append(items, service.UpdateOrderForecastControlItem{
+			YearNo:     item.YearNo,
+			MarketCode: item.MarketCode,
+			OrderType:  item.OrderType,
+			OrderCount: item.OrderCount,
+		})
+	}
+	narratives := make([]service.UpdateOrderForecastNarrativeItem, 0, len(req.Narratives))
+	for _, item := range req.Narratives {
+		narratives = append(narratives, service.UpdateOrderForecastNarrativeItem{
+			ForecastStageCode: item.ForecastStageCode,
+			MarketCode:        item.MarketCode,
+			Content:           item.Content,
+		})
+	}
+
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.commandService.UpdateForecastControl(c.Request.Context(), service.UpdateOrderForecastControlCommand{
+		Items:        items,
+		Narratives:   narratives,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortAdminOrderError(c, err, "更新订单数量控制台失败")
 		return
 	}
 
@@ -528,6 +599,7 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 	case errors.Is(err, service.ErrAdminOrderYearInvalid),
 		errors.Is(err, service.ErrAdminOrderParseFailed),
 		errors.Is(err, service.ErrAdminOrderConfigInvalid),
+		errors.Is(err, service.ErrAdminOrderForecastControlInvalid),
 		errors.Is(err, service.ErrAdminOrderReleaseSequenceDuplicated),
 		errors.Is(err, service.ErrAdminOrderSourceInsufficient),
 		errors.Is(err, service.ErrAdminOrderInvestmentIncomplete):
@@ -557,6 +629,8 @@ func resolveAdminOrderErrorMessage(err error) string {
 		return "订单 Excel 解析失败，请确认文件格式与订单推算模板一致"
 	case errors.Is(err, service.ErrAdminOrderConfigInvalid):
 		return "订单数量或标段释放顺序配置不合法"
+	case errors.Is(err, service.ErrAdminOrderForecastControlInvalid):
+		return "订单数量控制台配置不合法"
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceDuplicated):
 		return "同一年内标段释放顺序不能重复"
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceLocked):

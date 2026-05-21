@@ -40,6 +40,70 @@
       </article>
     </section>
 
+    <section class="panel-card forecast-control-panel">
+      <div class="panel-head">
+        <div>
+          <strong>多年订单数量控制台</strong>
+          <span>订单数量固定维护 1~8 年，年度订单池只读取当年已开启市场的数量。</span>
+        </div>
+        <button type="button" class="btn primary" :disabled="savingForecastControl || generatingPool || !config?.canUpdateConfig" @click="handleSaveForecastControl">
+          {{ savingForecastControl ? '保存中...' : '保存控制台' }}
+        </button>
+      </div>
+      <div v-for="stage in forecastStages" :key="stage.forecastStageCode" class="forecast-stage-block">
+        <div class="forecast-stage-head">
+          <strong>{{ stage.forecastStageName }}</strong>
+          <span>公式版本 {{ forecastControl?.forecast.formulaVersion ?? config?.forecast.formulaVersion ?? '--' }}</span>
+        </div>
+        <div class="table-scroll">
+          <table class="forecast-control-table">
+            <thead>
+              <tr>
+                <th>市场</th>
+                <th>订单类型</th>
+                <th v-for="yearNo in stage.years" :key="yearNo">{{ yearNo }}年数量</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="market in marketOptions" :key="`${stage.forecastStageCode}-${market.code}`">
+                <tr v-for="(orderType, orderIndex) in orderTypeOptions" :key="`${market.code}-${orderType.code}`">
+                  <td v-if="orderIndex === 0" :rowspan="orderTypeOptions.length">{{ market.name }}</td>
+                  <td>{{ orderType.name }}</td>
+                  <td v-for="yearNo in stage.years" :key="yearNo">
+                    <input
+                      :value="getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0"
+                      type="number"
+                      min="0"
+                      max="15"
+                      step="1"
+                      class="compact-input"
+                      :disabled="savingForecastControl || generatingPool || !config?.canUpdateConfig"
+                      @input="handleForecastCountInput(yearNo, market.code, orderType.code, $event)"
+                    >
+                  </td>
+                </tr>
+                <tr class="forecast-total-row">
+                  <td colspan="2">{{ market.name }}预测金额</td>
+                  <td v-for="yearNo in stage.years" :key="yearNo" class="number-cell">{{ formatAmount(getForecastYear(stage.forecastStageCode, market.code, yearNo)?.totalForecastAmount ?? 0) }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <div class="forecast-narratives">
+          <label v-for="market in marketOptions" :key="`${stage.forecastStageCode}-${market.code}`" class="field">
+            <span>{{ market.name }}说明</span>
+            <textarea
+              :value="getForecastNarrative(stage.forecastStageCode, market.code)?.content ?? ''"
+              rows="2"
+              :disabled="savingForecastControl || generatingPool || !config?.canUpdateConfig"
+              @input="handleForecastNarrativeInput(stage.forecastStageCode, market.code, $event)"
+            />
+          </label>
+        </div>
+      </div>
+    </section>
+
     <section class="panel-card">
       <div class="panel-head">
         <div>
@@ -63,7 +127,7 @@
       <div class="panel-head">
         <div>
           <strong>标段数量与释放顺序</strong>
-          <span>有效释放顺序只覆盖已开启且订单数量大于 0 的标段。</span>
+          <span>订单数量来自多年控制台，本区只保存当年标段释放顺序。</span>
         </div>
         <button type="button" class="btn primary" :disabled="savingConfig || !config?.canUpdateConfig" @click="handleSaveConfig">
           {{ savingConfig ? '保存中...' : '保存配置' }}
@@ -97,7 +161,7 @@
               </td>
               <td>{{ item.orderTypeName }}</td>
               <td>
-                <input v-model.number="item.orderCount" type="number" min="0" max="15" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input">
+                <span class="readonly-number">{{ item.orderCount }}</span>
               </td>
               <td class="number-cell">{{ item.marketEnabled ? item.availableCount : 0 }}</td>
               <td class="number-cell">{{ item.generatedCount }}</td>
@@ -361,6 +425,7 @@ const {
   orderPool,
   loading,
   savingConfig,
+  savingForecastControl,
   savingMarketConfig,
   generatingPool,
   confirmingPool,
@@ -373,6 +438,10 @@ const {
   marketSelectionStatus,
   currentSegment,
   sortedItems,
+  forecastControl,
+  forecastStages,
+  editableForecastItems,
+  editableForecastNarratives,
   editableMarketConfigs,
   totalOrderCount,
   totalGeneratedCount,
@@ -417,6 +486,7 @@ async function handleYearChange() {
 
 async function handleRefresh() {
   try {
+    await store.loadForecastControl({ silent: true })
     await store.loadConfig()
     await store.loadPool({ silent: true })
     await store.loadSelectionStatus({ silent: true })
@@ -427,12 +497,15 @@ async function handleRefresh() {
 
 async function handleSaveConfig() {
   try {
-    for (const item of sortedItems.value) {
-      if (!item.marketEnabled) {
-        item.orderCount = 0
-      }
-    }
     await store.saveConfig()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleSaveForecastControl() {
+  try {
+    await store.saveForecastControl()
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -450,9 +523,39 @@ function syncMarketDraftToItems() {
   const enabledMap = new Map(editableMarketConfigs.value.map((item) => [item.marketCode, item.enabled]))
   for (const item of sortedItems.value) {
     item.marketEnabled = enabledMap.get(item.marketCode) ?? item.marketEnabled
-    if (!item.marketEnabled) {
-      item.orderCount = 0
-    }
+  }
+}
+
+function getForecastItem(yearNo: number, marketCode: string, orderType: string) {
+  return editableForecastItems.value.find((item) => item.yearNo === yearNo && item.marketCode === marketCode && item.orderType === orderType) ?? null
+}
+
+function getForecastNarrative(stageCode: string, marketCode: string) {
+  return editableForecastNarratives.value.find((item) => item.forecastStageCode === stageCode && item.marketCode === marketCode) ?? null
+}
+
+function getForecastYear(stageCode: string, marketCode: string, yearNo: number) {
+  return forecastStages.value
+    .find((stage) => stage.forecastStageCode === stageCode)
+    ?.markets.find((market) => market.marketCode === marketCode)
+    ?.years.find((year) => year.yearNo === yearNo) ?? null
+}
+
+function handleForecastCountInput(yearNo: number, marketCode: string, orderType: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  const raw = Number(input.value)
+  const value = Number.isFinite(raw) ? Math.min(Math.max(Math.trunc(raw), 0), 15) : 0
+  const item = getForecastItem(yearNo, marketCode, orderType)
+  if (item) {
+    item.orderCount = value
+  }
+}
+
+function handleForecastNarrativeInput(stageCode: string, marketCode: string, event: Event) {
+  const input = event.target as HTMLTextAreaElement
+  const item = getForecastNarrative(stageCode, marketCode)
+  if (item) {
+    item.content = input.value
   }
 }
 
@@ -790,7 +893,8 @@ function formatGroupName(groupId?: number | null) {
 }
 
 .config-table,
-.pool-table {
+.pool-table,
+.forecast-control-table {
   width: 100%;
   min-width: 900px;
   border-collapse: collapse;
@@ -799,14 +903,17 @@ function formatGroupName(groupId?: number | null) {
 .config-table th,
 .config-table td,
 .pool-table th,
-.pool-table td {
+.pool-table td,
+.forecast-control-table th,
+.forecast-control-table td {
   border: 1px solid var(--line);
   padding: 10px 12px;
   font-size: 14px;
 }
 
 .config-table th,
-.pool-table th {
+.pool-table th,
+.forecast-control-table th {
   background: #f4f6f9;
   text-align: center;
 }
@@ -820,6 +927,53 @@ function formatGroupName(groupId?: number | null) {
 
 .number-cell {
   text-align: right;
+}
+
+.readonly-number {
+  display: inline-flex;
+  min-width: 56px;
+  justify-content: flex-end;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px 10px;
+}
+
+.forecast-control-panel {
+  overflow: hidden;
+}
+
+.forecast-stage-block {
+  border-top: 1px solid var(--line);
+}
+
+.forecast-stage-block:first-of-type {
+  border-top: 0;
+}
+
+.forecast-stage-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fbfcfe;
+}
+
+.forecast-stage-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.forecast-total-row {
+  background: #f8fafc;
+  color: var(--muted);
+}
+
+.forecast-narratives {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px 16px;
 }
 
 .empty-row {
@@ -991,6 +1145,15 @@ function formatGroupName(groupId?: number | null) {
   padding: 10px 12px;
 }
 
+.field textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 10px;
+  font: inherit;
+}
+
 @media (max-width: 1240px) {
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1007,6 +1170,7 @@ function formatGroupName(groupId?: number | null) {
   .stats-grid,
   .batch-grid,
   .pool-filter,
+  .forecast-narratives,
   .market-config-grid,
   .control-grid,
   .selection-overview,

@@ -37,6 +37,36 @@ func (OrderGenerationConfig) TableName() string {
 	return "sg_order_generation_config"
 }
 
+type OrderForecastControl struct {
+	ID                int64  `gorm:"column:id;primaryKey"`
+	YearNo            int    `gorm:"column:year_no"`
+	ForecastStageCode string `gorm:"column:forecast_stage_code"`
+	MarketCode        string `gorm:"column:market_code"`
+	OrderType         string `gorm:"column:order_type"`
+	OrderCount        int    `gorm:"column:order_count"`
+	BaseEntity
+}
+
+func (OrderForecastControl) TableName() string {
+	return "sg_order_forecast_control"
+}
+
+type OrderMarketForecast struct {
+	ID                  int64  `gorm:"column:id;primaryKey"`
+	ForecastStageCode   string `gorm:"column:forecast_stage_code"`
+	MarketCode          string `gorm:"column:market_code"`
+	ForecastData        []byte `gorm:"column:forecast_data_json"`
+	Narrative           string `gorm:"column:narrative"`
+	FormulaVersion      string `gorm:"column:formula_version"`
+	RandomSeed          string `gorm:"column:random_seed"`
+	ControlSnapshotJSON []byte `gorm:"column:control_snapshot_json"`
+	BaseEntity
+}
+
+func (OrderMarketForecast) TableName() string {
+	return "sg_order_market_forecast"
+}
+
 type OrderMarketConfig struct {
 	ID            int64  `gorm:"column:id;primaryKey"`
 	YearNo        int    `gorm:"column:year_no"`
@@ -58,6 +88,7 @@ type OrderGenerationBatch struct {
 	FormulaVersion      string     `gorm:"column:formula_version"`
 	RandomSeed          string     `gorm:"column:random_seed"`
 	ControlSnapshot     []byte     `gorm:"column:control_snapshot_json"`
+	ForecastSnapshot    []byte     `gorm:"column:forecast_snapshot_json"`
 	ParameterSnapshot   []byte     `gorm:"column:parameter_snapshot_json"`
 	OrderDetail         []byte     `gorm:"column:order_detail_json"`
 	GeneratedOrderCount int        `gorm:"column:generated_order_count"`

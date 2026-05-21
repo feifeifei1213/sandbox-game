@@ -17,15 +17,18 @@ import (
 )
 
 const (
-	adminActionCodeUploadOrderExcel     = "UPLOAD_ORDER_EXCEL"
-	adminActionCodeUpdateOrderConfig    = "UPDATE_ORDER_CONFIG"
-	adminActionCodeUpdateMarketConfig   = "UPDATE_ORDER_MARKET_CONFIG"
-	adminActionCodeGenerateOrderPool    = "GENERATE_ORDER_POOL"
-	adminActionCodeGenerateOrderPreview = "GENERATE_ORDER_PREVIEW"
-	adminActionCodeConfirmOrderPool     = "CONFIRM_ORDER_POOL"
-	defaultOrderReleaseSequenceStart    = 1
-	defaultOrderParsePreviewLimit       = 20
-	requiredOrderInvestmentSegmentCount = 16
+	adminActionCodeUploadOrderExcel      = "UPLOAD_ORDER_EXCEL"
+	adminActionCodeUpdateForecastControl = "UPDATE_ORDER_FORECAST_CONTROL"
+	adminActionCodeUpdateOrderConfig     = "UPDATE_ORDER_CONFIG"
+	adminActionCodeUpdateMarketConfig    = "UPDATE_ORDER_MARKET_CONFIG"
+	adminActionCodeGenerateOrderPool     = "GENERATE_ORDER_POOL"
+	adminActionCodeGenerateOrderPreview  = "GENERATE_ORDER_PREVIEW"
+	adminActionCodeConfirmOrderPool      = "CONFIRM_ORDER_POOL"
+	defaultOrderReleaseSequenceStart     = 1
+	defaultOrderParsePreviewLimit        = 20
+	requiredOrderInvestmentSegmentCount  = 16
+	forecastControlMinYear               = 1
+	forecastControlMaxYear               = 8
 )
 
 var (
@@ -44,6 +47,7 @@ var (
 	ErrAdminOrderInvestmentIncomplete      = errors.New("admin order investment incomplete")
 	ErrAdminOrderSequenceAlreadyGenerated  = errors.New("admin order sequence already generated")
 	ErrAdminOrderMarketConfigLocked        = errors.New("admin order market config locked")
+	ErrAdminOrderForecastControlInvalid    = errors.New("admin order forecast control invalid")
 )
 
 type OrderSegmentDefinition struct {
@@ -79,6 +83,65 @@ type OrderSourceSummary struct {
 	OrderType      string `json:"orderType"`
 	OrderTypeName  string `json:"orderTypeName"`
 	AvailableCount int    `json:"availableCount"`
+}
+
+type OrderForecastControlItem struct {
+	YearNo            int    `json:"yearNo"`
+	ForecastStageCode string `json:"forecastStageCode"`
+	ForecastStageName string `json:"forecastStageName"`
+	MarketCode        string `json:"marketCode"`
+	MarketName        string `json:"marketName"`
+	OrderType         string `json:"orderType"`
+	OrderTypeName     string `json:"orderTypeName"`
+	OrderCount        int    `json:"orderCount"`
+}
+
+type OrderForecastNarrativeItem struct {
+	ForecastStageCode string `json:"forecastStageCode"`
+	ForecastStageName string `json:"forecastStageName"`
+	MarketCode        string `json:"marketCode"`
+	MarketName        string `json:"marketName"`
+	Content           string `json:"content"`
+}
+
+type OrderMarketForecastProduct struct {
+	OrderType      string  `json:"orderType"`
+	OrderTypeName  string  `json:"orderTypeName"`
+	OrderCount     int     `json:"orderCount"`
+	ForecastAmount float64 `json:"forecastAmount"`
+}
+
+type OrderMarketForecastYear struct {
+	YearNo              int                          `json:"yearNo"`
+	Products            []OrderMarketForecastProduct `json:"products"`
+	TotalOrderCount     int                          `json:"totalOrderCount"`
+	TotalForecastAmount float64                      `json:"totalForecastAmount"`
+}
+
+type OrderMarketForecastMarket struct {
+	MarketCode string                    `json:"marketCode"`
+	MarketName string                    `json:"marketName"`
+	Narrative  string                    `json:"narrative"`
+	Years      []OrderMarketForecastYear `json:"years"`
+}
+
+type OrderMarketForecastStage struct {
+	ForecastStageCode string                      `json:"forecastStageCode"`
+	ForecastStageName string                      `json:"forecastStageName"`
+	YearRange         string                      `json:"yearRange"`
+	Years             []int                       `json:"years"`
+	Markets           []OrderMarketForecastMarket `json:"markets"`
+}
+
+type OrderMarketForecastResult struct {
+	FormulaVersion string                     `json:"formulaVersion"`
+	Stages         []OrderMarketForecastStage `json:"stages"`
+}
+
+type OrderForecastControlResult struct {
+	Items      []OrderForecastControlItem   `json:"items"`
+	Narratives []OrderForecastNarrativeItem `json:"narratives"`
+	Forecast   OrderMarketForecastResult    `json:"forecast"`
 }
 
 type OrderControlConfigItem struct {
@@ -128,6 +191,7 @@ type OrderControlConfigResult struct {
 	FinalYear             int                          `json:"finalYear"`
 	LatestBatchID         *int64                       `json:"latestBatchId"`
 	LatestBatchUploadedAt *string                      `json:"latestBatchUploadedAt"`
+	Forecast              OrderMarketForecastResult    `json:"forecast"`
 	GenerationStatus      string                       `json:"generationStatus"`
 	LatestPreviewBatch    *OrderGenerationBatchSummary `json:"latestPreviewBatch"`
 	ConfirmedBatch        *OrderGenerationBatchSummary `json:"confirmedBatch"`
@@ -158,6 +222,34 @@ type UpdateOrderMarketConfigResult struct {
 	Warnings  []OrderControlWarning    `json:"warnings"`
 	UpdatedAt string                   `json:"updatedAt"`
 	UpdatedBy string                   `json:"updatedBy"`
+}
+
+type UpdateOrderForecastControlCommand struct {
+	Items        []UpdateOrderForecastControlItem
+	Narratives   []UpdateOrderForecastNarrativeItem
+	OperatorID   int64
+	OperatorName string
+}
+
+type UpdateOrderForecastControlItem struct {
+	YearNo     int
+	MarketCode string
+	OrderType  string
+	OrderCount int
+}
+
+type UpdateOrderForecastNarrativeItem struct {
+	ForecastStageCode string
+	MarketCode        string
+	Content           string
+}
+
+type UpdateOrderForecastControlResult struct {
+	Items      []OrderForecastControlItem   `json:"items"`
+	Narratives []OrderForecastNarrativeItem `json:"narratives"`
+	Forecast   OrderMarketForecastResult    `json:"forecast"`
+	UpdatedAt  string                       `json:"updatedAt"`
+	UpdatedBy  string                       `json:"updatedBy"`
 }
 
 type UpdateOrderControlConfigCommand struct {
@@ -249,14 +341,16 @@ type OrderPoolResult struct {
 }
 
 type AdminOrderQueryService struct {
-	gameConfigRepo *repository.GameConfigRepository
-	groupRepo      *repository.GroupRepository
-	importRepo     *repository.OrderImportBatchRepository
-	batchRepo      *repository.OrderGenerationBatchRepository
-	configRepo     *repository.OrderGenerationConfigRepository
-	marketRepo     *repository.OrderMarketConfigRepository
-	poolRepo       *repository.OrderPoolRepository
-	stateRepo      *repository.MarketBiddingStateRepository
+	gameConfigRepo     *repository.GameConfigRepository
+	groupRepo          *repository.GroupRepository
+	importRepo         *repository.OrderImportBatchRepository
+	batchRepo          *repository.OrderGenerationBatchRepository
+	configRepo         *repository.OrderGenerationConfigRepository
+	forecastRepo       *repository.OrderForecastControlRepository
+	marketForecastRepo *repository.OrderMarketForecastRepository
+	marketRepo         *repository.OrderMarketConfigRepository
+	poolRepo           *repository.OrderPoolRepository
+	stateRepo          *repository.MarketBiddingStateRepository
 }
 
 func NewAdminOrderQueryService(
@@ -265,20 +359,44 @@ func NewAdminOrderQueryService(
 	importRepo *repository.OrderImportBatchRepository,
 	batchRepo *repository.OrderGenerationBatchRepository,
 	configRepo *repository.OrderGenerationConfigRepository,
+	forecastRepo *repository.OrderForecastControlRepository,
+	marketForecastRepo *repository.OrderMarketForecastRepository,
 	marketRepo *repository.OrderMarketConfigRepository,
 	poolRepo *repository.OrderPoolRepository,
 	stateRepo *repository.MarketBiddingStateRepository,
 ) *AdminOrderQueryService {
 	return &AdminOrderQueryService{
-		gameConfigRepo: gameConfigRepo,
-		groupRepo:      groupRepo,
-		importRepo:     importRepo,
-		batchRepo:      batchRepo,
-		configRepo:     configRepo,
-		marketRepo:     marketRepo,
-		poolRepo:       poolRepo,
-		stateRepo:      stateRepo,
+		gameConfigRepo:     gameConfigRepo,
+		groupRepo:          groupRepo,
+		importRepo:         importRepo,
+		batchRepo:          batchRepo,
+		configRepo:         configRepo,
+		forecastRepo:       forecastRepo,
+		marketForecastRepo: marketForecastRepo,
+		marketRepo:         marketRepo,
+		poolRepo:           poolRepo,
+		stateRepo:          stateRepo,
 	}
+}
+
+func (s *AdminOrderQueryService) GetForecastControl(ctx context.Context) (*OrderForecastControlResult, error) {
+	items, err := s.forecastRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list order forecast control: %w", err)
+	}
+	forecastRows, err := s.marketForecastRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list market forecast: %w", err)
+	}
+	if len(items) == 0 {
+		items = defaultForecastControlEntities("system", time.Now())
+	}
+	forecast := buildMarketForecastResult(items, forecastRows)
+	return &OrderForecastControlResult{
+		Items:      buildOrderForecastControlItems(items),
+		Narratives: buildOrderForecastNarratives(forecastRows),
+		Forecast:   forecast,
+	}, nil
 }
 
 func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo int) (*OrderControlConfigResult, error) {
@@ -297,6 +415,19 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 	var latestBatchID *int64
 	var latestBatchUploadedAt *string
 	sourceCounts := defaultOrderSourceCounts(yearNo)
+	forecastControls, err := s.forecastRepo.ListByYear(ctx, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("list order forecast control: %w", err)
+	}
+	forecastControlCounts := forecastControlCountMap(yearNo, forecastControls)
+	allForecastControls, err := s.forecastRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list all order forecast control: %w", err)
+	}
+	forecastRows, err := s.marketForecastRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list order market forecast: %w", err)
+	}
 	latestBatch, batchErr := s.importRepo.FindLatestSuccess(ctx)
 	if batchErr == nil {
 		latestBatchID = &latestBatch.ID
@@ -322,7 +453,7 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 		return nil, fmt.Errorf("list order states: %w", err)
 	}
 
-	items := buildControlConfigItems(yearNo, configs, sourceCounts, poolCounts, marketConfigMap)
+	items := buildControlConfigItems(yearNo, configs, forecastControlCounts, sourceCounts, poolCounts, marketConfigMap)
 	groupCount, err := s.groupRepo.CountAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("count groups: %w", err)
@@ -336,6 +467,7 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 		FinalYear:             gameConfig.FinalYear,
 		LatestBatchID:         latestBatchID,
 		LatestBatchUploadedAt: latestBatchUploadedAt,
+		Forecast:              buildMarketForecastResult(mergeForecastControlDefaults(allForecastControls), forecastRows),
 		GenerationStatus:      resolveOrderGenerationStatus(latestPreview, confirmed, states),
 		LatestPreviewBatch:    buildOrderGenerationBatchSummary(latestPreview),
 		ConfirmedBatch:        buildOrderGenerationBatchSummary(confirmed),
@@ -382,6 +514,34 @@ func (s *AdminOrderQueryService) GetOrderPool(ctx context.Context, yearNo int, m
 		OrderTypeName: orderTypeName(orderType),
 		List:          resultItems,
 	}, nil
+}
+
+type PlayerOrderForecastQueryService struct {
+	forecastRepo       *repository.OrderForecastControlRepository
+	marketForecastRepo *repository.OrderMarketForecastRepository
+}
+
+func NewPlayerOrderForecastQueryService(
+	forecastRepo *repository.OrderForecastControlRepository,
+	marketForecastRepo *repository.OrderMarketForecastRepository,
+) *PlayerOrderForecastQueryService {
+	return &PlayerOrderForecastQueryService{
+		forecastRepo:       forecastRepo,
+		marketForecastRepo: marketForecastRepo,
+	}
+}
+
+func (s *PlayerOrderForecastQueryService) GetMarketForecast(ctx context.Context) (*OrderMarketForecastResult, error) {
+	items, err := s.forecastRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list forecast control: %w", err)
+	}
+	forecastRows, err := s.marketForecastRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list market forecast: %w", err)
+	}
+	result := buildMarketForecastResult(mergeForecastControlDefaults(items), forecastRows)
+	return &result, nil
 }
 
 func (s *AdminOrderQueryService) validateYear(ctx context.Context, yearNo int) error {
@@ -488,6 +648,98 @@ func (s *AdminOrderCommandService) UploadExcel(ctx context.Context, cmd UploadOr
 	return buildUploadOrderExcelResult(item, parsed), nil
 }
 
+func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cmd UpdateOrderForecastControlCommand) (*UpdateOrderForecastControlResult, error) {
+	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
+	if err := validateForecastControlCommand(cmd); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	var result *UpdateOrderForecastControlResult
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		forecastRepo := repository.NewOrderForecastControlRepository(tx)
+		marketForecastRepo := repository.NewOrderMarketForecastRepository(tx)
+		actionRepo := repository.NewAdminActionLogRepository(tx)
+
+		existingForecasts, err := marketForecastRepo.ListAll(ctx)
+		if err != nil {
+			return fmt.Errorf("list existing market forecast: %w", err)
+		}
+		existingNarratives := forecastNarrativeMap(existingForecasts)
+
+		items := make([]entity.OrderForecastControl, 0, len(cmd.Items))
+		for _, reqItem := range cmd.Items {
+			yearNo := reqItem.YearNo
+			marketCode := normalizeMarketCode(reqItem.MarketCode)
+			orderType := normalizeOrderType(reqItem.OrderType)
+			items = append(items, entity.OrderForecastControl{
+				YearNo:            yearNo,
+				ForecastStageCode: forecastStageCodeForYear(yearNo),
+				MarketCode:        marketCode,
+				OrderType:         orderType,
+				OrderCount:        reqItem.OrderCount,
+				BaseEntity: entity.BaseEntity{
+					Creator:    operatorName,
+					CreateTime: now,
+					Updater:    operatorName,
+					UpdateTime: now,
+				},
+			})
+		}
+		if err := forecastRepo.UpsertBatch(ctx, items); err != nil {
+			return fmt.Errorf("upsert forecast control: %w", err)
+		}
+
+		controlRows, err := forecastRepo.ListAll(ctx)
+		if err != nil {
+			return fmt.Errorf("reload forecast control: %w", err)
+		}
+		controlRows = mergeForecastControlDefaults(controlRows)
+		narratives := mergeForecastNarratives(existingNarratives, cmd.Narratives)
+		forecastRows, err := buildMarketForecastEntities(controlRows, narratives, operatorName, now)
+		if err != nil {
+			return err
+		}
+		if err := marketForecastRepo.UpsertBatch(ctx, forecastRows); err != nil {
+			return fmt.Errorf("upsert market forecast: %w", err)
+		}
+		forecastRows, err = marketForecastRepo.ListAll(ctx)
+		if err != nil {
+			return fmt.Errorf("reload market forecast: %w", err)
+		}
+
+		actionPayload, err := marshalJSON(map[string]any{
+			"items":      cmd.Items,
+			"narratives": cmd.Narratives,
+		})
+		if err != nil {
+			return err
+		}
+		if err := actionRepo.Create(ctx, &entity.AdminActionLog{
+			ActionCode:    adminActionCodeUpdateForecastControl,
+			ActionPayload: actionPayload,
+			StateBefore:   []byte("{}"),
+			StateAfter:    []byte("{}"),
+			OperatorID:    cmd.OperatorID,
+			OperatorName:  operatorName,
+			OperateTime:   now,
+		}); err != nil {
+			return fmt.Errorf("create admin action log: %w", err)
+		}
+
+		result = &UpdateOrderForecastControlResult{
+			Items:      buildOrderForecastControlItems(controlRows),
+			Narratives: buildOrderForecastNarratives(forecastRows),
+			Forecast:   buildMarketForecastResult(controlRows, forecastRows),
+			UpdatedAt:  now.Format(time.RFC3339),
+			UpdatedBy:  operatorName,
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("update order forecast control transaction: %w", err)
+	}
+	return result, nil
+}
+
 func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd UpdateOrderMarketConfigCommand) (*UpdateOrderMarketConfigResult, error) {
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	if err := validateMarketConfigCommand(cmd); err != nil {
@@ -500,6 +752,7 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		groupRepo := repository.NewGroupRepository(tx)
 		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
 		configRepo := repository.NewOrderGenerationConfigRepository(tx)
+		forecastRepo := repository.NewOrderForecastControlRepository(tx)
 		marketRepo := repository.NewOrderMarketConfigRepository(tx)
 		poolRepo := repository.NewOrderPoolRepository(tx)
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
@@ -563,12 +816,17 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		if err != nil {
 			return fmt.Errorf("reload order configs: %w", err)
 		}
+		forecastControls, err := forecastRepo.ListByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("list forecast control: %w", err)
+		}
+		forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
 		sourceCounts := defaultOrderSourceCounts(cmd.YearNo)
 		poolCounts, err := countGeneratedByYearWithRepo(ctx, poolRepo, cmd.YearNo)
 		if err != nil {
 			return err
 		}
-		viewItems := buildControlConfigItems(cmd.YearNo, configs, sourceCounts, poolCounts, marketMap)
+		viewItems := buildControlConfigItems(cmd.YearNo, configs, forecastCounts, sourceCounts, poolCounts, marketMap)
 		groupCount, err := groupRepo.CountAll(ctx)
 		if err != nil {
 			return fmt.Errorf("count groups: %w", err)
@@ -607,6 +865,7 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		groupRepo := repository.NewGroupRepository(tx)
 		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
 		configRepo := repository.NewOrderGenerationConfigRepository(tx)
+		forecastRepo := repository.NewOrderForecastControlRepository(tx)
 		marketRepo := repository.NewOrderMarketConfigRepository(tx)
 		poolRepo := repository.NewOrderPoolRepository(tx)
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
@@ -654,7 +913,12 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 			}
 		}
 		marketMap := buildMarketEnabledMap(marketConfigs)
-		if err := validateEffectiveReleaseSequences(cmd.Items, marketMap); err != nil {
+		forecastControls, err := forecastRepo.ListByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("list forecast control: %w", err)
+		}
+		forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
+		if err := validateEffectiveReleaseSequences(cmd.Items, marketMap, forecastCounts, cmd.YearNo); err != nil {
 			return err
 		}
 		sourceCounts := defaultOrderSourceCounts(cmd.YearNo)
@@ -663,14 +927,15 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		items := make([]entity.OrderGenerationConfig, 0, len(cmd.Items))
 		for _, reqItem := range cmd.Items {
 			marketCode := strings.ToUpper(strings.TrimSpace(reqItem.MarketCode))
-			orderCount := reqItem.OrderCount
+			orderType := strings.ToUpper(strings.TrimSpace(reqItem.OrderType))
+			orderCount := forecastCounts[segmentKey(cmd.YearNo, marketCode, orderType)]
 			if !isMarketEnabled(marketMap, marketCode) {
 				orderCount = 0
 			}
 			items = append(items, entity.OrderGenerationConfig{
 				YearNo:            cmd.YearNo,
 				MarketCode:        marketCode,
-				OrderType:         strings.ToUpper(strings.TrimSpace(reqItem.OrderType)),
+				OrderType:         orderType,
 				OrderCount:        orderCount,
 				ReleaseSequenceNo: reqItem.ReleaseSequenceNo,
 				ConfigStatus:      enum.OrderConfigStatusDraft,
@@ -697,7 +962,7 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		if err != nil {
 			return err
 		}
-		viewItems := buildControlConfigItems(cmd.YearNo, configs, sourceCounts, poolCounts, marketMap)
+		viewItems := buildControlConfigItems(cmd.YearNo, configs, forecastCounts, sourceCounts, poolCounts, marketMap)
 		groupCount, err := groupRepo.CountAll(ctx)
 		if err != nil {
 			return fmt.Errorf("count groups: %w", err)
@@ -749,6 +1014,8 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 		gameConfigRepo := repository.NewGameConfigRepository(tx)
 		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
 		configRepo := repository.NewOrderGenerationConfigRepository(tx)
+		forecastRepo := repository.NewOrderForecastControlRepository(tx)
+		marketForecastRepo := repository.NewOrderMarketForecastRepository(tx)
 		marketRepo := repository.NewOrderMarketConfigRepository(tx)
 		poolRepo := repository.NewOrderPoolRepository(tx)
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
@@ -785,15 +1052,31 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 		if err != nil {
 			return fmt.Errorf("list order configs: %w", err)
 		}
-		if len(configs) == 0 {
-			return ErrAdminOrderConfigNotFound
-		}
 		marketConfigs, err := marketRepo.ListByYear(ctx, cmd.YearNo)
 		if err != nil {
 			return fmt.Errorf("list order market configs: %w", err)
 		}
 		marketMap := buildMarketEnabledMap(marketConfigs)
-		configs = applyMarketEnabledToConfigs(configs, marketMap)
+		forecastControls, err := forecastRepo.ListByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("list forecast control: %w", err)
+		}
+		forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
+		if len(configs) == 0 {
+			configs = buildOrderGenerationConfigsFromForecast(cmd.YearNo, forecastCounts, marketMap, operatorName, time.Now())
+			if err := configRepo.CreateBatch(ctx, configs); err != nil {
+				return fmt.Errorf("create default order release configs: %w", err)
+			}
+		} else {
+			configs = applyForecastCountsToConfigs(configs, forecastCounts)
+			configs = applyMarketEnabledToConfigs(configs, marketMap)
+			if err := configRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
+				return fmt.Errorf("delete old order configs before forecast snapshot: %w", err)
+			}
+			if err := configRepo.CreateBatch(ctx, configs); err != nil {
+				return fmt.Errorf("recreate order configs with forecast snapshot: %w", err)
+			}
+		}
 
 		now := time.Now()
 		if err := batchRepo.VoidPreviewByYear(ctx, cmd.YearNo, operatorName, now); err != nil {
@@ -807,9 +1090,18 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 		}
 		seed := fmt.Sprintf("%d", now.UnixNano())
 		controlSnapshot, err := marshalJSON(map[string]any{
-			"marketConfigs": buildOrderMarketConfigItems(cmd.YearNo, marketConfigs),
-			"configs":       configs,
+			"marketConfigs":   buildOrderMarketConfigItems(cmd.YearNo, marketConfigs),
+			"configs":         configs,
+			"forecastControl": buildOrderForecastControlItems(mergeForecastControlDefaults(forecastControls)),
 		})
+		if err != nil {
+			return err
+		}
+		forecastRows, err := marketForecastRepo.ListAll(ctx)
+		if err != nil {
+			return fmt.Errorf("list market forecast: %w", err)
+		}
+		forecastSnapshot, err := marshalJSON(buildMarketForecastResult(mergeForecastControlDefaults(forecastControls), forecastRows))
 		if err != nil {
 			return err
 		}
@@ -824,6 +1116,7 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 			FormulaVersion:      orderGenerationFormulaVersion,
 			RandomSeed:          seed,
 			ControlSnapshot:     controlSnapshot,
+			ForecastSnapshot:    forecastSnapshot,
 			ParameterSnapshot:   parameterSnapshot,
 			OrderDetail:         []byte("[]"),
 			GeneratedOrderCount: 0,
@@ -1005,24 +1298,8 @@ func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd Con
 }
 
 func defaultOrderSegments() []OrderSegmentDefinition {
-	markets := []struct {
-		code string
-		name string
-	}{
-		{enum.MarketCodeLocal, "本地市场"},
-		{enum.MarketCodeRegional, "区域市场"},
-		{enum.MarketCodeNational, "全国市场"},
-		{enum.MarketCodeGlobal, "全球市场"},
-	}
-	orderTypes := []struct {
-		code string
-		name string
-	}{
-		{enum.OrderTypeAgencyInspection, "代办过检"},
-		{enum.OrderTypeTwoCabinVIP, "两舱贵宾"},
-		{enum.OrderTypeBusinessVIP, "商务贵宾"},
-		{enum.OrderTypeMemberCustom, "会员定制"},
-	}
+	markets := adminOrderMarkets()
+	orderTypes := adminOrderTypes()
 	segments := make([]OrderSegmentDefinition, 0, len(markets)*len(orderTypes))
 	for _, market := range markets {
 		for _, orderType := range orderTypes {
@@ -1037,7 +1314,97 @@ func defaultOrderSegments() []OrderSegmentDefinition {
 	return segments
 }
 
-func buildControlConfigItems(yearNo int, configs []entity.OrderGenerationConfig, sourceCounts map[string]int, poolCounts map[string]int, marketConfigMap map[string]bool) []OrderControlConfigItem {
+type orderCodeName struct {
+	code string
+	name string
+}
+
+type forecastStageDefinition struct {
+	code      string
+	name      string
+	yearRange string
+	years     []int
+}
+
+func adminOrderMarkets() []orderCodeName {
+	return []orderCodeName{
+		{enum.MarketCodeLocal, "本地市场"},
+		{enum.MarketCodeRegional, "区域市场"},
+		{enum.MarketCodeNational, "全国市场"},
+		{enum.MarketCodeGlobal, "全球市场"},
+	}
+}
+
+func adminOrderTypes() []orderCodeName {
+	return []orderCodeName{
+		{enum.OrderTypeAgencyInspection, "代办过检"},
+		{enum.OrderTypeTwoCabinVIP, "两舱贵宾"},
+		{enum.OrderTypeBusinessVIP, "商务贵宾"},
+		{enum.OrderTypeMemberCustom, "会员定制"},
+	}
+}
+
+func forecastStages() []forecastStageDefinition {
+	return []forecastStageDefinition{
+		{code: "YEAR_1_3", name: "1~3年", yearRange: "1~3年", years: []int{1, 2, 3}},
+		{code: "YEAR_4_5", name: "4~5年", yearRange: "4~5年", years: []int{4, 5}},
+		{code: "YEAR_6_8", name: "6~8年", yearRange: "6~8年", years: []int{6, 7, 8}},
+	}
+}
+
+func forecastStageCodeForYear(yearNo int) string {
+	switch {
+	case yearNo >= 1 && yearNo <= 3:
+		return "YEAR_1_3"
+	case yearNo >= 4 && yearNo <= 5:
+		return "YEAR_4_5"
+	default:
+		return "YEAR_6_8"
+	}
+}
+
+func forecastStageName(stageCode string) string {
+	for _, stage := range forecastStages() {
+		if stage.code == stageCode {
+			return stage.name
+		}
+	}
+	return stageCode
+}
+
+func isValidForecastStageCode(stageCode string) bool {
+	for _, stage := range forecastStages() {
+		if stage.code == stageCode {
+			return true
+		}
+	}
+	return false
+}
+
+func forecastNarrativeKey(stageCode string, marketCode string) string {
+	return strings.ToUpper(strings.TrimSpace(stageCode)) + "|" + normalizeMarketCode(marketCode)
+}
+
+func forecastNarrativeMap(rows []entity.OrderMarketForecast) map[string]string {
+	result := make(map[string]string, len(rows))
+	for _, row := range rows {
+		result[forecastNarrativeKey(row.ForecastStageCode, row.MarketCode)] = row.Narrative
+	}
+	return result
+}
+
+func mergeForecastNarratives(existing map[string]string, updates []UpdateOrderForecastNarrativeItem) map[string]string {
+	result := make(map[string]string, len(existing)+len(updates))
+	for key, value := range existing {
+		result[key] = value
+	}
+	for _, item := range updates {
+		result[forecastNarrativeKey(item.ForecastStageCode, item.MarketCode)] = strings.TrimSpace(item.Content)
+	}
+	return result
+}
+
+func buildControlConfigItems(yearNo int, configs []entity.OrderGenerationConfig, forecastCounts map[string]int, sourceCounts map[string]int, poolCounts map[string]int, marketConfigMap map[string]bool) []OrderControlConfigItem {
 	configMap := make(map[string]entity.OrderGenerationConfig, len(configs))
 	for _, item := range configs {
 		configMap[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item
@@ -1046,11 +1413,10 @@ func buildControlConfigItems(yearNo int, configs []entity.OrderGenerationConfig,
 	for index, segment := range defaultOrderSegments() {
 		key := segmentKey(yearNo, segment.MarketCode, segment.OrderType)
 		config, exists := configMap[key]
-		orderCount := 0
+		orderCount := forecastCounts[key]
 		releaseSequenceNo := defaultOrderReleaseSequenceStart + index
 		configStatus := enum.OrderConfigStatusDraft
 		if exists {
-			orderCount = config.OrderCount
 			releaseSequenceNo = config.ReleaseSequenceNo
 			configStatus = config.ConfigStatus
 		}
@@ -1132,7 +1498,7 @@ func validateControlConfigCommand(cmd UpdateOrderControlConfigCommand) error {
 	for _, item := range cmd.Items {
 		marketCode := strings.ToUpper(strings.TrimSpace(item.MarketCode))
 		orderType := strings.ToUpper(strings.TrimSpace(item.OrderType))
-		if !enum.IsValidMarketCode(marketCode) || !enum.IsValidOrderType(orderType) || item.OrderCount < 0 || item.OrderCount > 15 || item.ReleaseSequenceNo <= 0 {
+		if !enum.IsValidMarketCode(marketCode) || !enum.IsValidOrderType(orderType) || item.ReleaseSequenceNo <= 0 {
 			return ErrAdminOrderConfigInvalid
 		}
 		key := segmentKey(cmd.YearNo, marketCode, orderType)
@@ -1144,11 +1510,52 @@ func validateControlConfigCommand(cmd UpdateOrderControlConfigCommand) error {
 	return nil
 }
 
-func validateEffectiveReleaseSequences(items []UpdateOrderControlConfigItem, marketConfigMap map[string]bool) error {
+func validateForecastControlCommand(cmd UpdateOrderForecastControlCommand) error {
+	if len(cmd.Items) == 0 {
+		return ErrAdminOrderForecastControlInvalid
+	}
+	params := defaultOrderGenerationParameters()
+	seenSegments := map[string]bool{}
+	for _, item := range cmd.Items {
+		yearNo := item.YearNo
+		marketCode := normalizeMarketCode(item.MarketCode)
+		orderType := normalizeOrderType(item.OrderType)
+		if yearNo < forecastControlMinYear ||
+			yearNo > forecastControlMaxYear ||
+			!enum.IsValidMarketCode(marketCode) ||
+			!enum.IsValidOrderType(orderType) ||
+			item.OrderCount < 0 ||
+			item.OrderCount > params.MaxCardCount {
+			return ErrAdminOrderForecastControlInvalid
+		}
+		key := segmentKey(yearNo, marketCode, orderType)
+		if seenSegments[key] {
+			return ErrAdminOrderForecastControlInvalid
+		}
+		seenSegments[key] = true
+	}
+	seenNarratives := map[string]bool{}
+	for _, item := range cmd.Narratives {
+		stageCode := strings.ToUpper(strings.TrimSpace(item.ForecastStageCode))
+		marketCode := normalizeMarketCode(item.MarketCode)
+		if !isValidForecastStageCode(stageCode) || !enum.IsValidMarketCode(marketCode) {
+			return ErrAdminOrderForecastControlInvalid
+		}
+		key := forecastNarrativeKey(stageCode, marketCode)
+		if seenNarratives[key] {
+			return ErrAdminOrderForecastControlInvalid
+		}
+		seenNarratives[key] = true
+	}
+	return nil
+}
+
+func validateEffectiveReleaseSequences(items []UpdateOrderControlConfigItem, marketConfigMap map[string]bool, forecastCounts map[string]int, yearNo int) error {
 	seenSequences := map[int]bool{}
 	for _, item := range items {
 		marketCode := strings.ToUpper(strings.TrimSpace(item.MarketCode))
-		if !isMarketEnabled(marketConfigMap, marketCode) || item.OrderCount <= 0 {
+		orderType := strings.ToUpper(strings.TrimSpace(item.OrderType))
+		if !isMarketEnabled(marketConfigMap, marketCode) || forecastCounts[segmentKey(yearNo, marketCode, orderType)] <= 0 {
 			continue
 		}
 		if item.ReleaseSequenceNo <= 0 {
@@ -1355,8 +1762,8 @@ func buildOrderMarketConfigItems(yearNo int, configs []entity.OrderMarketConfig)
 	for _, item := range configs {
 		configMap[normalizeMarketCode(item.MarketCode)] = item
 	}
-	items := make([]OrderMarketConfigItem, 0, len(defaultOrderMarkets()))
-	for _, market := range defaultOrderMarkets() {
+	items := make([]OrderMarketConfigItem, 0, len(adminOrderMarkets()))
+	for _, market := range adminOrderMarkets() {
 		config, exists := configMap[market.code]
 		enabled := defaultMarketEnabled(market.code)
 		status := enum.OrderConfigStatusDraft
@@ -1378,9 +1785,243 @@ func buildOrderMarketConfigItems(yearNo int, configs []entity.OrderMarketConfig)
 	return items
 }
 
+func defaultForecastControlEntities(operatorName string, now time.Time) []entity.OrderForecastControl {
+	items := make([]entity.OrderForecastControl, 0, forecastControlMaxYear*len(defaultOrderSegments()))
+	for yearNo := forecastControlMinYear; yearNo <= forecastControlMaxYear; yearNo++ {
+		for _, segment := range defaultOrderSegments() {
+			items = append(items, entity.OrderForecastControl{
+				YearNo:            yearNo,
+				ForecastStageCode: forecastStageCodeForYear(yearNo),
+				MarketCode:        segment.MarketCode,
+				OrderType:         segment.OrderType,
+				OrderCount:        0,
+				BaseEntity: entity.BaseEntity{
+					Creator:    operatorName,
+					CreateTime: now,
+					Updater:    operatorName,
+					UpdateTime: now,
+				},
+			})
+		}
+	}
+	return items
+}
+
+func mergeForecastControlDefaults(items []entity.OrderForecastControl) []entity.OrderForecastControl {
+	now := time.Now()
+	resultMap := make(map[string]entity.OrderForecastControl, len(items))
+	for _, item := range items {
+		resultMap[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item
+	}
+	for _, item := range defaultForecastControlEntities("system", now) {
+		key := segmentKey(item.YearNo, item.MarketCode, item.OrderType)
+		if _, exists := resultMap[key]; !exists {
+			resultMap[key] = item
+		}
+	}
+	result := make([]entity.OrderForecastControl, 0, len(resultMap))
+	for _, item := range resultMap {
+		result = append(result, item)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].YearNo != result[j].YearNo {
+			return result[i].YearNo < result[j].YearNo
+		}
+		if result[i].MarketCode != result[j].MarketCode {
+			return marketSortIndex(result[i].MarketCode) < marketSortIndex(result[j].MarketCode)
+		}
+		return orderTypeSortIndex(result[i].OrderType) < orderTypeSortIndex(result[j].OrderType)
+	})
+	return result
+}
+
+func buildOrderForecastControlItems(items []entity.OrderForecastControl) []OrderForecastControlItem {
+	items = mergeForecastControlDefaults(items)
+	result := make([]OrderForecastControlItem, 0, len(items))
+	for _, item := range items {
+		stageCode := forecastStageCodeForYear(item.YearNo)
+		result = append(result, OrderForecastControlItem{
+			YearNo:            item.YearNo,
+			ForecastStageCode: stageCode,
+			ForecastStageName: forecastStageName(stageCode),
+			MarketCode:        item.MarketCode,
+			MarketName:        marketName(item.MarketCode),
+			OrderType:         item.OrderType,
+			OrderTypeName:     orderTypeName(item.OrderType),
+			OrderCount:        item.OrderCount,
+		})
+	}
+	return result
+}
+
+func buildOrderForecastNarratives(rows []entity.OrderMarketForecast) []OrderForecastNarrativeItem {
+	narrativeMap := forecastNarrativeMap(rows)
+	result := make([]OrderForecastNarrativeItem, 0, len(forecastStages())*len(adminOrderMarkets()))
+	for _, stage := range forecastStages() {
+		for _, market := range adminOrderMarkets() {
+			key := forecastNarrativeKey(stage.code, market.code)
+			result = append(result, OrderForecastNarrativeItem{
+				ForecastStageCode: stage.code,
+				ForecastStageName: stage.name,
+				MarketCode:        market.code,
+				MarketName:        market.name,
+				Content:           narrativeMap[key],
+			})
+		}
+	}
+	return result
+}
+
+func buildMarketForecastEntities(controlRows []entity.OrderForecastControl, narratives map[string]string, operatorName string, now time.Time) ([]entity.OrderMarketForecast, error) {
+	controlSnapshot, err := marshalJSON(buildOrderForecastControlItems(controlRows))
+	if err != nil {
+		return nil, err
+	}
+	forecast := buildMarketForecastResult(controlRows, nil)
+	items := make([]entity.OrderMarketForecast, 0, len(forecast.Stages)*len(adminOrderMarkets()))
+	for _, stage := range forecast.Stages {
+		for _, market := range stage.Markets {
+			dataJSON, err := marshalJSON(market.Years)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, entity.OrderMarketForecast{
+				ForecastStageCode:   stage.ForecastStageCode,
+				MarketCode:          market.MarketCode,
+				ForecastData:        dataJSON,
+				Narrative:           narratives[forecastNarrativeKey(stage.ForecastStageCode, market.MarketCode)],
+				FormulaVersion:      orderGenerationFormulaVersion,
+				RandomSeed:          "FORECAST_DETERMINISTIC",
+				ControlSnapshotJSON: controlSnapshot,
+				BaseEntity: entity.BaseEntity{
+					Creator:    operatorName,
+					CreateTime: now,
+					Updater:    operatorName,
+					UpdateTime: now,
+				},
+			})
+		}
+	}
+	return items, nil
+}
+
+func buildMarketForecastResult(controlRows []entity.OrderForecastControl, forecastRows []entity.OrderMarketForecast) OrderMarketForecastResult {
+	controlRows = mergeForecastControlDefaults(controlRows)
+	controlMap := forecastControlCountMapAll(controlRows)
+	narrativeMap := forecastNarrativeMap(forecastRows)
+	stages := make([]OrderMarketForecastStage, 0, len(forecastStages()))
+	for _, stage := range forecastStages() {
+		stageView := OrderMarketForecastStage{
+			ForecastStageCode: stage.code,
+			ForecastStageName: stage.name,
+			YearRange:         stage.yearRange,
+			Years:             append([]int(nil), stage.years...),
+			Markets:           make([]OrderMarketForecastMarket, 0, len(adminOrderMarkets())),
+		}
+		for _, market := range adminOrderMarkets() {
+			marketView := OrderMarketForecastMarket{
+				MarketCode: market.code,
+				MarketName: market.name,
+				Narrative:  narrativeMap[forecastNarrativeKey(stage.code, market.code)],
+				Years:      make([]OrderMarketForecastYear, 0, len(stage.years)),
+			}
+			for _, yearNo := range stage.years {
+				yearView := OrderMarketForecastYear{
+					YearNo:   yearNo,
+					Products: make([]OrderMarketForecastProduct, 0, len(adminOrderTypes())),
+				}
+				for _, orderType := range adminOrderTypes() {
+					count := controlMap[segmentKey(yearNo, market.code, orderType.code)]
+					amount := forecastAmountForProduct(yearNo, market.code, orderType.code, count)
+					yearView.Products = append(yearView.Products, OrderMarketForecastProduct{
+						OrderType:      orderType.code,
+						OrderTypeName:  orderType.name,
+						OrderCount:     count,
+						ForecastAmount: amount,
+					})
+					yearView.TotalOrderCount += count
+					yearView.TotalForecastAmount = roundMoney(yearView.TotalForecastAmount + amount)
+				}
+				marketView.Years = append(marketView.Years, yearView)
+			}
+			stageView.Markets = append(stageView.Markets, marketView)
+		}
+		stages = append(stages, stageView)
+	}
+	return OrderMarketForecastResult{
+		FormulaVersion: orderGenerationFormulaVersion,
+		Stages:         stages,
+	}
+}
+
+func forecastAmountForProduct(yearNo int, marketCode string, orderType string, orderCount int) float64 {
+	if orderCount <= 0 {
+		return 0
+	}
+	params := defaultOrderGenerationParameters()
+	avgPrice := params.AveragePrices[marketCode][orderType]
+	avgQuantity := float64(params.MinQuantity+params.MaxQuantity) / 2
+	return roundMoney(float64(orderCount) * avgPrice * avgQuantity)
+}
+
+func forecastControlCountMap(yearNo int, controls []entity.OrderForecastControl) map[string]int {
+	result := make(map[string]int, len(defaultOrderSegments()))
+	for _, segment := range defaultOrderSegments() {
+		result[segmentKey(yearNo, segment.MarketCode, segment.OrderType)] = 0
+	}
+	for _, item := range controls {
+		if item.YearNo == yearNo {
+			result[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item.OrderCount
+		}
+	}
+	return result
+}
+
+func forecastControlCountMapAll(controls []entity.OrderForecastControl) map[string]int {
+	result := make(map[string]int, len(controls))
+	for _, item := range controls {
+		result[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item.OrderCount
+	}
+	return result
+}
+
+func buildOrderGenerationConfigsFromForecast(yearNo int, forecastCounts map[string]int, marketConfigMap map[string]bool, operatorName string, now time.Time) []entity.OrderGenerationConfig {
+	items := make([]entity.OrderGenerationConfig, 0, len(defaultOrderSegments()))
+	for index, segment := range defaultOrderSegments() {
+		count := forecastCounts[segmentKey(yearNo, segment.MarketCode, segment.OrderType)]
+		if !isMarketEnabled(marketConfigMap, segment.MarketCode) {
+			count = 0
+		}
+		items = append(items, entity.OrderGenerationConfig{
+			YearNo:            yearNo,
+			MarketCode:        segment.MarketCode,
+			OrderType:         segment.OrderType,
+			OrderCount:        count,
+			ReleaseSequenceNo: index + 1,
+			ConfigStatus:      enum.OrderConfigStatusDraft,
+			BaseEntity: entity.BaseEntity{
+				Creator:    operatorName,
+				CreateTime: now,
+				Updater:    operatorName,
+				UpdateTime: now,
+			},
+		})
+	}
+	return items
+}
+
+func applyForecastCountsToConfigs(configs []entity.OrderGenerationConfig, forecastCounts map[string]int) []entity.OrderGenerationConfig {
+	result := make([]entity.OrderGenerationConfig, 0, len(configs))
+	for _, item := range configs {
+		item.OrderCount = forecastCounts[segmentKey(item.YearNo, item.MarketCode, item.OrderType)]
+		result = append(result, item)
+	}
+	return result
+}
+
 func buildMarketEnabledMap(configs []entity.OrderMarketConfig) map[string]bool {
-	result := make(map[string]bool, len(defaultOrderMarkets()))
-	for _, market := range defaultOrderMarkets() {
+	result := make(map[string]bool, len(adminOrderMarkets()))
+	for _, market := range adminOrderMarkets() {
 		result[market.code] = defaultMarketEnabled(market.code)
 	}
 	for _, item := range configs {
@@ -1421,7 +2062,7 @@ func ensureDefaultMarketConfigs(ctx context.Context, repo *repository.OrderMarke
 	if err != nil {
 		return err
 	}
-	if len(existing) >= len(defaultOrderMarkets()) {
+	if len(existing) >= len(adminOrderMarkets()) {
 		return nil
 	}
 	existingMap := make(map[string]bool, len(existing))
@@ -1429,7 +2070,7 @@ func ensureDefaultMarketConfigs(ctx context.Context, repo *repository.OrderMarke
 		existingMap[normalizeMarketCode(item.MarketCode)] = true
 	}
 	items := make([]entity.OrderMarketConfig, 0)
-	for _, market := range defaultOrderMarkets() {
+	for _, market := range adminOrderMarkets() {
 		if existingMap[market.code] {
 			continue
 		}

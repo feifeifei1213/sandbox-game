@@ -14,17 +14,20 @@ import (
 )
 
 type PlayerOrderHandler struct {
-	queryService   *service.PlayerOrderQueryService
-	commandService *service.PlayerOrderCommandService
+	queryService         *service.PlayerOrderQueryService
+	forecastQueryService *service.PlayerOrderForecastQueryService
+	commandService       *service.PlayerOrderCommandService
 }
 
 func NewPlayerOrderHandler(
 	queryService *service.PlayerOrderQueryService,
+	forecastQueryService *service.PlayerOrderForecastQueryService,
 	commandService *service.PlayerOrderCommandService,
 ) *PlayerOrderHandler {
 	return &PlayerOrderHandler{
-		queryService:   queryService,
-		commandService: commandService,
+		queryService:         queryService,
+		forecastQueryService: forecastQueryService,
+		commandService:       commandService,
 	}
 }
 
@@ -45,6 +48,18 @@ func (h *PlayerOrderHandler) GetYearView(c *gin.Context) {
 	result, err := h.queryService.GetYearView(c.Request.Context(), *identity.GroupID, *req.YearNo)
 	if err != nil {
 		abortOrderError(c, err, "获取玩家订单页失败")
+		return
+	}
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func (h *PlayerOrderHandler) GetMarketForecast(c *gin.Context) {
+	if _, ok := requireGroupIdentity(c, "当前身份无权访问市场预测"); !ok {
+		return
+	}
+	result, err := h.forecastQueryService.GetMarketForecast(c.Request.Context())
+	if err != nil {
+		abortOrderError(c, err, "获取市场预测失败")
 		return
 	}
 	c.JSON(http.StatusOK, dto.Success(result))

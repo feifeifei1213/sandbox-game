@@ -226,6 +226,38 @@ func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
 			UNIQUE KEY uk_order_generation_config (year_no, market_code, order_type),
 			KEY idx_order_release_sequence (year_no, release_sequence_no)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_order_forecast_control (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			year_no INT NOT NULL,
+			forecast_stage_code VARCHAR(32) NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			order_type VARCHAR(32) NOT NULL,
+			order_count INT NOT NULL DEFAULT 0,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_order_forecast_control (year_no, market_code, order_type),
+			KEY idx_order_forecast_stage (forecast_stage_code, market_code)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+		`CREATE TABLE IF NOT EXISTS sg_order_market_forecast (
+			id BIGINT NOT NULL AUTO_INCREMENT,
+			forecast_stage_code VARCHAR(32) NOT NULL,
+			market_code VARCHAR(32) NOT NULL,
+			forecast_data_json JSON NOT NULL,
+			narrative TEXT NULL,
+			formula_version VARCHAR(64) NOT NULL,
+			random_seed VARCHAR(64) NOT NULL DEFAULT '',
+			control_snapshot_json JSON NOT NULL,
+			creator VARCHAR(64) NOT NULL DEFAULT 'system',
+			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updater VARCHAR(64) NOT NULL DEFAULT 'system',
+			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY uk_order_market_forecast (forecast_stage_code, market_code),
+			KEY idx_order_market_forecast_stage (forecast_stage_code)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
 		`CREATE TABLE IF NOT EXISTS sg_order_generation_batch (
 			id BIGINT NOT NULL AUTO_INCREMENT,
 			year_no INT NOT NULL,
@@ -233,6 +265,7 @@ func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
 			formula_version VARCHAR(32) NOT NULL,
 			random_seed VARCHAR(64) NOT NULL,
 			control_snapshot_json JSON NOT NULL,
+			forecast_snapshot_json JSON NULL,
 			parameter_snapshot_json JSON NOT NULL,
 			order_detail_json JSON NOT NULL,
 			generated_order_count INT NOT NULL DEFAULT 0,
@@ -392,6 +425,12 @@ func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
 				!strings.Contains(errText, "duplicate key name") {
 				t.Fatalf("ensure order tables: %v", err)
 			}
+		}
+	}
+
+	if !db.Migrator().HasColumn(&entity.OrderGenerationBatch{}, "forecast_snapshot_json") {
+		if err := db.Migrator().AddColumn(&entity.OrderGenerationBatch{}, "ForecastSnapshot"); err != nil {
+			t.Fatalf("ensure order batch forecast snapshot column: %v", err)
 		}
 	}
 }

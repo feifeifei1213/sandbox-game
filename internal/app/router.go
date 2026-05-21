@@ -45,6 +45,8 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	orderImportRepo := repository.NewOrderImportBatchRepository(db)
 	orderBatchRepo := repository.NewOrderGenerationBatchRepository(db)
 	orderConfigRepo := repository.NewOrderGenerationConfigRepository(db)
+	orderForecastRepo := repository.NewOrderForecastControlRepository(db)
+	orderMarketForecastRepo := repository.NewOrderMarketForecastRepository(db)
 	orderMarketConfigRepo := repository.NewOrderMarketConfigRepository(db)
 	orderPoolRepo := repository.NewOrderPoolRepository(db)
 	marketBidRepo := repository.NewGroupMarketBidRepository(db)
@@ -125,9 +127,14 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		orderPoolRepo,
 		groupOrderSelectionRepo,
 	)
+	playerOrderForecastQueryService := service.NewPlayerOrderForecastQueryService(
+		orderForecastRepo,
+		orderMarketForecastRepo,
+	)
 	playerOrderCommandService := service.NewPlayerOrderCommandService(db)
 	playerOrderHandler := handler.NewPlayerOrderHandler(
 		playerOrderQueryService,
+		playerOrderForecastQueryService,
 		playerOrderCommandService,
 	)
 	adminSummaryQueryService := service.NewAdminSummaryQueryService(
@@ -179,6 +186,8 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		orderImportRepo,
 		orderBatchRepo,
 		orderConfigRepo,
+		orderForecastRepo,
+		orderMarketForecastRepo,
 		orderMarketConfigRepo,
 		orderPoolRepo,
 		marketStateRepo,
@@ -229,6 +238,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 
 		playerOrder := protected.Group("/player-order")
 		playerOrder.GET("/get-year-view", playerOrderHandler.GetYearView)
+		playerOrder.GET("/get-market-forecast", playerOrderHandler.GetMarketForecast)
 		playerOrder.POST("/submit-market-investment", playerOrderHandler.SubmitMarketInvestment)
 		playerOrder.POST("/submit-market-investments", playerOrderHandler.SubmitMarketInvestment)
 		playerOrder.POST("/select-order", playerOrderHandler.SelectOrder)
@@ -260,6 +270,8 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminNotice.POST("/send-adjustment", adminNoticeHandler.SendAdjustment)
 
 		adminOrder := protected.Group("/admin-order")
+		adminOrder.GET("/get-forecast-control", adminOrderHandler.GetForecastControl)
+		adminOrder.PUT("/update-forecast-control", adminOrderHandler.UpdateForecastControl)
 		adminOrder.GET("/get-control-config", adminOrderHandler.GetControlConfig)
 		adminOrder.POST("/upload-excel", adminOrderHandler.UploadExcel)
 		adminOrder.PUT("/update-market-enabled-config", adminOrderHandler.UpdateMarketConfig)

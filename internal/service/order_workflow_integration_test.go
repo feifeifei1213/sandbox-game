@@ -28,11 +28,12 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	}()
 
 	ctx := context.Background()
-	yearNo := int(nextIntegrationUniqueSeed()%100000) + 1000
+	yearNo := 2
 	previousYearNo := yearNo - 1
 	now := time.Now()
 
 	ensureIntegrationGameConfig(t, ctx, tx, yearNo, yearNo, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, previousYearNo, yearNo)
 	isolateOrderIntegrationGroups(t, ctx, tx)
 
 	groupOneID := createOrderIntegrationGroup(t, ctx, tx, "I4 order leader", enum.BusinessStatusNormal, nil)
@@ -66,13 +67,21 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 		t.Fatalf("update market enabled config: %v", err)
 	}
 
-	configResult, err := adminOrderService.UpdateControlConfig(ctx, UpdateOrderControlConfigCommand{
-		YearNo: yearNo,
-		Items: buildTestControlConfigItems(yearNo, map[string]int{
-			testOrderSegmentKey(enum.MarketCodeLocal, enum.OrderTypeAgencyInspection):    2,
-			testOrderSegmentKey(enum.MarketCodeRegional, enum.OrderTypeAgencyInspection): 1,
-			testOrderSegmentKey(enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP):         1,
+	if _, err := adminOrderService.UpdateForecastControl(ctx, UpdateOrderForecastControlCommand{
+		Items: buildTestForecastControlItems(map[string]int{
+			testForecastSegmentKey(yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection):    2,
+			testForecastSegmentKey(yearNo, enum.MarketCodeRegional, enum.OrderTypeAgencyInspection): 1,
+			testForecastSegmentKey(yearNo, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP):         1,
 		}),
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); err != nil {
+		t.Fatalf("update forecast control: %v", err)
+	}
+
+	configResult, err := adminOrderService.UpdateControlConfig(ctx, UpdateOrderControlConfigCommand{
+		YearNo:       yearNo,
+		Items:        buildTestControlConfigItems(yearNo, nil),
 		OperatorID:   1,
 		OperatorName: "integration-admin",
 	})
@@ -422,10 +431,11 @@ func TestOrderMarketDisabledRequiresZeroInvestment(t *testing.T) {
 	}()
 
 	ctx := context.Background()
-	yearNo := int(nextIntegrationUniqueSeed()%100000) + 200000
+	yearNo := 1
 	now := time.Now()
 
 	ensureIntegrationGameConfig(t, ctx, tx, yearNo, yearNo, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, yearNo)
 	isolateOrderIntegrationGroups(t, ctx, tx)
 
 	groupID := createOrderIntegrationGroup(t, ctx, tx, "I4 disabled market group", enum.BusinessStatusNormal, nil)
@@ -448,12 +458,19 @@ func TestOrderMarketDisabledRequiresZeroInvestment(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("update market config: %v", err)
 	}
-	if _, err := adminOrderService.UpdateControlConfig(ctx, UpdateOrderControlConfigCommand{
-		YearNo: yearNo,
-		Items: buildTestControlConfigItems(yearNo, map[string]int{
-			testOrderSegmentKey(enum.MarketCodeLocal, enum.OrderTypeAgencyInspection):    1,
-			testOrderSegmentKey(enum.MarketCodeRegional, enum.OrderTypeAgencyInspection): 1,
+	if _, err := adminOrderService.UpdateForecastControl(ctx, UpdateOrderForecastControlCommand{
+		Items: buildTestForecastControlItems(map[string]int{
+			testForecastSegmentKey(yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection):    1,
+			testForecastSegmentKey(yearNo, enum.MarketCodeRegional, enum.OrderTypeAgencyInspection): 1,
 		}),
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); err != nil {
+		t.Fatalf("update forecast control: %v", err)
+	}
+	if _, err := adminOrderService.UpdateControlConfig(ctx, UpdateOrderControlConfigCommand{
+		YearNo:       yearNo,
+		Items:        buildTestControlConfigItems(yearNo, nil),
 		OperatorID:   1,
 		OperatorName: "integration-admin",
 	}); err != nil {
@@ -509,6 +526,41 @@ func isolateOrderIntegrationGroups(t *testing.T, ctx context.Context, tx *gorm.D
 			"update_time":     now,
 		}).Error; err != nil {
 		t.Fatalf("isolate existing groups: %v", err)
+	}
+}
+
+func cleanupOrderIntegrationYears(t *testing.T, ctx context.Context, tx *gorm.DB, yearNos ...int) {
+	t.Helper()
+
+	if len(yearNos) == 0 {
+		return
+	}
+	targets := make([]int, 0, len(yearNos))
+	seen := map[int]bool{}
+	for _, yearNo := range yearNos {
+		if yearNo < 0 || seen[yearNo] {
+			continue
+		}
+		targets = append(targets, yearNo)
+		seen[yearNo] = true
+	}
+	if len(targets) == 0 {
+		return
+	}
+	entities := []any{
+		&entity.GroupMarketBid{},
+		&entity.MarketSelectionOrder{},
+		&entity.GroupOrderSelection{},
+		&entity.MarketBiddingState{},
+		&entity.OrderPool{},
+		&entity.OrderGenerationConfig{},
+		&entity.OrderMarketConfig{},
+		&entity.OrderGenerationBatch{},
+	}
+	for _, item := range entities {
+		if err := tx.WithContext(ctx).Where("year_no IN ?", targets).Delete(item).Error; err != nil {
+			t.Fatalf("cleanup order integration years %v for %T: %v", targets, item, err)
+		}
 	}
 }
 

@@ -488,6 +488,56 @@
 
 ### 4.7 年度订单与市场竞标
 
+#### 4.7.0 `sg_order_forecast_control`
+
+用途：存储多年订单数量控制台，是市场预测和年度正式订单池的共同订单数量来源。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `year_no` | INT | 预测年份，固定 `1~8` |
+| `market_code` | VARCHAR(32) | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
+| `order_type` | VARCHAR(32) | `AGENCY_INSPECTION / TWO_CABIN_VIP / BUSINESS_VIP / MEMBER_CUSTOM` |
+| `order_count` | INT | 订单卡片数量，范围 `0~15` |
+| `forecast_stage_code` | VARCHAR(32) | `YEAR_1_3 / YEAR_4_5 / YEAR_6_8` |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_order_forecast_control(year_no, market_code, order_type)`
+- `idx_order_forecast_stage(forecast_stage_code, market_code)`
+
+说明：
+
+- 该表固定覆盖 `1年~8年 × 四个市场 × 四类产品`，不随管理员配置的最终年份裁剪。
+- 年度订单池生成时，只读取该年且管理员手动开启市场对应的控制台数量。
+- 控制台有数量不代表市场自动开启；市场开启仍以 `sg_order_market_config` 为准。
+
+#### 4.7.0A `sg_order_market_forecast`
+
+用途：存储市场预测展示快照和说明文字，供玩家端只读查看。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `forecast_stage_code` | VARCHAR(32) | `YEAR_1_3 / YEAR_4_5 / YEAR_6_8` |
+| `market_code` | VARCHAR(32) | 市场 |
+| `forecast_data_json` | JSON | 该阶段内各年份、四类产品的预测金额/订单量数据 |
+| `narrative` | TEXT | 市场预测说明文字 |
+| `formula_version` | VARCHAR(64) | 预测生成公式版本 |
+| `random_seed` | VARCHAR(64) | 预测快照随机种子 |
+| `control_snapshot_json` | JSON | 生成该预测时的多年控制台快照 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+说明：
+
+- 玩家端市场预测固定按三段展示，不因最终年份变化隐藏 `6~8年`。
+- 市场预测只是趋势展示，不代表当年市场自动开启，也不直接生成玩家可选订单。
+
 #### 4.7.1 `sg_order_generation_batch`
 
 用途：记录系统按订单推算 Excel 公式链生成订单池的预览/正式批次。
@@ -502,6 +552,7 @@
 | `formula_version` | VARCHAR(64) | 订单生成公式版本 |
 | `random_seed` | VARCHAR(64) | 随机种子，用于复盘 |
 | `control_snapshot_json` | JSON | 订单数量控制台快照 |
+| `forecast_snapshot_json` | JSON | 市场预测快照摘要 |
 | `parameter_snapshot_json` | JSON | 均价、波动系数、最小/最大数量、账期范围等公式参数快照 |
 | `confirmed_at` | DATETIME NULL | 确认时间 |
 | `operator_id/operator_name/operate_time` | - | 生成/确认操作人信息 |
@@ -511,11 +562,12 @@
 
 - 预览批次可被重新生成覆盖或置为 `VOID`。
 - 管理员确认后，当前预览批次转为 `CONFIRMED`，订单池固定落库。
+- 生成批次的订单数量来源应为多年订单数量控制台中该年、已开启市场的数量快照。
 - “上传 Excel”不再作为订单池主链路；若后续保留导入能力，应另建“导入控制台参数/模板”的辅助记录，不替代本生成批次。
 
 #### 4.7.2 `sg_order_generation_config`
 
-用途：按 `年份 + 市场 + 订单类型` 存储订单数量控制。
+用途：按 `年份 + 市场 + 订单类型` 存储当年标段释放顺序和生成批次关联；订单数量从多年订单数量控制台带入。
 
 关键字段建议：
 
@@ -525,7 +577,7 @@
 | `year_no` | INT | 年份，正式年份从 `1` 开始 |
 | `market_code` | VARCHAR(32) | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
 | `order_type` | VARCHAR(32) | `AGENCY_INSPECTION / TWO_CABIN_VIP / BUSINESS_VIP / MEMBER_CUSTOM` |
-| `order_count` | INT | 该类订单生成数量 |
+| `order_count` | INT | 从多年订单数量控制台带入的该类订单生成数量快照 |
 | `release_sequence_no` | INT | 标段释放顺序；释放单元为 `市场 + 订单类型` |
 | `generation_batch_id` | BIGINT NULL | 当前确认订单池批次 |
 | `config_status` | VARCHAR(32) | `DRAFT / CONFIRMED / LOCKED` |
@@ -539,7 +591,7 @@
 
 说明：
 
-- 首版只配置订单数量。
+- 多年订单数量控制台是订单数量主来源；本表中的 `order_count` 是当年生成/确认时的快照，不应作为另一套独立数量来源。
 - `order_count` 范围为 `0 ~ 15`；`0` 表示不生成订单且该标段不进入开标。
 - `release_sequence_no` 必须在开标前配置完成；释放第一个标段后不允许调整。
 - 系统可基于 `order_count`、实际小组数、市场投入资格生成风险提示，但不做强制保底或多轮分配。
@@ -571,7 +623,8 @@
 - 本地市场默认 `market_enabled=1`。
 - 区域市场、全国市场、全球市场默认 `market_enabled=0`。
 - 订单池确认前可修改市场开启状态；确认后该年市场开启状态锁定。
-- 未开启市场下四个标段订单数量按 `0` 处理，不生成订单池、不占用有效释放顺序、不进入选单。
+- 市场开启完全以管理员当年手动配置为准，不因多年订单数量控制台中存在订单数量而自动开启。
+- 未开启市场下四个标段不生成订单池、不占用有效释放顺序、不进入选单。
 - 玩家仍需提交未开启市场对应的 4 项投入，且必须为 `0`；服务端负责拦截非 `0`。
 
 #### 4.7.3 `sg_order_pool`

@@ -4,6 +4,24 @@ type AdminOrderGetControlConfigRequest struct {
 	YearNo *int `form:"yearNo" binding:"required"`
 }
 
+type AdminOrderUpdateForecastControlRequest struct {
+	Items      []AdminOrderUpdateForecastControlItem   `json:"items" binding:"required"`
+	Narratives []AdminOrderUpdateForecastNarrativeItem `json:"narratives"`
+}
+
+type AdminOrderUpdateForecastControlItem struct {
+	YearNo     int    `json:"yearNo" binding:"required"`
+	MarketCode string `json:"marketCode" binding:"required"`
+	OrderType  string `json:"orderType" binding:"required"`
+	OrderCount int    `json:"orderCount"`
+}
+
+type AdminOrderUpdateForecastNarrativeItem struct {
+	ForecastStageCode string `json:"forecastStageCode" binding:"required"`
+	MarketCode        string `json:"marketCode" binding:"required"`
+	Content           string `json:"content"`
+}
+
 type AdminOrderUpdateControlConfigRequest struct {
 	YearNo *int                                `json:"yearNo" binding:"required"`
 	Items  []AdminOrderUpdateControlConfigItem `json:"items" binding:"required"`

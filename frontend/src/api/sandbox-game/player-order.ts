@@ -2,6 +2,7 @@ import { request } from '@/api/http'
 import type {
   DeliverOrdersRequest,
   DeliverOrdersResult,
+  OrderMarketForecastResult,
   PassOrderSegmentRequest,
   PassOrderSegmentResult,
   PlayerOrderYearView,
@@ -13,6 +14,10 @@ import type {
 
 export function getPlayerOrderYearView(yearNo: number) {
   return request<PlayerOrderYearView>(`/api/v1/sandbox-game/player-order/get-year-view?yearNo=${yearNo}`)
+}
+
+export function getPlayerMarketForecast() {
+  return request<OrderMarketForecastResult>('/api/v1/sandbox-game/player-order/get-market-forecast')
 }
 
 export function submitPlayerMarketInvestment(payload: SubmitMarketInvestmentRequest) {

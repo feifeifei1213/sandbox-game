@@ -1,6 +1,7 @@
 export type OrderMarketCode = 'LOCAL' | 'REGIONAL' | 'NATIONAL' | 'GLOBAL'
 export type OrderTypeCode = 'AGENCY_INSPECTION' | 'TWO_CABIN_VIP' | 'BUSINESS_VIP' | 'MEMBER_CUSTOM'
 export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'VOID'
+export type OrderForecastStageCode = 'YEAR_1_3' | 'YEAR_4_5' | 'YEAR_6_8' | string
 export type OrderSegmentStatus =
   | 'MARKET_DISABLED'
   | 'NO_ORDER_CONFIG'
@@ -23,6 +24,40 @@ export type OrderSelectionStatus =
   | string
 export type OrderDeliveryStatus = 'SELECTED' | 'DELIVERED' | 'UNFINISHED' | string
 export type OrderDeliveryStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4'
+
+export interface OrderMarketForecastProduct {
+  orderType: OrderTypeCode
+  orderTypeName: string
+  orderCount: number
+  forecastAmount: number
+}
+
+export interface OrderMarketForecastYear {
+  yearNo: number
+  products: OrderMarketForecastProduct[]
+  totalOrderCount: number
+  totalForecastAmount: number
+}
+
+export interface OrderMarketForecastMarket {
+  marketCode: OrderMarketCode
+  marketName: string
+  narrative: string
+  years: OrderMarketForecastYear[]
+}
+
+export interface OrderMarketForecastStage {
+  forecastStageCode: OrderForecastStageCode
+  forecastStageName: string
+  yearRange: string
+  years: number[]
+  markets: OrderMarketForecastMarket[]
+}
+
+export interface OrderMarketForecastResult {
+  formulaVersion: string
+  stages: OrderMarketForecastStage[]
+}
 
 export interface PlayerOrderPoolItem {
   orderId: number

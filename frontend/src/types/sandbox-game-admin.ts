@@ -4,7 +4,7 @@ export type UnlockTargetType = 'OPERATING' | 'REPORT'
 export type UnlockStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEAR_END'
 export type NoticeTargetScope = 'ALL' | 'GROUP'
 export type AdjustmentType = 'REWARD' | 'PENALTY'
-import type { OrderMarketCode, OrderPoolStatus, OrderTypeCode } from '@/types/sandbox-game-order'
+import type { OrderForecastStageCode, OrderMarketCode, OrderMarketForecastResult, OrderPoolStatus, OrderTypeCode } from '@/types/sandbox-game-order'
 
 export type { OrderMarketCode, OrderPoolStatus }
 export type AdminOrderType = OrderTypeCode
@@ -271,6 +271,31 @@ export interface OrderSourceSummary {
   availableCount: number
 }
 
+export interface OrderForecastControlItem {
+  yearNo: number
+  forecastStageCode: OrderForecastStageCode
+  forecastStageName: string
+  marketCode: OrderMarketCode
+  marketName: string
+  orderType: AdminOrderType
+  orderTypeName: string
+  orderCount: number
+}
+
+export interface OrderForecastNarrativeItem {
+  forecastStageCode: OrderForecastStageCode
+  forecastStageName: string
+  marketCode: OrderMarketCode
+  marketName: string
+  content: string
+}
+
+export interface OrderForecastControlResult {
+  items: OrderForecastControlItem[]
+  narratives: OrderForecastNarrativeItem[]
+  forecast: OrderMarketForecastResult
+}
+
 export interface UploadOrderExcelResult {
   batchId: number
   originalFileName: string
@@ -329,6 +354,7 @@ export interface OrderControlConfigResult {
   finalYear: number
   latestBatchId: number | null
   latestBatchUploadedAt: string | null
+  forecast: OrderMarketForecastResult
   generationStatus: OrderGenerationStatus
   latestPreviewBatch: OrderGenerationBatchSummary | null
   confirmedBatch: OrderGenerationBatchSummary | null
@@ -357,12 +383,30 @@ export interface UpdateOrderMarketConfigResult {
   updatedBy: string
 }
 
+export interface UpdateOrderForecastControlRequest {
+  items: Array<{
+    yearNo: number
+    marketCode: OrderMarketCode
+    orderType: AdminOrderType
+    orderCount: number
+  }>
+  narratives: Array<{
+    forecastStageCode: OrderForecastStageCode
+    marketCode: OrderMarketCode
+    content: string
+  }>
+}
+
+export interface UpdateOrderForecastControlResult extends OrderForecastControlResult {
+  updatedAt: string
+  updatedBy: string
+}
+
 export interface UpdateOrderControlConfigRequest {
   yearNo: number
   items: Array<{
     marketCode: OrderMarketCode
     orderType: AdminOrderType
-    orderCount: number
     releaseSequenceNo: number
   }>
 }
