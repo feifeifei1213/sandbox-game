@@ -77,12 +77,28 @@
                   <section v-for="market in stage.markets" :key="market.marketCode" class="forecast-market-card">
                     <div class="forecast-market-head">
                       <strong>{{ market.marketName }}</strong>
-                      <span>{{ formatAmount(stageMarketAmount(market)) }}</span>
+                      <span>{{ formatIntegerAmount(stageMarketAmount(market)) }}</span>
                     </div>
                     <p v-if="market.narrative">{{ market.narrative }}</p>
-                    <div class="forecast-years">
-                      <span v-for="year in market.years" :key="year.yearNo">
-                        {{ year.yearNo }}年 {{ year.totalOrderCount }}单 / {{ formatAmount(year.totalForecastAmount) }}
+                    <div class="forecast-chart">
+                      <div v-for="year in market.years" :key="year.yearNo" class="forecast-year-group">
+                        <div class="forecast-bars">
+                          <span
+                            v-for="product in year.products"
+                            :key="product.orderType"
+                            class="forecast-bar"
+                            :class="`type-${product.orderType}`"
+                            :style="{ height: `${forecastBarHeight(product.forecastAmount, market)}%` }"
+                            :title="`${year.yearNo}年 ${product.orderTypeName}: ${product.orderCount}单 / ${formatIntegerAmount(product.forecastAmount)}`"
+                          />
+                        </div>
+                        <span class="forecast-year-label">{{ year.yearNo }}年</span>
+                        <em>{{ year.totalOrderCount }}单 / {{ formatIntegerAmount(year.totalForecastAmount) }}</em>
+                      </div>
+                    </div>
+                    <div class="forecast-legend">
+                      <span v-for="orderType in orderTypeOptions" :key="orderType.code" :class="`type-${orderType.code}`">
+                        {{ orderType.name }}
                       </span>
                     </div>
                   </section>
@@ -210,7 +226,7 @@
                 <div v-if="visibleSegment.selectedOrder" class="selected-order">
                   <div>
                     <strong>本组已选订单</strong>
-                    <span>{{ formatOrderNo(visibleSegment.selectedOrder) }} · 金额 {{ formatAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
+                    <span>{{ formatOrderNo(visibleSegment.selectedOrder) }} · 金额 {{ formatIntegerAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
                   </div>
                   <div v-if="visibleSegment.deliveryStatus === 'SELECTED'" class="delivery-actions">
                     <select v-model="deliveryStageDraft[visibleSegment.selectedOrder.orderId]">
@@ -244,9 +260,9 @@
                       <span>可选</span>
                     </div>
                     <dl>
-                      <div><dt>金额</dt><dd>{{ formatAmount(order.orderAmount) }}</dd></div>
-                      <div><dt>数量</dt><dd>{{ formatAmount(order.orderQuantity) }}</dd></div>
-                      <div><dt>单价</dt><dd>{{ formatAmount(order.unitPrice) }}</dd></div>
+                      <div><dt>金额</dt><dd>{{ formatIntegerAmount(order.orderAmount) }}</dd></div>
+                      <div><dt>数量</dt><dd>{{ formatQuantity(order.orderQuantity) }}</dd></div>
+                      <div><dt>单价</dt><dd>{{ formatUnitPrice(order.unitPrice) }}</dd></div>
                       <div><dt>账期</dt><dd>{{ order.accountTerm }} 季度</dd></div>
                     </dl>
                     <button
@@ -268,9 +284,9 @@
                       <span>已锁定</span>
                     </div>
                     <dl>
-                      <div><dt>金额</dt><dd>{{ formatAmount(order.orderAmount) }}</dd></div>
-                      <div><dt>数量</dt><dd>{{ formatAmount(order.orderQuantity) }}</dd></div>
-                      <div><dt>单价</dt><dd>{{ formatAmount(order.unitPrice) }}</dd></div>
+                      <div><dt>金额</dt><dd>{{ formatIntegerAmount(order.orderAmount) }}</dd></div>
+                      <div><dt>数量</dt><dd>{{ formatQuantity(order.orderQuantity) }}</dd></div>
+                      <div><dt>单价</dt><dd>{{ formatUnitPrice(order.unitPrice) }}</dd></div>
                       <div><dt>账期</dt><dd>{{ order.accountTerm }} 季度</dd></div>
                     </dl>
                     <button type="button" class="btn full" disabled>不可选择</button>
@@ -328,7 +344,7 @@
                     <input v-model="selectedDeliveryOrderIds" type="checkbox" :value="item.orderId">
                     <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
                     <strong>{{ item.businessOrderNo || `#${item.orderId}` }}</strong>
-                    <em>{{ formatAmount(item.orderAmount) }}</em>
+                    <em>{{ formatIntegerAmount(item.orderAmount) }}</em>
                   </label>
                 </div>
               </template>
@@ -346,7 +362,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -541,7 +557,10 @@ function startPolling() {
       return
     }
     try {
+      const scrollY = window.scrollY
       await store.loadYearView(selectedYear.value, { silent: true })
+      await nextTick()
+      window.scrollTo({ top: scrollY, behavior: 'auto' })
     } catch {
       // 自动轮询失败时保留当前页面状态。
     }
@@ -585,8 +604,35 @@ function formatAmount(value: number) {
   return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+function formatIntegerAmount(value: number) {
+  return Math.round(Number(value || 0)).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+function formatQuantity(value: number) {
+  return Math.round(Number(value || 0)).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+function formatUnitPrice(value: number) {
+  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
 function stageMarketAmount(market: OrderMarketForecastMarket) {
   return market.years.reduce((sum, year) => sum + Number(year.totalForecastAmount || 0), 0)
+}
+
+function stageMarketMaxAmount(market: OrderMarketForecastMarket) {
+  return Math.max(
+    ...market.years.flatMap((year) => year.products.map((product) => Number(product.forecastAmount || 0))),
+    0,
+  )
+}
+
+function forecastBarHeight(amount: number, market: OrderMarketForecastMarket) {
+  const max = stageMarketMaxAmount(market)
+  if (max <= 0) {
+    return 0
+  }
+  return Math.max(4, Math.round((Number(amount || 0) / max) * 100))
 }
 
 function formatOrderNo(order: PlayerOrderPoolItem) {
@@ -858,7 +904,7 @@ function formatDeliveryStage(value: string) {
 
 .forecast-market-card {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #ffffff;
@@ -883,14 +929,99 @@ function formatDeliveryStage(value: string) {
   line-height: 1.5;
 }
 
-.forecast-years {
+.forecast-chart {
   display: grid;
-  gap: 5px;
+  grid-template-columns: repeat(3, minmax(74px, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 172px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    linear-gradient(to top, rgba(148, 163, 184, 0.18) 1px, transparent 1px) 0 0 / 100% 25%,
+    #fbfcfe;
+  padding: 12px 10px 10px;
 }
 
-.forecast-years span {
+.forecast-year-group {
+  display: grid;
+  grid-template-rows: 112px auto auto;
+  gap: 5px;
+  min-width: 0;
+  text-align: center;
+}
+
+.forecast-bars {
+  display: flex;
+  gap: 4px;
+  align-items: end;
+  justify-content: center;
+  height: 112px;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.forecast-bar {
+  width: 10px;
+  min-height: 0;
+  border-radius: 3px 3px 0 0;
+  background: #3b82f6;
+}
+
+.forecast-year-label,
+.forecast-year-group em {
+  overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forecast-year-label {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.forecast-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.forecast-legend span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.forecast-legend span::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+  content: "";
+}
+
+.type-AGENCY_INSPECTION {
+  background-color: #2563eb;
+  color: #2563eb;
+}
+
+.type-TWO_CABIN_VIP {
+  background-color: #16a34a;
+  color: #16a34a;
+}
+
+.type-BUSINESS_VIP {
+  background-color: #d97706;
+  color: #d97706;
+}
+
+.type-MEMBER_CUSTOM {
+  background-color: #7c3aed;
+  color: #7c3aed;
 }
 
 .investment-grid {

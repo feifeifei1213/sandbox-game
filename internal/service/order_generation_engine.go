@@ -56,7 +56,8 @@ func buildGeneratedOrderPoolItems(configs []entity.OrderGenerationConfig, batchI
 		for index := 1; index <= config.OrderCount; index++ {
 			quantity := randomIntInclusive(rng, params.MinQuantity, params.MaxQuantity)
 			accountTerm := randomIntInclusive(rng, params.MinAccountTerm, params.MaxAccountTerm)
-			amount := roundMoney(avgPrice*float64(quantity) - params.Volatility*(float64(quantity)-float64(params.MinQuantity+params.MaxQuantity)/2))
+			rawAmount := avgPrice*float64(quantity) - params.Volatility*(float64(quantity)-float64(params.MinQuantity+params.MaxQuantity)/2)
+			amount := validIntegerOrderAmount(rawAmount, quantity)
 			unitPrice := roundMoney(amount / float64(quantity))
 			sourceRowKey := fmt.Sprintf("%d_%s_%s_%02d", config.YearNo, config.MarketCode, config.OrderType, index)
 			segmentCode := fmt.Sprintf("%s_%s", config.MarketCode, config.OrderType)
@@ -153,4 +154,29 @@ func randomIntInclusive(rng *rand.Rand, min int, max int) int {
 
 func roundMoney(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+func validIntegerOrderAmount(rawAmount float64, quantity int) float64 {
+	target := int(math.Round(rawAmount))
+	if target < 1 {
+		target = 1
+	}
+	if quantity <= 0 {
+		return float64(target)
+	}
+	for offset := 0; ; offset++ {
+		if candidate := target - offset; candidate >= 1 && isValidIntegerAmountForQuantity(candidate, quantity) {
+			return float64(candidate)
+		}
+		if candidate := target + offset; candidate >= 1 && isValidIntegerAmountForQuantity(candidate, quantity) {
+			return float64(candidate)
+		}
+	}
+}
+
+func isValidIntegerAmountForQuantity(amount int, quantity int) bool {
+	if quantity <= 0 {
+		return false
+	}
+	return (amount*100)%quantity == 0
 }

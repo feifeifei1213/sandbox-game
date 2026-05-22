@@ -135,12 +135,42 @@ func TestBuildGeneratedOrderPoolItemsIsDeterministicAndCapsCardCount(t *testing.
 	if leftItems[0].SegmentCode != "LOCAL_AGENCY_INSPECTION" || leftItems[0].SourceSheetName != "系统生成" || leftItems[0].CardSequenceNo != 1 {
 		t.Fatalf("unexpected generated order metadata: %#v", leftItems[0])
 	}
+	for index, item := range leftItems {
+		if item.OrderAmount != float64(int64(item.OrderAmount)) {
+			t.Fatalf("expected integer order amount at index %d, got %#v", index, item)
+		}
+		if !almostEqual(item.OrderAmount, item.OrderQuantity*item.UnitPrice) {
+			t.Fatalf("expected amount to equal quantity * unit price at index %d, got %#v", index, item)
+		}
+		if item.OrderQuantity != float64(int64(item.OrderQuantity)) {
+			t.Fatalf("expected integer quantity at index %d, got %#v", index, item)
+		}
+	}
 
 	invalid := append([]entity.OrderGenerationConfig(nil), configs...)
 	invalid[0].OrderCount = 16
 	if _, _, _, err := buildGeneratedOrderPoolItems(invalid, 91, "stable-seed", "tester", now); !errors.Is(err, ErrAdminOrderConfigInvalid) {
 		t.Fatalf("expected generated order count > max to be rejected, got %v", err)
 	}
+}
+
+func TestValidIntegerOrderAmountAllowsDecimalUnitPriceWhenAmountIsInteger(t *testing.T) {
+	if amount := validIntegerOrderAmount(10.8, 2); amount != 11 {
+		t.Fatalf("expected nearest integer amount for quantity 2, got %v", amount)
+	}
+	if unitPrice := roundMoney(validIntegerOrderAmount(10.8, 2) / 2); unitPrice != 5.5 {
+		t.Fatalf("expected decimal unit price to be allowed for quantity 2, got %v", unitPrice)
+	}
+	if amount := validIntegerOrderAmount(17.01, 3); amount != 18 {
+		t.Fatalf("expected quantity 3 to avoid invalid two-decimal multiplication, got %v", amount)
+	}
+}
+
+func almostEqual(left float64, right float64) bool {
+	if left > right {
+		return left-right < 0.000001
+	}
+	return right-left < 0.000001
 }
 
 func TestBuildMarketParticipantsHonorsLeaderAndPreviousAmountTieBreak(t *testing.T) {

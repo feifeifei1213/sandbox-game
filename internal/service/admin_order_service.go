@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -1940,7 +1941,7 @@ func buildMarketForecastResult(controlRows []entity.OrderForecastControl, foreca
 						ForecastAmount: amount,
 					})
 					yearView.TotalOrderCount += count
-					yearView.TotalForecastAmount = roundMoney(yearView.TotalForecastAmount + amount)
+					yearView.TotalForecastAmount = roundIntegerMoney(yearView.TotalForecastAmount + amount)
 				}
 				marketView.Years = append(marketView.Years, yearView)
 			}
@@ -1961,7 +1962,11 @@ func forecastAmountForProduct(yearNo int, marketCode string, orderType string, o
 	params := defaultOrderGenerationParameters()
 	avgPrice := params.AveragePrices[marketCode][orderType]
 	avgQuantity := float64(params.MinQuantity+params.MaxQuantity) / 2
-	return roundMoney(float64(orderCount) * avgPrice * avgQuantity)
+	return roundIntegerMoney(float64(orderCount) * avgPrice * avgQuantity)
+}
+
+func roundIntegerMoney(value float64) float64 {
+	return math.Round(value)
 }
 
 func forecastControlCountMap(yearNo int, controls []entity.OrderForecastControl) map[string]int {

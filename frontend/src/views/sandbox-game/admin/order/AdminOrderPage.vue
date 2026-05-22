@@ -84,7 +84,7 @@
                 </tr>
                 <tr class="forecast-total-row">
                   <td colspan="2">{{ market.name }}预测金额</td>
-                  <td v-for="yearNo in stage.years" :key="yearNo" class="number-cell">{{ formatAmount(getForecastYear(stage.forecastStageCode, market.code, yearNo)?.totalForecastAmount ?? 0) }}</td>
+                  <td v-for="yearNo in stage.years" :key="yearNo" class="number-cell">{{ formatIntegerAmount(getForecastYear(stage.forecastStageCode, market.code, yearNo)?.totalForecastAmount ?? 0) }}</td>
                 </tr>
               </template>
             </tbody>
@@ -392,9 +392,9 @@
               <td>{{ item.businessOrderNo || `#${item.orderId}` }}</td>
               <td>{{ item.marketName }}</td>
               <td>{{ item.orderTypeName }}</td>
-              <td class="number-cell">{{ formatAmount(item.orderAmount) }}</td>
-              <td class="number-cell">{{ formatAmount(item.orderQuantity) }}</td>
-              <td class="number-cell">{{ formatAmount(item.unitPrice) }}</td>
+              <td class="number-cell">{{ formatIntegerAmount(item.orderAmount) }}</td>
+              <td class="number-cell">{{ formatQuantity(item.orderQuantity) }}</td>
+              <td class="number-cell">{{ formatUnitPrice(item.unitPrice) }}</td>
               <td>{{ item.accountTerm }}季度</td>
               <td>{{ formatPoolStatus(item.poolStatus) }}</td>
               <td>{{ item.selectedGroupId ? `组ID ${item.selectedGroupId}` : '--' }}</td>
@@ -635,6 +635,18 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatAmount(value: number) {
+  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function formatIntegerAmount(value: number) {
+  return Math.round(Number(value || 0)).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+function formatQuantity(value: number) {
+  return Math.round(Number(value || 0)).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+function formatUnitPrice(value: number) {
   return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 

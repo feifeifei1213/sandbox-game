@@ -96,7 +96,10 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   }
 
   async function loadYearView(yearNo: number, options?: { silent?: boolean }) {
-    yearViewLoading.value = true
+    const showLoading = !options?.silent
+    if (showLoading) {
+      yearViewLoading.value = true
+    }
     if (!options?.silent) {
       pageMessage.value = null
     }
@@ -113,7 +116,9 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
       pageMessage.value = toErrorMessage(error, `读取 ${yearNo} 年订单页失败`)
       throw error
     } finally {
-      yearViewLoading.value = false
+      if (showLoading) {
+        yearViewLoading.value = false
+      }
     }
   }
 
