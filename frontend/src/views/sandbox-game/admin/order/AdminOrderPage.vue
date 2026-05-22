@@ -90,6 +90,36 @@
             </tbody>
           </table>
         </div>
+        <div class="forecast-chart-grid">
+          <section v-for="market in stage.markets" :key="`${stage.forecastStageCode}-${market.marketCode}-chart`" class="forecast-market-card">
+            <div class="forecast-market-head">
+              <strong>{{ market.marketName }}</strong>
+              <span>{{ formatIntegerAmount(stageMarketAmount(market)) }}</span>
+            </div>
+            <p v-if="market.narrative">{{ market.narrative }}</p>
+            <div class="forecast-chart" :style="forecastChartColumns(market)">
+              <div v-for="year in market.years" :key="year.yearNo" class="forecast-year-group">
+                <div class="forecast-bars">
+                  <span
+                    v-for="product in year.products"
+                    :key="product.orderType"
+                    class="forecast-bar"
+                    :class="`type-${product.orderType}`"
+                    :style="{ height: `${forecastBarHeight(product.forecastAmount, market)}%` }"
+                    :title="`${year.yearNo}年 ${product.orderTypeName}: ${product.orderCount}单 / ${formatIntegerAmount(product.forecastAmount)}`"
+                  />
+                </div>
+                <span class="forecast-year-label">{{ year.yearNo }}年</span>
+                <em>{{ year.totalOrderCount }}单 / {{ formatIntegerAmount(year.totalForecastAmount) }}</em>
+              </div>
+            </div>
+            <div class="forecast-legend">
+              <span v-for="orderType in orderTypeOptions" :key="orderType.code" :class="`type-${orderType.code}`">
+                {{ orderType.name }}
+              </span>
+            </div>
+          </section>
+        </div>
         <div class="forecast-narratives">
           <label v-for="market in marketOptions" :key="`${stage.forecastStageCode}-${market.code}`" class="field">
             <span>{{ market.name }}说明</span>
@@ -414,6 +444,7 @@ import { storeToRefs } from 'pinia'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { MARKET_OPTIONS, ORDER_TYPE_OPTIONS, useAdminOrderStore } from '@/stores/admin-order'
 import type { OrderPoolStatus } from '@/types/sandbox-game-admin'
+import type { OrderMarketForecastMarket } from '@/types/sandbox-game-order'
 
 const shellStore = useAdminShellStore()
 const store = useAdminOrderStore()
@@ -648,6 +679,31 @@ function formatQuantity(value: number) {
 
 function formatUnitPrice(value: number) {
   return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function stageMarketAmount(market: OrderMarketForecastMarket) {
+  return market.years.reduce((sum, year) => sum + Number(year.totalForecastAmount || 0), 0)
+}
+
+function stageMarketMaxAmount(market: OrderMarketForecastMarket) {
+  return Math.max(
+    ...market.years.flatMap((year) => year.products.map((product) => Number(product.forecastAmount || 0))),
+    0,
+  )
+}
+
+function forecastBarHeight(amount: number, market: OrderMarketForecastMarket) {
+  const max = stageMarketMaxAmount(market)
+  if (max <= 0) {
+    return 0
+  }
+  return Math.max(4, Math.round((Number(amount || 0) / max) * 100))
+}
+
+function forecastChartColumns(market: OrderMarketForecastMarket) {
+  return {
+    gridTemplateColumns: `repeat(${Math.max(market.years.length, 1)}, minmax(72px, 1fr))`,
+  }
 }
 
 function formatPoolStatus(value: OrderPoolStatus) {
@@ -981,6 +1037,134 @@ function formatGroupName(groupId?: number | null) {
   color: var(--muted);
 }
 
+.forecast-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px 0;
+}
+
+.forecast-market-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 11px 12px;
+}
+
+.forecast-market-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.forecast-market-head span {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.forecast-market-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.forecast-chart {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+  min-height: 172px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    linear-gradient(to top, rgba(148, 163, 184, 0.18) 1px, transparent 1px) 0 0 / 100% 25%,
+    #fbfcfe;
+  padding: 12px 10px 10px;
+}
+
+.forecast-year-group {
+  display: grid;
+  grid-template-rows: 112px auto auto;
+  gap: 5px;
+  min-width: 0;
+  text-align: center;
+}
+
+.forecast-bars {
+  display: flex;
+  gap: 4px;
+  align-items: end;
+  justify-content: center;
+  height: 112px;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.forecast-bar {
+  width: 10px;
+  min-height: 0;
+  border-radius: 3px 3px 0 0;
+  background: #3b82f6;
+}
+
+.forecast-year-label,
+.forecast-year-group em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forecast-year-label {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.forecast-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.forecast-legend span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.forecast-legend span::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+  content: "";
+}
+
+.type-AGENCY_INSPECTION {
+  background-color: #2563eb;
+  color: #2563eb;
+}
+
+.type-TWO_CABIN_VIP {
+  background-color: #16a34a;
+  color: #16a34a;
+}
+
+.type-BUSINESS_VIP {
+  background-color: #d97706;
+  color: #d97706;
+}
+
+.type-MEMBER_CUSTOM {
+  background-color: #7c3aed;
+  color: #7c3aed;
+}
+
 .forecast-narratives {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1182,6 +1366,7 @@ function formatGroupName(groupId?: number | null) {
   .stats-grid,
   .batch-grid,
   .pool-filter,
+  .forecast-chart-grid,
   .forecast-narratives,
   .market-config-grid,
   .control-grid,
