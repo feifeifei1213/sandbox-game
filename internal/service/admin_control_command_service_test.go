@@ -120,6 +120,17 @@ func TestValidateInitializeGameEditionRequiresKnownEdition(t *testing.T) {
 	if edition.EditionCode != GameEditionVIPServiceV1 || edition.RuleVersion != FormulaVersionCommonV1 {
 		t.Fatalf("unexpected edition: %#v", edition)
 	}
+
+	productionEdition, err := validateInitializeGameEdition("production_v1")
+	if err != nil {
+		t.Fatalf("expected production edition to pass, got %v", err)
+	}
+	if productionEdition.EditionCode != GameEditionProductionV1 ||
+		productionEdition.OperatingTemplateVersion != OperatingTemplateVersionProductionV1 ||
+		productionEdition.ReportTemplateVersion != ReportTemplateVersionProductionV1 ||
+		productionEdition.OrderTemplateVersion != OrderTemplateVersionVIPServiceV1 {
+		t.Fatalf("unexpected production edition: %#v", productionEdition)
+	}
 }
 
 func TestEnsureUnlockYearAllowedRejectsBlankReason(t *testing.T) {

@@ -35,7 +35,7 @@
             <th class="row-head">1</th>
             <td class="section-band band-year-start" rowspan="7">年初工作</td>
             <td class="group-title" colspan="2">1. 支付上年度所得税</td>
-            <td class="note-cell center" colspan="4">{{ serviceOperatingLabels.taxPolicyNote }}</td>
+            <td class="note-cell center" colspan="4">{{ labels.taxPolicyNote }}</td>
             <td class="result-cell">{{ formatNumber(taxPaymentDisplay) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
@@ -114,7 +114,7 @@
 
           <tr>
             <th class="row-head">13</th>
-            <td class="group-title" rowspan="6">{{ serviceOperatingLabels.materialGroupTitle }}</td>
+            <td class="group-title" rowspan="6">{{ labels.materialGroupTitle }}</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`material-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
@@ -143,12 +143,12 @@
           </tr>
           <tr>
             <th class="row-head">19</th>
-            <td class="reminder-cell" colspan="9">服务进度更新</td>
+            <td class="reminder-cell" colspan="9">{{ labels.progressUpdateReminder }}</td>
           </tr>
 
           <tr>
             <th class="row-head">20</th>
-            <td class="group-title" colspan="2">{{ serviceOperatingLabels.productionAdjustmentGroupTitle }}</td>
+            <td class="group-title" colspan="2">{{ labels.productionAdjustmentGroupTitle }}</td>
             <td v-for="quarter in quarterList" :key="`line-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
             <td class="empty-cell" colspan="2"></td>
@@ -182,7 +182,7 @@
 
           <tr>
             <th class="row-head">27</th>
-            <td class="group-title" rowspan="2">{{ serviceOperatingLabels.humanResourceGroupTitle }}</td>
+            <td class="group-title" rowspan="2">{{ labels.humanResourceGroupTitle }}</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`hr-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
@@ -190,7 +190,7 @@
           </tr>
           <tr>
             <th class="row-head">28</th>
-            <td class="note-cell">{{ serviceOperatingLabels.humanResourceLabel }}</td>
+            <td class="note-cell">{{ labels.humanResourceLabel }}</td>
             <td v-for="quarter in quarterList" :key="`hr-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
                 :value="displayCell(getQuarterFieldValue('humanResource', quarter.key, 'staffCost'))"
@@ -205,7 +205,7 @@
 
           <tr>
             <th class="row-head">29</th>
-            <td class="group-title" rowspan="2">{{ serviceOperatingLabels.salaryGroupTitle }}</td>
+            <td class="group-title" rowspan="2">{{ labels.salaryGroupTitle }}</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`salary-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
@@ -213,7 +213,7 @@
           </tr>
           <tr>
             <th class="row-head">30</th>
-            <td class="note-cell">{{ serviceOperatingLabels.salaryLabel }}</td>
+            <td class="note-cell">{{ labels.salaryLabel }}</td>
             <td v-for="quarter in quarterList" :key="`salary-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
                 :value="displayCell(getQuarterFieldValue('salaryAndProduction', quarter.key, 'salaryCost'))"
@@ -228,7 +228,7 @@
 
           <tr>
             <th class="row-head">31</th>
-            <td class="group-title" rowspan="3">{{ serviceOperatingLabels.researchAndManagementGroupTitle }}</td>
+            <td class="group-title" rowspan="3">{{ labels.researchAndManagementGroupTitle }}</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`research-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
@@ -250,12 +250,12 @@
           </tr>
           <tr>
             <th class="row-head">34</th>
-            <td class="reminder-cell" colspan="9">{{ serviceOperatingLabels.newOrderReminder }}</td>
+            <td class="reminder-cell" colspan="9">{{ labels.newOrderReminder }}</td>
           </tr>
 
           <tr>
             <th class="row-head">35</th>
-            <td class="group-title" rowspan="2">{{ serviceOperatingLabels.receivableGroupTitle }}</td>
+            <td class="group-title" rowspan="2">{{ labels.receivableGroupTitle }}</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`receivable-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
@@ -263,7 +263,7 @@
           </tr>
           <tr>
             <th class="row-head">36</th>
-            <td class="note-cell">{{ serviceOperatingLabels.receivableLabel }}</td>
+            <td class="note-cell">{{ labels.receivableLabel }}</td>
             <td v-for="quarter in quarterList" :key="`receivable-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
                 :value="displayCell(getQuarterFieldValue('receivableUpdate', quarter.key, 'receivableCollection'))"
@@ -277,12 +277,12 @@
           </tr>
           <tr>
             <th class="row-head">37</th>
-            <td class="reminder-cell" colspan="9">{{ serviceOperatingLabels.receivableReminder }}</td>
+            <td class="reminder-cell" colspan="9">{{ labels.receivableReminder }}</td>
           </tr>
 
           <tr>
             <th class="row-head">38</th>
-            <td class="group-title" rowspan="3">{{ serviceOperatingLabels.deliveryGroupTitle }}</td>
+            <td class="group-title" rowspan="3">{{ labels.deliveryGroupTitle }}</td>
             <td class="note-cell center"></td>
             <td v-for="quarter in quarterList" :key="`delivery-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
@@ -290,7 +290,7 @@
           </tr>
           <tr>
             <th class="row-head">39</th>
-            <td class="note-cell">{{ serviceOperatingLabels.deliveryRevenueLabel }}</td>
+            <td class="note-cell">{{ labels.deliveryRevenueLabel }}</td>
             <td v-for="quarter in quarterList" :key="`sales-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))"
@@ -304,7 +304,7 @@
           </tr>
           <tr>
             <th class="row-head">40</th>
-            <td class="note-cell">{{ serviceOperatingLabels.deliveryCostLabel }}</td>
+            <td class="note-cell">{{ labels.deliveryCostLabel }}</td>
             <td v-for="quarter in quarterList" :key="`cost-${quarter.key}`" :class="editableCellClass(quarter.scope)">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'directCost'))"
@@ -319,7 +319,7 @@
 
           <tr>
             <th class="row-head">41</th>
-            <td class="group-title" rowspan="2">{{ serviceOperatingLabels.managementStaffGroupTitle }}</td>
+            <td class="group-title" rowspan="2">{{ labels.managementStaffGroupTitle }}</td>
             <td class="note-cell center">每季 1M</td>
             <td v-for="quarter in quarterList" :key="`management-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
             <td class="note-cell center">总计</td>
@@ -397,8 +397,8 @@
 
           <tr>
             <th class="row-head">47</th>
-            <td class="group-title">{{ serviceOperatingLabels.lineMaintenanceGroupTitle }}</td>
-            <td class="note-cell center">{{ serviceOperatingLabels.lineMaintenanceNote }}</td>
+            <td class="group-title">{{ labels.lineMaintenanceGroupTitle }}</td>
+            <td class="note-cell center">{{ labels.lineMaintenanceNote }}</td>
             <td class="empty-cell" colspan="5"></td>
             <td :class="editableCellClass('YEAR_END')">
               <input
@@ -413,9 +413,9 @@
 
           <tr>
             <th class="row-head">48</th>
-            <td class="group-title" rowspan="2">{{ serviceOperatingLabels.assetGroupTitle }}</td>
+            <td class="group-title" rowspan="2">{{ labels.assetGroupTitle }}</td>
             <td class="note-cell center">购买</td>
-            <td class="note-cell center" colspan="5">{{ serviceOperatingLabels.assetValueNote }}</td>
+            <td class="note-cell center" colspan="5">{{ labels.assetValueNote }}</td>
             <td :class="editableCellClass('YEAR_END')">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'purchase'))"
@@ -429,7 +429,7 @@
           <tr>
             <th class="row-head">49</th>
             <td class="note-cell center">出售</td>
-            <td class="note-cell center" colspan="5">{{ serviceOperatingLabels.assetValueNote }}</td>
+            <td class="note-cell center" colspan="5">{{ labels.assetValueNote }}</td>
             <td :class="editableCellClass('YEAR_END')">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'sale'))"
@@ -443,9 +443,9 @@
 
           <tr>
             <th class="row-head">50</th>
-            <td class="group-title">{{ serviceOperatingLabels.rentGroupTitle }}</td>
+            <td class="group-title">{{ labels.rentGroupTitle }}</td>
             <td class="note-cell center">付租金</td>
-            <td class="note-cell center" colspan="5">{{ serviceOperatingLabels.rentValueNote }}</td>
+            <td class="note-cell center" colspan="5">{{ labels.rentValueNote }}</td>
             <td :class="editableCellClass('YEAR_END')">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'rent'))"
@@ -458,7 +458,7 @@
           </tr>
           <tr>
             <th class="row-head">51</th>
-            <td class="group-title">{{ serviceOperatingLabels.residualGroupTitle }}</td>
+            <td class="group-title">{{ labels.residualGroupTitle }}</td>
             <td class="empty-cell" colspan="6"></td>
             <td class="result-cell">{{ formatNumber(derivedMetric('lineResidual')) }}</td>
             <td class="empty-cell" colspan="2"></td>
@@ -466,7 +466,7 @@
 
           <tr>
             <th class="row-head">52</th>
-            <td class="group-title" rowspan="3">{{ serviceOperatingLabels.depreciationGroupTitle }}</td>
+            <td class="group-title" rowspan="3">{{ labels.depreciationGroupTitle }}</td>
             <td class="note-cell">折旧前待折资产总价值</td>
             <td class="empty-cell" colspan="5"></td>
             <td class="result-cell">{{ formatNumber(derivedMetric('depreciableAssetTotal')) }}</td>
@@ -481,7 +481,7 @@
           </tr>
           <tr>
             <th class="row-head">54</th>
-            <td class="note-cell">{{ serviceOperatingLabels.workInConstructionLabel }}</td>
+            <td class="note-cell">{{ labels.workInConstructionLabel }}</td>
             <td class="empty-cell" colspan="5"></td>
             <td :class="editableCellClass('YEAR_END')">
               <input
@@ -595,7 +595,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { serviceOperatingLabels } from '@/configs/sandbox-game-service-labels'
+import { serviceOperatingLabels, type SandboxGameOperatingLabels } from '@/configs/sandbox-game-service-labels'
 import { cloneOperatingPayload, type CellValue, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
 
 type MarketBidKey =
@@ -618,6 +618,7 @@ const props = defineProps<{
   derivedValues: Record<string, number>
   periodEndCash: number
   carryForward?: OperatingCarryForward | null
+  labels?: SandboxGameOperatingLabels
 }>()
 
 const emit = defineEmits<{
@@ -631,7 +632,9 @@ const marketRegions = [
   { key: 'global', label: '全球' },
 ] as const
 
-const marketProductFields = serviceOperatingLabels.marketProductFields as ReadonlyArray<{ key: MarketBidKey; label: string }>
+const labels = computed(() => props.labels ?? serviceOperatingLabels)
+
+const marketProductFields = computed(() => labels.value.marketProductFields as ReadonlyArray<{ key: MarketBidKey; label: string }>)
 
 const legacyMarketProductKeys = ['basicProductTotal', 'standardProductTotal', 'precisionProductTotal', 'intelligentProductTotal'] as const satisfies ReadonlyArray<MarketBidKey>
 
@@ -648,7 +651,7 @@ const shortTermLoanFields = [
   { key: 'newLoan', label: '新增贷款' },
 ] as const
 
-const materialFields = serviceOperatingLabels.materialFields
+const materialFields = computed(() => labels.value.materialFields)
 
 interface ProductionLineRow {
   key: string
@@ -659,16 +662,16 @@ interface ProductionLineRow {
   useExistingGroupCell?: boolean
 }
 
-const productionLineRows: ReadonlyArray<ProductionLineRow> = serviceOperatingLabels.productionLineRows
+const productionLineRows = computed<ReadonlyArray<ProductionLineRow>>(() => labels.value.productionLineRows)
 
-const researchFields = serviceOperatingLabels.researchFields
+const researchFields = computed(() => labels.value.researchFields)
 
 const extraFields = [
   { key: 'discountExpense', label: '折现费用' },
   { key: 'extraExpensePenalty', label: '额外支出 / 罚款' },
   { key: 'extraIncomeReward', label: '额外收入 / 奖励' },
 ] as const
-const materialFieldKeys = materialFields.map((item) => item.key)
+const materialFieldKeys = computed(() => materialFields.value.map((item) => item.key))
 
 const marketBidRows = computed(() => buildFixedMarketBidRows(props.modelValue.beginning.marketBid))
 const marketOrderTotal = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.orderTotal, props.derivedValues.orderTotal, marketBidRows.value.reduce((total, _row, index) => total + getMarketRowTotal(index), 0)))
@@ -899,7 +902,7 @@ function getMarketRowTotal(index: number) {
   if (explicit !== null && isOrderLinkedMarketBid()) {
     return explicit
   }
-  const currentTotal = marketProductFields.reduce((total, field) => total + toNumber(row[field.key]), 0)
+  const currentTotal = marketProductFields.value.reduce((total, field) => total + toNumber(row[field.key]), 0)
   if (currentTotal !== 0) {
     return currentTotal
   }
@@ -912,7 +915,7 @@ function syncMarketBidDerived(next: OperatingPayload) {
   let orderTotal = 0
   next.beginning.marketBid.forEach((row) => {
     const typedRow = row as Record<string, CellValue>
-    const rowTotal = marketProductFields.reduce((total, field) => total + toNumber(typedRow[field.key]), 0)
+    const rowTotal = marketProductFields.value.reduce((total, field) => total + toNumber(typedRow[field.key]), 0)
     typedRow.orderAmount = rowTotal
     orderTotal += rowTotal
   })

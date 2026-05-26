@@ -9,12 +9,17 @@ import (
 const (
 	GameEditionVIPServiceV1              = "VIP_SERVICE_V1"
 	GameEditionVIPServiceV1Name          = "贵宾服务版 V1"
+	GameEditionProductionV1              = "PRODUCTION_V1"
+	GameEditionProductionV1Name          = "生产制造版 V1"
 	FormulaVersionCommonV1               = "COMMON_FORMULA_V1"
 	ProcessRuleVersionCommonV1           = "COMMON_PROCESS_V1"
 	TemplateVersionVIPServiceV1          = "VIP_SERVICE_V1"
 	OperatingTemplateVersionVIPServiceV1 = "VIP_OPERATING_TEMPLATE_V1"
 	ReportTemplateVersionVIPServiceV1    = "VIP_REPORT_TEMPLATE_V1"
 	OrderTemplateVersionVIPServiceV1     = "VIP_ORDER_TEMPLATE_V1"
+	TemplateVersionProductionV1          = "PRODUCTION_V1"
+	OperatingTemplateVersionProductionV1 = "PRODUCTION_OPERATING_TEMPLATE_V1"
+	ReportTemplateVersionProductionV1    = "PRODUCTION_REPORT_TEMPLATE_V1"
 )
 
 type GameEdition struct {
@@ -42,6 +47,19 @@ var builtInGameEditions = []GameEdition{
 		TemplateVersion:          TemplateVersionVIPServiceV1,
 		OperatingTemplateVersion: OperatingTemplateVersionVIPServiceV1,
 		ReportTemplateVersion:    ReportTemplateVersionVIPServiceV1,
+		OrderTemplateVersion:     OrderTemplateVersionVIPServiceV1,
+		ProcessRuleVersion:       ProcessRuleVersionCommonV1,
+	},
+	{
+		EditionCode:              GameEditionProductionV1,
+		EditionName:              GameEditionProductionV1Name,
+		Description:              "生产制造版经营页和财报页字段模板，订单字段首轮暂沿用贵宾订单模板。",
+		DefaultEdition:           false,
+		RuleVersion:              FormulaVersionCommonV1,
+		FormulaVersion:           FormulaVersionCommonV1,
+		TemplateVersion:          TemplateVersionProductionV1,
+		OperatingTemplateVersion: OperatingTemplateVersionProductionV1,
+		ReportTemplateVersion:    ReportTemplateVersionProductionV1,
 		OrderTemplateVersion:     OrderTemplateVersionVIPServiceV1,
 		ProcessRuleVersion:       ProcessRuleVersionCommonV1,
 	},

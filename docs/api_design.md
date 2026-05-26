@@ -195,6 +195,14 @@
 - 首版不建议按“前端页面路径”来拆接口域。
 - 首版也不建议把所有接口塞进单一 `game` 域，避免后续维护混乱。
 
+### 4.1 沙盘版本包接口口径
+
+- 沙盘版本包为系统内置配置，不提供管理员在线新增、编辑或删除版本包的接口。
+- 管理员只能在比赛初始化前从服务端返回的版本包列表中选择本场比赛版本。
+- 初始化完成后，版本包锁定；`game-config`、玩家经营页、玩家财报页、年度订单页等接口应返回当前版本标识，供前端选择字段模板和展示文案。
+- 当前已内置 `VIP_SERVICE_V1`，绑定贵宾服务版字段模板与通用公式/流程规则。
+- 下一步新增 `PRODUCTION_V1`，绑定生产制造版经营页和财报页字段模板，公式规则和流程规则继续共用通用版本；订单字段模板暂时仍绑定 `VIP_ORDER_TEMPLATE_V1`，待生产版订单字段确认后再升级为生产版订单模板。
+
 ---
 
 ## 5. 核心状态与结构性字段
@@ -358,9 +366,41 @@
 |---|---|
 | `currentOpenYear` | 当前开放年份 |
 | `finalYear` | 最终年份配置 |
+| `editionCode` | 当前沙盘版本包编码，例如 `VIP_SERVICE_V1` |
+| `editionName` | 当前沙盘版本包显示名，例如 `贵宾服务版 V1` |
 | `ruleVersion` | 当前规则版本 |
 | `templateVersion` | 当前模板版本 |
+| `operatingTemplateVersion` | 当前经营页字段模板版本 |
+| `reportTemplateVersion` | 当前财报页字段模板版本 |
+| `orderTemplateVersion` | 当前订单字段模板版本 |
+| `processRuleVersion` | 当前流程规则版本 |
 | `demoYearEnabled` | 是否启用 `0年` 引导年，首版固定为 `true` |
+
+#### 6.1.1A 获取可选沙盘版本包
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/game-config/list-game-editions`
+- 权限：管理员已登录可访问
+
+返回字段建议：
+
+| 字段 | 说明 |
+|---|---|
+| `editionCode` | 版本包编码 |
+| `editionName` | 版本包显示名 |
+| `description` | 版本说明 |
+| `defaultEdition` | 是否默认版本 |
+| `operatingTemplateVersion` | 经营页字段模板版本 |
+| `reportTemplateVersion` | 财报页字段模板版本 |
+| `orderTemplateVersion` | 订单字段模板版本 |
+| `formulaVersion` | 公式规则版本 |
+| `processRuleVersion` | 流程规则版本 |
+
+规则：
+
+- 当前至少返回 `VIP_SERVICE_V1`；新增生产制造版后应同时返回 `PRODUCTION_V1`。
+- 本接口只返回系统内置版本包，不支持页面新增或修改版本包。
+- 比赛已初始化后仍可查询，但不能再用于切换当前比赛版本。
 
 #### 6.1.2 获取年份标签状态
 
@@ -1104,6 +1144,9 @@ Go DTO 建议：
 | `groupCount` | `int` | 当前已初始化的小组数量 |
 | `finalYear` | `int` | 当前最终年份配置 |
 | `currentOpenYear` | `int` | 当前开放年份 |
+| `editionCode` | `string` | 当前或默认沙盘版本包编码 |
+| `editionName` | `string` | 当前或默认沙盘版本包显示名 |
+| `availableEditions` | `array` | 可选沙盘版本包列表；当前包含 `VIP_SERVICE_V1`，新增生产制造版后包含 `PRODUCTION_V1` |
 | `initialBaselineSubmitted` | `bool` | 初始基线是否已提交 |
 | `defaultRoute` | `string` | 管理员当前默认跳转地址 |
 
@@ -1111,6 +1154,7 @@ Go DTO 建议：
 
 - 首版建议直接以 `sg_group` 实际记录数推断 `initialized` 与 `groupCount`。
 - 当 `initialized=false` 时，`defaultRoute` 应返回 `admin/setup`；当 `initialized=true` 时，应返回 `admin/summary`。
+- 当 `initialized=false` 时，前端允许管理员选择 `availableEditions` 中的版本包；当 `initialized=true` 时，该版本包只读展示。
 
 #### 6.5.2 初始化比赛
 
@@ -1127,7 +1171,17 @@ Go DTO 建议：
 
 ```json
 {
-  "groupCount": 6
+  "groupCount": 6,
+  "editionCode": "VIP_SERVICE_V1"
+}
+```
+
+生产制造版初始化示例：
+
+```json
+{
+  "groupCount": 6,
+  "editionCode": "PRODUCTION_V1"
 }
 ```
 
@@ -1136,6 +1190,7 @@ Go DTO 建议：
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `groupCount` | `int` | 是 | 本场比赛要初始化的小组数量，首版建议限制在 `1 ~ 10` |
+| `editionCode` | `string` | 是 | 沙盘版本包编码，当前支持 `VIP_SERVICE_V1`；新增生产制造版后支持 `PRODUCTION_V1` |
 
 响应字段建议：
 
@@ -1143,6 +1198,8 @@ Go DTO 建议：
 |---|---|---|
 | `initialized` | `bool` | 初始化后应返回 `true` |
 | `groupCount` | `int` | 实际初始化的小组数量 |
+| `editionCode` | `string` | 本场比赛锁定的沙盘版本包编码 |
+| `editionName` | `string` | 本场比赛锁定的沙盘版本包显示名 |
 | `createdGroupCount` | `int` | 本次创建的小组主数据数量 |
 | `createdAccountCount` | `int` | 本次创建的账号数量 |
 | `createdYearStateCount` | `int` | 本次创建的年份状态数量 |
@@ -1151,7 +1208,9 @@ Go DTO 建议：
 
 - 仅管理员可调用。
 - 仅允许在比赛未初始化时调用；若已初始化，应返回 `409`。
+- `editionCode` 必须属于系统内置版本包；非法版本返回 `422`。
 - 服务端应以单事务一次性创建 `sg_group`、`sg_account`、`sg_group_year_state`。
+- 初始化成功后，本场比赛沙盘版本包锁定，不提供运行中切换接口。
 - 初始化成功后，管理员账号保留 `admin`，玩家账号建议按 `group01 ~ groupNN` 自动生成。
 - 初始化成功后，系统应处于“`0年` 已开放、正式年份已预置但锁定”的初始状态。
 
@@ -1174,8 +1233,14 @@ Go DTO 建议：
 | `canOpenNextYear` | `bool` | 当前是否允许开放下一年 |
 | `nextOpenableYear` | `int` | 若允许开放，下一次将开放的年份 |
 | `openNextYearBlockedReason` | `string` | 不允许开放时的阻塞原因 |
+| `editionCode` | `string` | 当前沙盘版本包编码 |
+| `editionName` | `string` | 当前沙盘版本包显示名 |
 | `ruleVersion` | `string` | 当前规则版本 |
 | `templateVersion` | `string` | 当前模板版本 |
+| `operatingTemplateVersion` | `string` | 经营页字段模板版本 |
+| `reportTemplateVersion` | `string` | 财报页字段模板版本 |
+| `orderTemplateVersion` | `string` | 订单字段模板版本 |
+| `processRuleVersion` | `string` | 流程规则版本 |
 | `initialBaselineSubmitted` | `bool` | 初始基线是否已提交 |
 | `initialBaselineSubmittedAt` | `string \| null` | 初始基线提交时间，RFC3339 |
 | `initialBaselineSubmitterName` | `string \| null` | 初始基线提交人 |
@@ -1656,12 +1721,33 @@ type AdminControlConfigResp struct {
     CanOpenNextYear              bool                    `json:"canOpenNextYear"`
     NextOpenableYear             int                     `json:"nextOpenableYear"`
     OpenNextYearBlockedReason    string                  `json:"openNextYearBlockedReason"`
+    EditionCode                  string                  `json:"editionCode"`
+    EditionName                  string                  `json:"editionName"`
     RuleVersion                  string                  `json:"ruleVersion"`
     TemplateVersion              string                  `json:"templateVersion"`
+    OperatingTemplateVersion     string                  `json:"operatingTemplateVersion"`
+    ReportTemplateVersion        string                  `json:"reportTemplateVersion"`
+    OrderTemplateVersion         string                  `json:"orderTemplateVersion"`
+    ProcessRuleVersion           string                  `json:"processRuleVersion"`
     InitialBaselineSubmitted     bool                    `json:"initialBaselineSubmitted"`
     InitialBaselineSubmittedAt   *string                 `json:"initialBaselineSubmittedAt"`
     InitialBaselineSubmitterName *string                 `json:"initialBaselineSubmitterName"`
     LatestAdminAction            *AdminActionSummaryResp `json:"latestAdminAction"`
+}
+
+type InitializeGameReq struct {
+    GroupCount  int    `json:"groupCount" validate:"required,min=1,max=10"`
+    EditionCode string `json:"editionCode" validate:"required"`
+}
+
+type InitializeGameResp struct {
+    Initialized           bool   `json:"initialized"`
+    GroupCount            int    `json:"groupCount"`
+    EditionCode           string `json:"editionCode"`
+    EditionName           string `json:"editionName"`
+    CreatedGroupCount     int    `json:"createdGroupCount"`
+    CreatedAccountCount   int    `json:"createdAccountCount"`
+    CreatedYearStateCount int    `json:"createdYearStateCount"`
 }
 
 type UpdateFinalYearReq struct {
@@ -1749,6 +1835,9 @@ type AdminActionSummaryResp struct {
 | `ErrAdminControlConfigNotFound` | `404` | 配置表未初始化 | `游戏配置不存在` |
 | `ErrAdminControlAlreadyInitialized` | `409` | 比赛已初始化后重复初始化 | `比赛已初始化，不能重复执行初始化` |
 | `ErrAdminControlInitializeInvalid` | `422` | 初始化请求缺失或 `groupCount` 非法 | `初始化参数不合法` |
+| `ErrAdminControlEditionRequired` | `422` | 初始化比赛未选择沙盘版本包 | `请选择沙盘版本` |
+| `ErrAdminControlEditionInvalid` | `422` | 初始化比赛选择了不存在或未启用的版本包 | `沙盘版本不合法` |
+| `ErrAdminControlEditionLocked` | `409` | 比赛初始化后尝试切换版本包 | `比赛已初始化，不能切换沙盘版本` |
 | `ErrAdminControlFinalYearTooSmall` | `422` | `finalYear < currentOpenYear` | `最终年份不能小于当前开放年份` |
 | `ErrAdminControlTargetYearMismatch` | `409` | `targetYearNo != currentOpenYear + 1` | `开放年份与当前状态不一致` |
 | `ErrAdminControlFinalYearReached` | `409` | 已到最终年份仍尝试开放 | `已达到最终年份，无法继续开放` |

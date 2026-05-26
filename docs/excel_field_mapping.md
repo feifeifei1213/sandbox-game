@@ -48,6 +48,9 @@
 补充约束：
 
 - 当前中文显示名已按最新版 `1组 最终版.xlsx` 同步为 `材料`、`待折资产`、`生产线残值`、`厂房` 等口径。
+- 首版新增沙盘版本包口径：系统字段名和 payload 结构保持稳定，经营页、财报页、订单页的中文显示名由字段模板版本控制。
+- 当前已落地 `VIP_SERVICE_V1` 贵宾服务版字段模板，经营页和财报页字段从 `guibing` 分支已有服务/贵宾字段配置提取；下一步新增 `PRODUCTION_V1` 生产制造版字段模板，经营页和财报页字段从 `shengchan` 分支现有生产制造口径提取。
+- `PRODUCTION_V1` 的订单字段暂时继续使用 `VIP_ORDER_TEMPLATE_V1` 贵宾订单口径，等拿到生产版订单字段来源后再新增生产版订单字段模板。
 - 系统字段名与数据库字段名保持稳定，不因 Excel 中文标签微调直接改名。
 
 ### 2.3 字段分类
@@ -295,6 +298,61 @@
 | 玩家财报页 | `rawMaterials` | 材料 | 材料 | 绿色手工项 |
 | 玩家财报页 | `incomeTaxRate` | 所得税税率 | 所得税税率 | 下拉值 `0.25 / 0.15 / 0` |
 | 玩家经营页 | `quarterCashCheckLabel` | 核对季末现金 | 核对季末现金 | 只读展示标签 |
+
+### 4.7.2 `VIP_SERVICE_V1` 贵宾服务版关键显示名
+
+说明：
+
+- 本节记录贵宾服务版字段模板的关键显示名差异。
+- 系统字段名、接口 payload 和数据库字段语义不随显示名改变。
+- 公式继续使用当前通用公式版本，显示名仅影响页面、字段映射和用户理解。
+
+| 页面 / 区块 | 系统字段 / 区块 | 生产显示名基线 | 贵宾服务版显示名 |
+|---|---|---|---|
+| 管理端初始基线 / 财报资产侧 | `baselineWorkInConstruction` / `reportWorkInConstruction` | 在建生产线 | 在建贵宾厅 |
+| 管理端初始基线 / 财报资产侧 | `baselineFactoryAsset` / `reportFactoryAsset` | 厂房 | 贵宾区 |
+| 管理端初始基线 / 财报资产侧 | `baselineLineResidual` / `reportLineResidual` | 生产线残值 | 贵宾厅残值 |
+| 管理端初始基线 / 财报手工项 | `workInProgress` / `baselineWorkInProgress` | 在制品 | 在途服务 |
+| 管理端初始基线 / 财报手工项 | `finishedGoods` / `baselineFinishedGoods` | 成品 | 服务验收 |
+| 管理端初始基线 / 财报手工项 | `rawMaterials` / `baselineRawMaterials` | 材料 | 前期花费 |
+| 经营页年初市场竞标 | `beginning.marketBid` 四类产品 | 基础/标准/精密/智能产品 | 代办过检服务 / 两舱贵宾服务 / 商务贵宾服务 / 会员定制服务 |
+| 经营页季度区 | `quarter.materialPayment` | 支付材料费用 | 支付前期花费费用 |
+| 经营页季度区 | `quarter.productionLineAdjustment` | 生产线调整 | 贵宾厅调整 |
+| 经营页季度区 | `quarter.salaryAndProduction` | 工资与生产 | 贵宾厅空位开始服务，发放服务人员工资 |
+| 经营页季度区 | `quarter.researchAndManagement` | 研发投入 / 管理体系投入 | 新服务研创 / 管理体系投入 |
+| 经营页季度区 | `quarter.deliverySettlement.salesRevenue` | 交货销售额 | 服务订单销售额 |
+| 经营页季度区 | `quarter.deliverySettlement.directCost` | 交货成本 | 服务订单成本 |
+| 经营页年末区 | `yearEnd.assetAdjustment.lineMaintenance` | 生产线年度维护费 | 贵宾厅年度维护费 |
+| 经营页年末区 | `yearEnd.assetAdjustment.workInConstruction` | 未完工生产线价值 | 未完工贵宾厅价值 |
+| 财报得分项 | `productionHumanScore` | 最佳生产人力总监得分 | 最佳服务人力总监得分 |
+
+### 4.7.3 `PRODUCTION_V1` 生产制造版字段模板方案
+
+说明：
+
+- 本节记录待实现的生产制造版版本包方案，先作为文档确认口径，不代表当前代码已完成。
+- `PRODUCTION_V1` 的经营页和财报页显示名以 `shengchan` 分支现有生产制造字段为基线。
+- 公式规则、流程规则、系统字段名、接口 payload 和数据库字段语义不随版本包切换而改变。
+- 订单字段暂时沿用 `VIP_ORDER_TEMPLATE_V1`，即仍显示代办过检、两舱贵宾、商务贵宾、会员定制等贵宾订单字段；该口径只是为了先让生产版经营页/财报页可选可看，后续拿到生产版订单字段后再补 `PRODUCTION_ORDER_TEMPLATE_V1`。
+
+| 页面 / 区块 | 系统字段 / 区块 | 生产制造版显示名 | 当前来源 |
+|---|---|---|---|
+| 管理端初始基线 / 财报资产侧 | `baselineWorkInConstruction` / `reportWorkInConstruction` | 在建生产线 | `shengchan` 分支 |
+| 管理端初始基线 / 财报资产侧 | `baselineFactoryAsset` / `reportFactoryAsset` | 厂房 | `shengchan` 分支 |
+| 管理端初始基线 / 财报资产侧 | `baselineLineResidual` / `reportLineResidual` | 生产线残值 | `shengchan` 分支 |
+| 管理端初始基线 / 财报手工项 | `workInProgress` / `baselineWorkInProgress` | 在制品 | `shengchan` 分支 |
+| 管理端初始基线 / 财报手工项 | `finishedGoods` / `baselineFinishedGoods` | 成品 | `shengchan` 分支 |
+| 管理端初始基线 / 财报手工项 | `rawMaterials` / `baselineRawMaterials` | 材料 | `shengchan` 分支 |
+| 经营页年初市场竞标 | `beginning.marketBid` 四类产品 | 订单页暂用贵宾订单字段；经营页历史生产字段保留兼容 | 待生产版订单字段确认 |
+| 经营页季度区 | `quarter.materialPayment` | 支付材料费用 | `shengchan` 分支 |
+| 经营页季度区 | `quarter.productionLineAdjustment` | 生产线调整 | `shengchan` 分支 |
+| 经营页季度区 | `quarter.salaryAndProduction` | 工资与生产 | `shengchan` 分支 |
+| 经营页季度区 | `quarter.researchAndManagement` | 研发与管理 | `shengchan` 分支 |
+| 经营页季度区 | `quarter.deliverySettlement.salesRevenue` | 销售收入 | `shengchan` 分支 |
+| 经营页季度区 | `quarter.deliverySettlement.directCost` | 直接成本 | `shengchan` 分支 |
+| 经营页年末区 | `yearEnd.assetAdjustment.lineMaintenance` | 生产线年度维护费 | `shengchan` 分支 |
+| 经营页年末区 | `yearEnd.assetAdjustment.workInConstruction` | 未完工生产线价值 | `shengchan` 分支 |
+| 财报得分项 | `productionHumanScore` | 最佳生产人力总监得分 | `shengchan` 分支 |
 ### 4.8 与接口/数据库的直接落点
 
 | 文档对象 | 对应映射章节 | 说明 |
@@ -329,6 +387,8 @@
 
 - 经营页全部中文标签清单
 - 经营页逐格显示名称
+- 生产版订单字段模板
+- `PRODUCTION_V1` 首轮只完成经营页和财报页字段模板；订单字段暂用贵宾版，待最终生产订单字段后补齐
 - 少量仍可能调整的表头名称
 - 帮助文案和提示语中的 Excel 原词
 

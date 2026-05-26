@@ -61,6 +61,7 @@
             :derived-values="activeDerivedValues"
             :period-end-cash="activePeriodEndCash"
             :carry-forward="activeView.carryForward"
+            :labels="activeOperatingLabels"
             @update:model-value="updatePayload"
           />
 
@@ -91,6 +92,7 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import OperatingSheet from '@/components/sandbox-game/player/OperatingSheet.vue'
 import OperatingSidebar from '@/components/sandbox-game/player/OperatingSidebar.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
+import { resolveOperatingLabels } from '@/configs/sandbox-game-service-labels'
 import { useAuthStore } from '@/stores/auth'
 import { formatReportStatus, formatStageCode, formatYearStatus } from '@/utils/sandbox-game-display'
 import { buildOperatingPreviewCalculation } from '@/utils/sandbox-game-operating-preview'
@@ -199,6 +201,7 @@ const activeDirty = computed(() => (previewMode.value ? previewDirty.value : dir
 const activeSaving = computed(() => (previewMode.value ? previewSaving.value : saving.value))
 const activeSubmitting = computed(() => (previewMode.value ? previewSubmitting.value : submitting.value))
 const activeReportEnabled = computed(() => (previewMode.value ? true : reportEnabled.value))
+const activeOperatingLabels = computed(() => resolveOperatingLabels(activeConfig.value?.editionCode))
 
 onMounted(async () => {
   if (previewMode.value) {

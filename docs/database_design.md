@@ -164,14 +164,25 @@
 | `id` | BIGINT | 主键 |
 | `final_year` | INT | 最终年份 |
 | `current_open_year` | INT | 当前开放年份 |
+| `edition_code` | VARCHAR(64) | 沙盘版本包编码，例如 `VIP_SERVICE_V1`、`PRODUCTION_V1` |
+| `edition_name` | VARCHAR(64) | 沙盘版本包显示名，例如 `贵宾服务版 V1`、`生产制造版 V1` |
 | `rule_version` | VARCHAR(32) | 规则版本 |
 | `template_version` | VARCHAR(32) | 模板版本 |
+| `operating_template_version` | VARCHAR(64) | 经营页字段模板版本 |
+| `report_template_version` | VARCHAR(64) | 财报页字段模板版本 |
+| `order_template_version` | VARCHAR(64) | 订单字段模板版本 |
+| `process_rule_version` | VARCHAR(64) | 流程规则版本 |
 | `initial_baseline_submitted` | TINYINT(1) | 初始基线是否已提交 |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
 
 说明：
 
-- `rule_version` 和 `template_version` 用于追踪 Excel 规则基线与页面模板版本。`final_year` 不能小于 `current_open_year`。
+- `edition_code` 用于锁定本场比赛采用的内置版本包，当前已支持 `VIP_SERVICE_V1`，下一步新增 `PRODUCTION_V1`。
+- `rule_version` 和 `template_version` 用于追踪 Excel 规则基线与页面模板版本。`operating_template_version / report_template_version / order_template_version` 用于区分经营页、财报页和订单页字段模板。
+- 当前生产版和贵宾版公式、流程一致，可共用 `COMMON_FORMULA_V1` 与 `COMMON_PROCESS_V1`。
+- `PRODUCTION_V1` 首轮应写入 `PRODUCTION_OPERATING_TEMPLATE_V1`、`PRODUCTION_REPORT_TEMPLATE_V1`，订单模板暂写入 `VIP_ORDER_TEMPLATE_V1`；待生产版订单字段确认后再补充新的订单模板版本。
+- 比赛初始化后版本包不允许切换；如需切换，应重新初始化新的比赛环境或比赛库。
+- `final_year` 不能小于 `current_open_year`。
 
 ---
 
@@ -814,7 +825,7 @@
 - `sg_group` 1:N `sg_group_order_selection`
 - `sg_group` 1:N `sg_admin_unlock_log`
 - `sg_account` N:1 `sg_group`（玩家账号场景）
-- `sg_game_config` 为单实例全局配置表
+- `sg_game_config` 为单实例全局配置表，并锁定本场比赛沙盘版本包与字段/公式/流程版本
 - `sg_order_generation_batch` 1:N `sg_order_generation_config`
 - `sg_order_generation_batch` 1:N `sg_order_market_config`（通过锁定批次追溯）
 - `sg_order_generation_batch` 1:N `sg_order_pool`
@@ -895,6 +906,7 @@
 
 - `operating_payload_json` 内部键名与 Excel 映射清单
 - `report_manual_payload_json` 的字段级映射说明
+- 沙盘版本包若后续从纯内置常量升级为数据库可查询配置，可补充 `sg_game_edition` / `sg_game_template_field` 等配置表；首版不要求落独立配置表
 - 最终 SQL DDL 文件
 - 数据初始化脚本（10 个组 + 1 个管理员）
 - 订单模块最终 SQL DDL 与迁移脚本

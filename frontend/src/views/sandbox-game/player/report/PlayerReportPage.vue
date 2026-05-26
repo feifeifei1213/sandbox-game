@@ -62,6 +62,7 @@
             :can-edit="activeView.canEdit"
             :has-invalid-draft="activeView.hasInvalidDraft"
             :tax-rate-options="activeView.manualFieldOptions.incomeTaxRateOptions"
+            :labels="activeReportLabels"
             @update:model-value="updatePayload"
           />
 
@@ -81,6 +82,7 @@
           :saving="activeSaving"
           :submitting="activeSubmitting"
           :submit-ready="activeSubmitReady"
+          :labels="activeReportLabels"
           @save="handleSave"
           @submit="handleSubmit"
         />
@@ -98,7 +100,7 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import ReportSheet from '@/components/sandbox-game/player/ReportSheet.vue'
 import ReportSidebar from '@/components/sandbox-game/player/ReportSidebar.vue'
-import { serviceReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
+import { resolveReportLabels, resolveReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
 import { useAuthStore } from '@/stores/auth'
 import { formatBusinessStatus, formatReportStatus, formatYearStatus } from '@/utils/sandbox-game-display'
 import { usePlayerReportStore } from '@/stores/player-report'
@@ -244,28 +246,29 @@ const previewBalanceGap = computed(
   () => previewComputedPayloadLocal.value.reportTotalAssets - previewComputedPayloadLocal.value.reportTotalLiabilityEquity,
 )
 const previewBalancePassed = computed(() => Math.abs(previewBalanceGap.value) <= balanceTolerance)
+const previewRequiredFieldLabels = computed(() => resolveReportRequiredFieldLabels(previewConfig.value.editionCode))
 const previewMissingFields = computed(() => {
   const missing: string[] = []
   if (previewDraftManualPayload.value.workInProgress === null) {
-    missing.push(serviceReportRequiredFieldLabels.workInProgress)
+    missing.push(previewRequiredFieldLabels.value.workInProgress)
   }
   if (previewDraftManualPayload.value.finishedGoods === null) {
-    missing.push(serviceReportRequiredFieldLabels.finishedGoods)
+    missing.push(previewRequiredFieldLabels.value.finishedGoods)
   }
   if (previewDraftManualPayload.value.rawMaterials === null) {
-    missing.push(serviceReportRequiredFieldLabels.rawMaterials)
+    missing.push(previewRequiredFieldLabels.value.rawMaterials)
   }
   if (previewDraftManualPayload.value.incomeTaxRate === null) {
-    missing.push(serviceReportRequiredFieldLabels.incomeTaxRate)
+    missing.push(previewRequiredFieldLabels.value.incomeTaxRate)
   }
   if (previewDraftManualPayload.value.enterpriseCertificationScore === null) {
-    missing.push(serviceReportRequiredFieldLabels.enterpriseCertificationScore)
+    missing.push(previewRequiredFieldLabels.value.enterpriseCertificationScore)
   }
   if (previewDraftManualPayload.value.productionHumanScore === null) {
-    missing.push(serviceReportRequiredFieldLabels.productionHumanScore)
+    missing.push(previewRequiredFieldLabels.value.productionHumanScore)
   }
   if (previewDraftManualPayload.value.closingSpeedScore === null) {
-    missing.push(serviceReportRequiredFieldLabels.closingSpeedScore)
+    missing.push(previewRequiredFieldLabels.value.closingSpeedScore)
   }
   return missing
 })
@@ -303,6 +306,7 @@ const activePageMessage = computed(() => (previewMode.value ? previewPageMessage
 const activeDirty = computed(() => (previewMode.value ? previewDirty.value : dirty.value))
 const activeSaving = computed(() => (previewMode.value ? previewSaving.value : saving.value))
 const activeSubmitting = computed(() => (previewMode.value ? previewSubmitting.value : submitting.value))
+const activeReportLabels = computed(() => resolveReportLabels(activeConfig.value?.editionCode))
 
 onMounted(async () => {
   if (previewMode.value) {

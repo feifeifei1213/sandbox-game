@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
 import { getPlayerReportView, savePlayerReportDraft, submitPlayerReport } from '@/api/sandbox-game/player-report'
-import { serviceReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
+import { resolveReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
 import {
   buildReportComputedPreview,
   cloneReportManualPayload,
@@ -46,26 +46,27 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
   const balancePassed = computed(() => Math.abs(balanceGap.value) <= balanceTolerance)
   const missingFields = computed(() => {
     const missing: string[] = []
+    const requiredFieldLabels = resolveReportRequiredFieldLabels(currentConfig.value?.editionCode)
     if (draftManualPayload.value.workInProgress === null) {
-      missing.push(serviceReportRequiredFieldLabels.workInProgress)
+      missing.push(requiredFieldLabels.workInProgress)
     }
     if (draftManualPayload.value.finishedGoods === null) {
-      missing.push(serviceReportRequiredFieldLabels.finishedGoods)
+      missing.push(requiredFieldLabels.finishedGoods)
     }
     if (draftManualPayload.value.rawMaterials === null) {
-      missing.push(serviceReportRequiredFieldLabels.rawMaterials)
+      missing.push(requiredFieldLabels.rawMaterials)
     }
     if (draftManualPayload.value.incomeTaxRate === null) {
-      missing.push(serviceReportRequiredFieldLabels.incomeTaxRate)
+      missing.push(requiredFieldLabels.incomeTaxRate)
     }
     if (draftManualPayload.value.enterpriseCertificationScore === null) {
-      missing.push(serviceReportRequiredFieldLabels.enterpriseCertificationScore)
+      missing.push(requiredFieldLabels.enterpriseCertificationScore)
     }
     if (draftManualPayload.value.productionHumanScore === null) {
-      missing.push(serviceReportRequiredFieldLabels.productionHumanScore)
+      missing.push(requiredFieldLabels.productionHumanScore)
     }
     if (draftManualPayload.value.closingSpeedScore === null) {
-      missing.push(serviceReportRequiredFieldLabels.closingSpeedScore)
+      missing.push(requiredFieldLabels.closingSpeedScore)
     }
     return missing
   })

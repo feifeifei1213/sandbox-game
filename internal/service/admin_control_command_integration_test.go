@@ -344,6 +344,51 @@ func TestInitializeGameCreatesGroupsAccountsAndYearStates(t *testing.T) {
 	}
 }
 
+func TestInitializeGameLocksProductionEdition(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureIntegrationGameConfig(t, ctx, tx, 3, 2, true)
+	clearInitializationFixtures(t, ctx, tx)
+
+	service := NewAdminControlCommandService(tx)
+	result, err := service.InitializeGame(ctx, InitializeGameCommand{
+		GroupCount:   2,
+		EditionCode:  GameEditionProductionV1,
+		OperatorID:   90014,
+		OperatorName: "integration-admin",
+	})
+	if err != nil {
+		t.Fatalf("initialize production game: %v", err)
+	}
+
+	if result.EditionCode != GameEditionProductionV1 ||
+		result.TemplateVersion != TemplateVersionProductionV1 ||
+		result.RuleVersion != FormulaVersionCommonV1 {
+		t.Fatalf("unexpected production initialize result: %#v", result)
+	}
+
+	gameConfig, err := repository.NewGameConfigRepository(tx).GetCurrent(ctx)
+	if err != nil {
+		t.Fatalf("reload game config after production initialization: %v", err)
+	}
+	if gameConfig.EditionCode != GameEditionProductionV1 ||
+		gameConfig.EditionName != GameEditionProductionV1Name ||
+		gameConfig.OperatingTemplateVersion != OperatingTemplateVersionProductionV1 ||
+		gameConfig.ReportTemplateVersion != ReportTemplateVersionProductionV1 ||
+		gameConfig.OrderTemplateVersion != OrderTemplateVersionVIPServiceV1 {
+		t.Fatalf("expected game config edition fields to be locked to production, got %#v", gameConfig)
+	}
+}
+
 func markAllExistingGroupsBankrupt(t *testing.T, ctx context.Context, tx *gorm.DB, yearNo int) {
 	t.Helper()
 

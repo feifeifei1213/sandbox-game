@@ -103,20 +103,25 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 
-import { serviceBaselineLabels } from '@/configs/sandbox-game-service-labels'
+import { resolveBaselineLabels } from '@/configs/sandbox-game-service-labels'
 import { useAdminBaselineStore } from '@/stores/admin-baseline'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import type { BaselinePayload } from '@/types/sandbox-game-admin'
 
-const fieldDefs: Array<{
+const shellStore = useAdminShellStore()
+const baselineStore = useAdminBaselineStore()
+const { view, draftPayload, loading, submitting, pageMessage } = storeToRefs(baselineStore)
+
+const baselineLabels = computed(() => resolveBaselineLabels(shellStore.config?.editionCode ?? shellStore.setupStatus?.editionCode))
+const fieldDefs = computed<Array<{
   key: keyof BaselinePayload
   section: string
   label: string
   note: string
-}> = [
+}>>(() => [
   { key: 'baselineSalesRevenue', section: '损益', label: '销售收入', note: '共享模板基线输入项' },
   { key: 'baselineDirectCost', section: '损益', label: '直接成本', note: '共享模板基线输入项' },
   { key: 'baselineComprehensiveCost', section: '损益', label: '综合费用', note: '共享模板基线输入项' },
@@ -124,24 +129,20 @@ const fieldDefs: Array<{
   { key: 'baselineFinanceIncomeExpense', section: '损益', label: '财务收入/支出', note: '共享模板基线输入项' },
   { key: 'baselineExtraIncomeExpense', section: '损益', label: '额外收入/支出', note: '共享模板基线输入项' },
   { key: 'baselineIncomeTax', section: '损益', label: '所得税', note: '共享模板基线输入项' },
-  { key: 'baselineWorkInConstruction', section: '资产', label: serviceBaselineLabels.workInConstruction, note: '共享模板基线输入项' },
-  { key: 'baselineFactoryAsset', section: '资产', label: serviceBaselineLabels.factoryAsset, note: '共享模板基线输入项' },
-  { key: 'baselineLineResidual', section: '资产', label: serviceBaselineLabels.lineResidual, note: '共享模板基线输入项' },
+  { key: 'baselineWorkInConstruction', section: '资产', label: baselineLabels.value.workInConstruction, note: '共享模板基线输入项' },
+  { key: 'baselineFactoryAsset', section: '资产', label: baselineLabels.value.factoryAsset, note: '共享模板基线输入项' },
+  { key: 'baselineLineResidual', section: '资产', label: baselineLabels.value.lineResidual, note: '共享模板基线输入项' },
   { key: 'baselineDepreciableAsset', section: '资产', label: '待折资产', note: '共享模板基线输入项' },
   { key: 'baselineCash', section: '资产', label: '现金', note: '共享模板基线输入项' },
   { key: 'baselineReceivable', section: '资产', label: '应收款', note: '共享模板基线输入项' },
-  { key: 'baselineWorkInProgress', section: '存货', label: serviceBaselineLabels.workInProgress, note: '共享模板基线输入项' },
-  { key: 'baselineFinishedGoods', section: '存货', label: serviceBaselineLabels.finishedGoods, note: '共享模板基线输入项' },
-  { key: 'baselineRawMaterials', section: '存货', label: serviceBaselineLabels.rawMaterials, note: '共享模板基线输入项' },
+  { key: 'baselineWorkInProgress', section: '存货', label: baselineLabels.value.workInProgress, note: '共享模板基线输入项' },
+  { key: 'baselineFinishedGoods', section: '存货', label: baselineLabels.value.finishedGoods, note: '共享模板基线输入项' },
+  { key: 'baselineRawMaterials', section: '存货', label: baselineLabels.value.rawMaterials, note: '共享模板基线输入项' },
   { key: 'baselineShortTermLoan', section: '负债', label: '短期负债', note: '共享模板基线输入项' },
   { key: 'baselineLongTermLoan', section: '负债', label: '长期负债', note: '共享模板基线输入项' },
   { key: 'baselineShareCapital', section: '权益', label: '股东资本', note: '共享模板基线输入项' },
   { key: 'baselineRetainedEarnings', section: '权益', label: '利润留存', note: '共享模板基线输入项' },
-]
-
-const shellStore = useAdminShellStore()
-const baselineStore = useAdminBaselineStore()
-const { view, draftPayload, loading, submitting, pageMessage } = storeToRefs(baselineStore)
+])
 
 onMounted(async () => {
   try {

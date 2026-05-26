@@ -148,7 +148,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { serviceReportLabels } from '@/configs/sandbox-game-service-labels'
+import { serviceReportLabels, type SandboxGameReportLabels } from '@/configs/sandbox-game-service-labels'
 import type { ReportComputedPayload, ReportManualPayload } from '@/types/sandbox-game'
 import { cloneReportManualPayload } from '@/types/sandbox-game'
 
@@ -177,6 +177,7 @@ const props = defineProps<{
   canEdit: boolean
   hasInvalidDraft: boolean
   taxRateOptions: number[]
+  labels?: SandboxGameReportLabels
 }>()
 
 const emit = defineEmits<{
@@ -184,12 +185,13 @@ const emit = defineEmits<{
 }>()
 
 const blankCell: SheetCell = { kind: 'blank' }
+const labels = computed(() => props.labels ?? serviceReportLabels)
 
-const sheetRows: SheetRow[] = [
+const sheetRows = computed<SheetRow[]>(() => [
   { rowNo: 4, profit: { label: '销售收入', kind: 'computed', computedKey: 'reportSalesRevenue' }, asset: { label: '非流动资产', kind: 'blank' }, liability: { label: '负债', kind: 'blank' } },
-  { rowNo: 5, profit: { label: '直接成本', kind: 'computed', computedKey: 'reportDirectCost' }, asset: { label: serviceReportLabels.workInConstruction, kind: 'computed', computedKey: 'reportWorkInConstruction' }, liability: blankCell },
-  { rowNo: 6, profit: blankCell, asset: { label: serviceReportLabels.factoryAsset, kind: 'computed', computedKey: 'reportFactoryAsset' }, liability: blankCell },
-  { rowNo: 7, profit: { label: '毛利', kind: 'computed', computedKey: 'reportGrossProfit' }, asset: { label: serviceReportLabels.lineResidual, kind: 'computed', computedKey: 'reportLineResidual' }, liability: { label: '短期负债', kind: 'computed', computedKey: 'reportShortTermLiability' } },
+  { rowNo: 5, profit: { label: '直接成本', kind: 'computed', computedKey: 'reportDirectCost' }, asset: { label: labels.value.workInConstruction, kind: 'computed', computedKey: 'reportWorkInConstruction' }, liability: blankCell },
+  { rowNo: 6, profit: blankCell, asset: { label: labels.value.factoryAsset, kind: 'computed', computedKey: 'reportFactoryAsset' }, liability: blankCell },
+  { rowNo: 7, profit: { label: '毛利', kind: 'computed', computedKey: 'reportGrossProfit' }, asset: { label: labels.value.lineResidual, kind: 'computed', computedKey: 'reportLineResidual' }, liability: { label: '短期负债', kind: 'computed', computedKey: 'reportShortTermLiability' } },
   { rowNo: 8, profit: blankCell, asset: { label: '待折资产', kind: 'computed', computedKey: 'reportDepreciableAsset' }, liability: { label: '长期负债', kind: 'computed', computedKey: 'reportLongTermLiability' } },
   { rowNo: 9, profit: blankCell, asset: { label: '总非流动资产', kind: 'computed', computedKey: 'reportTotalNonCurrentAssets' }, liability: blankCell },
   { rowNo: 10, profit: { label: '综合费用', kind: 'computed', computedKey: 'reportComprehensiveCost' }, asset: blankCell, liability: { label: '总负债', kind: 'computed', computedKey: 'reportTotalLiability' } },
@@ -197,22 +199,22 @@ const sheetRows: SheetRow[] = [
   { rowNo: 12, profit: blankCell, asset: blankCell, liability: blankCell },
   { rowNo: 13, profit: { label: '营业利润', kind: 'computed', computedKey: 'reportOperatingProfit' }, asset: { label: '现金', kind: 'computed', computedKey: 'reportCash' }, liability: { label: '总权益', kind: 'blank' } },
   { rowNo: 14, profit: blankCell, asset: { label: '应收款', kind: 'computed', computedKey: 'reportReceivable' }, liability: blankCell },
-  { rowNo: 15, profit: blankCell, asset: { label: serviceReportLabels.workInProgress, kind: 'manual-number', manualKey: 'workInProgress' }, liability: { label: '股东资本', kind: 'computed', computedKey: 'reportShareCapital' } },
-  { rowNo: 16, profit: { label: '财务收入/支出', kind: 'computed', computedKey: 'reportFinanceIncomeExpense' }, asset: { label: serviceReportLabels.finishedGoods, kind: 'manual-number', manualKey: 'finishedGoods' }, liability: { label: '利润留存', kind: 'computed', computedKey: 'reportRetainedEarnings' } },
-  { rowNo: 17, profit: { label: '额外收入/支出', kind: 'computed', computedKey: 'reportExtraIncomeExpense' }, asset: { label: serviceReportLabels.rawMaterials, kind: 'manual-number', manualKey: 'rawMaterials' }, liability: { label: '年度净利润', kind: 'computed', computedKey: 'reportNetProfit' } },
+  { rowNo: 15, profit: blankCell, asset: { label: labels.value.workInProgress, kind: 'manual-number', manualKey: 'workInProgress' }, liability: { label: '股东资本', kind: 'computed', computedKey: 'reportShareCapital' } },
+  { rowNo: 16, profit: { label: '财务收入/支出', kind: 'computed', computedKey: 'reportFinanceIncomeExpense' }, asset: { label: labels.value.finishedGoods, kind: 'manual-number', manualKey: 'finishedGoods' }, liability: { label: '利润留存', kind: 'computed', computedKey: 'reportRetainedEarnings' } },
+  { rowNo: 17, profit: { label: '额外收入/支出', kind: 'computed', computedKey: 'reportExtraIncomeExpense' }, asset: { label: labels.value.rawMaterials, kind: 'manual-number', manualKey: 'rawMaterials' }, liability: { label: '年度净利润', kind: 'computed', computedKey: 'reportNetProfit' } },
   { rowNo: 18, profit: blankCell, asset: { label: '所得税后现金', kind: 'computed', computedKey: 'reportPostTaxCash' }, liability: blankCell },
-  { rowNo: 19, profit: { label: serviceReportLabels.row19Label, kind: 'computed', computedKey: 'reportPreTaxProfit' }, asset: { label: '总流动资产', kind: 'computed', computedKey: 'reportTotalCurrentAssets' }, liability: { label: '总股东权益', kind: 'computed', computedKey: 'reportTotalEquity' } },
+  { rowNo: 19, profit: { label: labels.value.row19Label, kind: 'computed', computedKey: 'reportPreTaxProfit' }, asset: { label: '总流动资产', kind: 'computed', computedKey: 'reportTotalCurrentAssets' }, liability: { label: '总股东权益', kind: 'computed', computedKey: 'reportTotalEquity' } },
   { rowNo: 20, profit: blankCell, asset: blankCell, liability: blankCell },
   { rowNo: 21, profit: { label: '所得税', kind: 'computed', computedKey: 'reportIncomeTax' }, asset: blankCell, liability: blankCell },
-  { rowNo: 22, profit: { label: '年度净利润', kind: 'computed', computedKey: 'reportNetProfit' }, asset: { label: '总资产', kind: 'computed', computedKey: 'reportTotalAssets' }, liability: { label: serviceReportLabels.totalLiabilityEquity, kind: 'computed', computedKey: 'reportTotalLiabilityEquity' } },
+  { rowNo: 22, profit: { label: '年度净利润', kind: 'computed', computedKey: 'reportNetProfit' }, asset: { label: '总资产', kind: 'computed', computedKey: 'reportTotalAssets' }, liability: { label: labels.value.totalLiabilityEquity, kind: 'computed', computedKey: 'reportTotalLiabilityEquity' } },
   { rowNo: 23, profit: blankCell, asset: blankCell, liability: blankCell },
   { rowNo: 24, profit: { label: '所得税税率', kind: 'manual-select', manualKey: 'incomeTaxRate' }, asset: { label: '最佳市场经营总监得分', kind: 'computed', computedKey: 'reportBestMarketDirectorBaseScore', suffix: '+' }, liability: { label: '企业认证得分', kind: 'manual-number', manualKey: 'enterpriseCertificationScore' } },
   { rowNo: 25, profit: blankCell, asset: { label: '最佳科技创新总监得分', kind: 'computed', computedKey: 'reportBestTechnologyDirectorScore' }, liability: blankCell },
-  { rowNo: 26, profit: blankCell, asset: { label: serviceReportLabels.bestProductionHumanDirector, kind: 'manual-number', manualKey: 'productionHumanScore' }, liability: blankCell },
+  { rowNo: 26, profit: blankCell, asset: { label: labels.value.bestProductionHumanDirector, kind: 'manual-number', manualKey: 'productionHumanScore' }, liability: blankCell },
   { rowNo: 27, profit: blankCell, asset: { label: '最佳销售总监得分', kind: 'computed', computedKey: 'reportBestSalesDirectorScore' }, liability: blankCell },
   { rowNo: 28, profit: blankCell, asset: { label: '最佳 CFO（财务总监）得分', kind: 'computed', computedKey: 'reportBestCfoBaseScore', suffix: '+' }, liability: { label: '关账速度得分', kind: 'manual-number', manualKey: 'closingSpeedScore' } },
   { rowNo: 29, profit: blankCell, asset: { label: '最佳 CEO（总经理）得分', kind: 'computed', computedKey: 'reportBestCeoScore' }, liability: blankCell },
-]
+])
 
 const balanceGap = computed(() => {
   const assets = props.computedPayload.reportTotalAssets ?? 0
