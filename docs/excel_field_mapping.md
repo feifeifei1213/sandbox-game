@@ -198,7 +198,7 @@
 - 订单推算来源为 `道具-订单推算（服务企业）.xlsx`。
 - 系统按该 Excel 的公式链实现订单生成器，Excel 作为规则依据，不作为运行时订单池上传结果。
 - 多年订单数量控制台固定覆盖 `1年~8年 × 四个市场 × 四类产品`，是市场预测和年度订单池的共同订单数量来源。
-- 市场预测固定按 `1~3年 / 4~5年 / 6~8年` 三段展示，不受管理员配置的最终年份裁剪。
+- 市场预测固定按 `1~3年 / 4~5年 / 6~8年` 三段展示，不受管理员配置的最终年份裁剪；玩家端图表采用 Excel 竖状柱状图口径，每个阶段下按市场分图，年份为横轴，四类订单为柱状系列。
 - 首版管理员先维护多年订单数量控制台；每年开始前再配置当年市场开启状态，系统读取该年已开启市场的控制台数量生成预览订单池，确认后保存为固定业务数据。
 - 本地市场默认开启，区域/全国/全球默认关闭；未开启市场不生成订单、不进入抢单，但玩家仍需在投入表中手动填写 `0`。
 - 生成批次需保存随机种子、公式版本、控制台参数快照和公式参数快照，用于复盘与审计。
@@ -224,9 +224,9 @@
 | `selectionSequenceNo` | `sequence_no` | 年度订单页 | 选单顺序 | `SYSTEM_DERIVED` | 玩家和管理员均可查看完整顺序，但玩家端不展示排序依据 |
 | `selectionStatus` | `selection_status` | 年度订单页 | 小组标段状态 | `SYSTEM_DERIVED` | `INELIGIBLE / WAITING / CURRENT / SELECTED / PASSED / ADMIN_SKIPPED` |
 | `isMarketLeader` | `is_market_leader` | 年度订单页 | 是否市场龙头 | `SYSTEM_DERIVED` | 市场龙头只在对应市场生效，本年 `0` 投入仍可优先选单 |
-| `orderAmount` | `order_amount` | 订单池 | 订单金额 | `SYSTEM_DERIVED` | 系统按 Excel 公式链生成后写入 |
-| `orderQuantity` | `order_quantity` | 订单池 | 数量 | `SYSTEM_DERIVED` | 单张订单卡的随机服务数量，不是控制台订单卡片数量 |
-| `unitPrice` | `unit_price` | 订单池 | 单价 | `SYSTEM_DERIVED` | 订单卡片单价字段 |
+| `orderAmount` | `order_amount` | 订单池 | 订单金额 | `SYSTEM_DERIVED` | 系统按 Excel 公式链生成后写入；业务口径为整数金额，且等于数量乘以单价 |
+| `orderQuantity` | `order_quantity` | 订单池 | 数量 | `SYSTEM_DERIVED` | 单张订单卡的随机服务数量，不是控制台订单卡片数量；生成口径为整数 |
+| `unitPrice` | `unit_price` | 订单池 | 单价 | `SYSTEM_DERIVED` | 订单卡片单价字段；允许小数，由后端自动校准有效单价以保证订单金额为整数 |
 | `accountTerm` | `account_term` | 订单池 | 账期 | `SYSTEM_DERIVED` | 订单卡片账期字段；首版只展示，不参与应收账款自动计算 |
 | `orderPoolStatus` | `status` | 订单池 | 订单状态 | `SYSTEM_DERIVED` | `AVAILABLE / SELECTED / VOID` 等后续实现枚举 |
 | `marketInvestment` | `market_investment` | 年度订单页 | 市场投入 | `PLAYER_INPUT` | 玩家按 `市场 + 订单类型` 提交 16 项投入，提交后不可修改；未开启市场必须手动填写 `0` |

@@ -642,9 +642,9 @@
 | `segment_code` | VARCHAR(64) | 标段编码 |
 | `card_sequence_no` | INT | 订单卡片序号，`1 ~ 15` |
 | `business_order_no` | VARCHAR(64) | 业务订单编号/页面展示编号，例如 `CARD-01` |
-| `order_amount` | DECIMAL(18,2) | 订单金额 |
-| `order_quantity` | DECIMAL(18,2) | 数量 |
-| `unit_price` | DECIMAL(18,2) | 单价 |
+| `order_amount` | DECIMAL(18,2) | 订单金额，业务口径为整数金额 |
+| `order_quantity` | DECIMAL(18,2) | 数量，订单生成口径为整数 |
+| `unit_price` | DECIMAL(18,2) | 单价，允许小数 |
 | `account_term` | VARCHAR(64) | 账期 |
 | `pool_status` | VARCHAR(32) | `AVAILABLE / SELECTED / VOID` |
 | `selected_group_id` | BIGINT NULL | 选中小组 |
@@ -662,6 +662,7 @@
 说明：
 
 - 订单池生成后保存固定值，不在运行时持续依赖 Excel 随机公式。
+- 生成时由后端自动保证 `order_amount = order_quantity × unit_price`，且 `order_amount` 为整数；管理员不维护逐单金额或单价。
 - 订单池来自系统按 Excel 公式链生成后的批次，不来自上传固定订单明细。
 - 预览阶段可覆盖；确认后不允许覆盖或重新生成。
 - 管理端和玩家端订单列表应优先展示 `business_order_no` 或由 `card_sequence_no` 格式化出的 `CARD-01`，不应把数据库自增 `id` 作为业务订单编号展示给管理员。
