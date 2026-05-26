@@ -292,10 +292,11 @@
         </article>
         <article class="status-mini">
           <span>市场龙头</span>
-          <strong>{{ marketSelectionStatus?.leaderGroupId ? `组ID ${marketSelectionStatus.leaderGroupId}` : '--' }}</strong>
+          <strong>{{ marketLeaderText }}</strong>
+          <em v-if="marketLeaderAmountText">{{ marketLeaderAmountText }}</em>
         </article>
         <article class="status-mini">
-          <span>当前标段</span>
+          <span>当前选单标段</span>
           <strong>{{ currentSegment ? `${currentSegment.marketName} ${currentSegment.orderTypeName}` : '--' }}</strong>
         </article>
         <article class="status-mini">
@@ -328,7 +329,13 @@
             <tr v-if="!marketSelectionStatus || marketSelectionStatus.segments.length === 0">
               <td colspan="7" class="empty-row">当前市场暂无标段状态，请先生成订单池。</td>
             </tr>
-            <tr v-for="segment in marketSelectionStatus?.segments ?? []" :key="`${segment.marketCode}-${segment.orderType}`">
+            <tr
+              v-for="segment in marketSelectionStatus?.segments ?? []"
+              :key="`${segment.marketCode}-${segment.orderType}`"
+              class="clickable-row"
+              :class="{ selected: selectedSequenceSegmentKey === segmentKey(segment) }"
+              @click="selectSequenceSegment(segment)"
+            >
               <td>#{{ segment.releaseSequenceNo }}</td>
               <td>{{ segment.marketName }}</td>
               <td>{{ segment.orderTypeName }}</td>
@@ -345,22 +352,29 @@
         <table class="selection-table">
           <thead>
             <tr>
+              <th colspan="7" class="sequence-title">
+                {{ selectedSequenceSegment ? `${selectedSequenceSegment.marketName} · ${selectedSequenceSegment.orderTypeName} 选单顺序` : '选单顺序' }}
+              </th>
+            </tr>
+            <tr>
               <th>顺序</th>
               <th>小组</th>
-              <th>市场投入</th>
+              <th>本标段投入</th>
+              <th>上年该市场订单额</th>
               <th>市场龙头</th>
               <th>状态</th>
               <th>已选订单</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-if="!currentSegment || currentSegment.selectionOrder.length === 0">
-              <td colspan="6" class="empty-row">当前没有正在选单的标段。</td>
+            <tr v-if="!selectedSequenceSegment || selectedSequenceSegment.selectionOrder.length === 0">
+              <td colspan="7" class="empty-row">当前选中标段暂无选单顺序，请先生成选单顺序。</td>
             </tr>
-            <tr v-for="item in currentSegment?.selectionOrder ?? []" :key="item.groupId">
+            <tr v-for="item in selectedSequenceSegment?.selectionOrder ?? []" :key="item.groupId">
               <td>#{{ item.sequenceNo }}</td>
               <td>{{ item.groupName }}</td>
               <td class="number-cell">{{ formatAmount(item.marketInvestment) }}</td>
+              <td class="number-cell">{{ formatIntegerAmount(item.previousMarketOrderAmount) }}</td>
               <td>{{ item.isMarketLeader ? '是' : '否' }}</td>
               <td>{{ formatSelectionStatus(item.selectionStatus) }}</td>
               <td>{{ item.selectedOrderNo || (item.selectedOrderId ? `#${item.selectedOrderId}` : '--') }}</td>
@@ -438,13 +452,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { MARKET_OPTIONS, ORDER_TYPE_OPTIONS, useAdminOrderStore } from '@/stores/admin-order'
 import type { OrderPoolStatus } from '@/types/sandbox-game-admin'
-import type { OrderMarketForecastMarket } from '@/types/sandbox-game-order'
+import type { AdminOrderSegmentStatus, OrderMarketForecastMarket } from '@/types/sandbox-game-order'
 
 const shellStore = useAdminShellStore()
 const store = useAdminOrderStore()
@@ -481,6 +495,7 @@ const {
 
 const marketOptions = MARKET_OPTIONS
 const orderTypeOptions = ORDER_TYPE_OPTIONS
+const selectedSequenceSegmentKey = ref('')
 
 const yearOptions = computed(() => {
   const finalYear = Math.max(shellConfig.value?.finalYear ?? config.value?.finalYear ?? 1, 1)
@@ -490,6 +505,49 @@ const yearOptions = computed(() => {
   }))
 })
 const currentGroupName = computed(() => formatGroupName(currentSegment.value?.currentGroupId ?? null))
+const selectedSequenceSegment = computed(() => {
+  const segments = marketSelectionStatus.value?.segments ?? []
+  if (selectedSequenceSegmentKey.value) {
+    const matched = segments.find((item) => segmentKey(item) === selectedSequenceSegmentKey.value)
+    if (matched) {
+      return matched
+    }
+  }
+  return currentSegment.value
+    ?? segments.find((item) => item.selectionOrder.length > 0 && item.segmentStatus === 'SEQUENCE_READY')
+    ?? segments.find((item) => item.selectionOrder.length > 0)
+    ?? null
+})
+const marketLeaderOrder = computed(() => selectedSequenceSegment.value?.selectionOrder.find((item) => item.isMarketLeader) ?? null)
+const marketLeaderText = computed(() => {
+  const leader = marketLeaderOrder.value
+  if (leader) {
+    return leader.groupName || `组ID ${leader.groupId}`
+  }
+  return marketSelectionStatus.value?.leaderGroupId ? formatGroupName(marketSelectionStatus.value.leaderGroupId) : '--'
+})
+const marketLeaderAmountText = computed(() => {
+  const leader = marketLeaderOrder.value
+  if (!leader) {
+    return ''
+  }
+  return `上年该市场订单额 ${formatIntegerAmount(leader.previousMarketOrderAmount)}`
+})
+
+watch(
+  () => marketSelectionStatus.value,
+  () => {
+    const segments = marketSelectionStatus.value?.segments ?? []
+    const selectedStillExists = segments.some((item) => segmentKey(item) === selectedSequenceSegmentKey.value)
+    if (selectedStillExists) {
+      return
+    }
+    const fallback = currentSegment.value
+      ?? segments.find((item) => item.selectionOrder.length > 0 && item.segmentStatus === 'SEQUENCE_READY')
+      ?? segments.find((item) => item.selectionOrder.length > 0)
+    selectedSequenceSegmentKey.value = fallback ? segmentKey(fallback) : ''
+  },
+)
 
 onMounted(async () => {
   try {
@@ -632,6 +690,7 @@ async function handleLoadSelectionStatus() {
 
 async function handleControlMarketChange() {
   try {
+    selectedSequenceSegmentKey.value = ''
     await store.loadSelectionStatus()
   } catch {
     // 页面消息由 store 统一处理。
@@ -641,6 +700,9 @@ async function handleControlMarketChange() {
 async function handleReleaseNextSegment() {
   try {
     await store.releaseNextSegment()
+    if (currentSegment.value) {
+      selectedSequenceSegmentKey.value = segmentKey(currentSegment.value)
+    }
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -652,6 +714,14 @@ async function handleSkipCurrentGroup() {
   } catch {
     // 页面消息由 store 统一处理。
   }
+}
+
+function segmentKey(segment: Pick<AdminOrderSegmentStatus, 'marketCode' | 'orderType'>) {
+  return `${segment.marketCode}|${segment.orderType}`
+}
+
+function selectSequenceSegment(segment: AdminOrderSegmentStatus) {
+  selectedSequenceSegmentKey.value = segmentKey(segment)
 }
 
 function formatDateTime(value?: string | null) {
@@ -1287,6 +1357,12 @@ function formatGroupName(groupId?: number | null) {
   font-size: 16px;
 }
 
+.status-mini em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .skip-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1316,6 +1392,20 @@ function formatGroupName(groupId?: number | null) {
 .selection-table th {
   background: #f4f6f9;
   text-align: center;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row.selected {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.sequence-title {
+  color: var(--text);
+  text-align: left !important;
 }
 
 .sequence-scroll {

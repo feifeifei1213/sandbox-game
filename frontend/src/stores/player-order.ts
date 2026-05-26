@@ -57,6 +57,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   const deliveringOrders = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
   const investmentDraft = reactive<Record<string, number | null>>(createEmptyInvestmentDraft())
+  const investmentDraftYear = ref<number | null>(null)
 
   const markets = computed(() => currentView.value?.markets ?? [])
   const selectedMarket = computed<PlayerOrderMarketView | null>(
@@ -107,7 +108,8 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
       const view = await getPlayerOrderYearView(yearNo)
       currentView.value = view
       selectedYear.value = yearNo
-      applyInvestmentDraft(view, investmentDraft)
+      applyInvestmentDraft(view, investmentDraft, investmentDraftYear.value === yearNo)
+      investmentDraftYear.value = yearNo
       const selectedExists = view.markets?.some((item) => item.marketCode === selectedMarketCode.value)
       if (!selectedExists && view.markets?.[0]) {
         selectedMarketCode.value = view.markets[0].marketCode
@@ -262,11 +264,15 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   }
 })
 
-function applyInvestmentDraft(view: PlayerOrderYearView, draft: Record<string, number | null>) {
+function applyInvestmentDraft(view: PlayerOrderYearView, draft: Record<string, number | null>, preserveUnsavedDraft: boolean) {
+  const previousDraft = preserveUnsavedDraft ? { ...draft } : {}
+  for (const key of Object.keys(draft)) {
+    draft[key] = null
+  }
   for (const market of view.markets ?? []) {
     for (const segment of market.segments) {
       const key = investmentKey(segment.marketCode, segment.orderType)
-      draft[key] = segment.investmentSubmitted ? segment.marketInvestment : draft[key] ?? 0
+      draft[key] = segment.investmentSubmitted ? segment.marketInvestment : previousDraft[key] ?? 0
     }
   }
 }

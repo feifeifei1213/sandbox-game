@@ -355,14 +355,15 @@ type AdminOrderSegmentStatus struct {
 }
 
 type AdminSelectionOrderView struct {
-	SequenceNo       int     `json:"sequenceNo"`
-	GroupID          int64   `json:"groupId"`
-	GroupName        string  `json:"groupName"`
-	MarketInvestment float64 `json:"marketInvestment"`
-	IsMarketLeader   bool    `json:"isMarketLeader"`
-	SelectionStatus  string  `json:"selectionStatus"`
-	SelectedOrderID  *int64  `json:"selectedOrderId"`
-	SelectedOrderNo  string  `json:"selectedOrderNo,omitempty"`
+	SequenceNo                int     `json:"sequenceNo"`
+	GroupID                   int64   `json:"groupId"`
+	GroupName                 string  `json:"groupName"`
+	MarketInvestment          float64 `json:"marketInvestment"`
+	PreviousMarketOrderAmount float64 `json:"previousMarketOrderAmount"`
+	IsMarketLeader            bool    `json:"isMarketLeader"`
+	SelectionStatus           string  `json:"selectionStatus"`
+	SelectedOrderID           *int64  `json:"selectedOrderId"`
+	SelectedOrderNo           string  `json:"selectedOrderNo,omitempty"`
 }
 
 func (s *PlayerOrderQueryService) GetYearView(ctx context.Context, groupID int64, yearNo int) (*PlayerOrderYearView, error) {
@@ -1679,14 +1680,15 @@ func buildAdminSegmentStatus(ctx context.Context, sequenceRepo *repository.Marke
 			selectedOrderNo = orderNoMap[*sequence.SelectedOrderID]
 		}
 		sequenceViews = append(sequenceViews, AdminSelectionOrderView{
-			SequenceNo:       sequence.SequenceNo,
-			GroupID:          sequence.GroupID,
-			GroupName:        groupNames[sequence.GroupID],
-			MarketInvestment: sequence.MarketInvestment,
-			IsMarketLeader:   sequence.IsMarketLeader,
-			SelectionStatus:  sequence.SelectionStatus,
-			SelectedOrderID:  sequence.SelectedOrderID,
-			SelectedOrderNo:  selectedOrderNo,
+			SequenceNo:                sequence.SequenceNo,
+			GroupID:                   sequence.GroupID,
+			GroupName:                 groupNames[sequence.GroupID],
+			MarketInvestment:          sequence.MarketInvestment,
+			PreviousMarketOrderAmount: sequence.PreviousMarketOrderAmount,
+			IsMarketLeader:            sequence.IsMarketLeader,
+			SelectionStatus:           sequence.SelectionStatus,
+			SelectedOrderID:           sequence.SelectedOrderID,
+			SelectedOrderNo:           selectedOrderNo,
 		})
 	}
 	return AdminOrderSegmentStatus{

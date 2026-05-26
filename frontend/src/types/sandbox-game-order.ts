@@ -214,6 +214,7 @@ export interface AdminSelectionOrderView {
   groupId: number
   groupName: string
   marketInvestment: number
+  previousMarketOrderAmount: number
   isMarketLeader: boolean
   selectionStatus: OrderSelectionStatus
   selectedOrderId: number | null
