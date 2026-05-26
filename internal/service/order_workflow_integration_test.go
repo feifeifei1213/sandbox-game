@@ -332,6 +332,29 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	}); err != nil {
 		t.Fatalf("group one select local two-cabin order: %v", err)
 	}
+	twoCabinAfterSelect, err := stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP)
+	if err != nil {
+		t.Fatalf("reload local two-cabin after first selection: %v", err)
+	}
+	if twoCabinAfterSelect.SegmentStatus != enum.OrderSegmentStatusSelecting || twoCabinAfterSelect.CurrentGroupID == nil || *twoCabinAfterSelect.CurrentGroupID != groupTwoID {
+		t.Fatalf("expected order-empty segment to still advance to next group, got %#v", twoCabinAfterSelect)
+	}
+	if _, err := playerOrderService.PassSegment(ctx, PassOrderSegmentCommand{
+		GroupID:      groupTwoID,
+		YearNo:       yearNo,
+		MarketCode:   enum.MarketCodeLocal,
+		OrderType:    enum.OrderTypeTwoCabinVIP,
+		OperatorName: "group-two",
+	}); err != nil {
+		t.Fatalf("group two pass empty local two-cabin segment: %v", err)
+	}
+	twoCabinAfterPass, err := stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP)
+	if err != nil {
+		t.Fatalf("reload local two-cabin after empty pass: %v", err)
+	}
+	if twoCabinAfterPass.SegmentStatus != enum.OrderSegmentStatusCompleted {
+		t.Fatalf("expected segment to complete only after sequence is exhausted, got %#v", twoCabinAfterPass)
+	}
 	if completed, err := NewOrderOperatingLinkService(
 		repository.NewGroupMarketBidRepository(tx),
 		stateRepo,

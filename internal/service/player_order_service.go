@@ -1385,16 +1385,6 @@ func buildSelectionOrderItems(states []entity.MarketBiddingState, participants [
 }
 
 func advanceOrderSegment(ctx context.Context, stateRepo *repository.MarketBiddingStateRepository, sequenceRepo *repository.MarketSelectionOrderRepository, poolRepo *repository.OrderPoolRepository, segment entity.MarketBiddingState, operatorName string, now time.Time) (*int64, string, error) {
-	availableCount, err := poolRepo.CountAvailableBySegment(ctx, segment.YearNo, segment.MarketCode, segment.OrderType)
-	if err != nil {
-		return nil, "", fmt.Errorf("count available order: %w", err)
-	}
-	if availableCount <= 0 {
-		if err := stateRepo.CompleteSegment(ctx, segment.ID, operatorName, now); err != nil {
-			return nil, "", fmt.Errorf("complete empty segment: %w", err)
-		}
-		return nil, enum.OrderSegmentStatusCompleted, nil
-	}
 	next, err := sequenceRepo.GetNextWaiting(ctx, segment.YearNo, segment.MarketCode, segment.OrderType)
 	if err != nil {
 		if repository.IsRecordNotFound(err) {
