@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -10,32 +11,37 @@ import (
 	"strings"
 
 	driver "github.com/go-sql-driver/mysql"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 
 	appconfig "sandbox-game/internal/config"
 )
 
 const (
-	actionInitSingle       = "init-single"
-	actionResetSingle      = "reset-single"
-	actionInitCompetition  = "init-competition"
-	actionResetCompetition = "reset-competition"
+	actionInitSingle        = "init-single"
+	actionResetSingle       = "reset-single"
+	actionInitCompetition   = "init-competition"
+	actionResetCompetition  = "reset-competition"
+	actionSeedOrderScenario = "seed-order-scenario"
 )
 
 func main() {
 	var configPath string
 	var action string
+	var confirmReset bool
 
 	flag.StringVar(&configPath, "config", "configs/local-single.yaml", "配置文件路径")
-	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single/init-competition/reset-competition")
+	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single/init-competition/reset-competition/seed-order-scenario")
+	flag.BoolVar(&confirmReset, "confirm-reset", false, "确认允许重置当前配置指向的数据库，仅测试造数动作需要")
 	flag.Parse()
 
-	if err := run(configPath, action); err != nil {
+	if err := run(configPath, action, confirmReset); err != nil {
 		fmt.Fprintf(os.Stderr, "dbtool failed: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath string, action string) error {
+func run(configPath string, action string, confirmReset bool) error {
 	cfg, err := appconfig.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -79,6 +85,13 @@ func run(configPath string, action string) error {
 		if err := recreateDatabase(adminDB, targetDBName); err != nil {
 			return err
 		}
+	case actionSeedOrderScenario:
+		if !confirmReset {
+			return fmt.Errorf("seed-order-scenario 会重置当前配置指向的数据库 %q；确认在测试库执行时请追加 --confirm-reset", targetDBName)
+		}
+		if err := recreateDatabase(adminDB, targetDBName); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported action: %s", action)
 	}
@@ -109,6 +122,21 @@ func run(configPath string, action string) error {
 		}
 	}
 
+	if action == actionSeedOrderScenario {
+		gormDB, err := gorm.Open(mysql.Open(cfg.MySQL.DSN), &gorm.Config{})
+		if err != nil {
+			return fmt.Errorf("open target mysql with gorm: %w", err)
+		}
+		gormSQLDB, err := gormDB.DB()
+		if err != nil {
+			return fmt.Errorf("extract gorm sql db: %w", err)
+		}
+		defer gormSQLDB.Close()
+		if err := seedOrderScenario(context.Background(), gormDB); err != nil {
+			return err
+		}
+	}
+
 	fmt.Printf("database ready: %s (%s)\n", targetDBName, action)
 	return nil
 }
@@ -119,12 +147,14 @@ func resolveMigrationFiles(projectRoot string, action string) ([]string, error) 
 		filepath.Join(projectRoot, "migrations", "mysql", "0003_notice_adjustment.sql"),
 		filepath.Join(projectRoot, "migrations", "mysql", "0005_order_admin.sql"),
 		filepath.Join(projectRoot, "migrations", "mysql", "0006_order_generation_refactor.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0007_order_market_enable.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0008_order_forecast_control.sql"),
 	}
 
 	switch action {
 	case actionInitSingle, actionResetSingle:
 		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0002_seed_single_group.sql")), nil
-	case actionInitCompetition, actionResetCompetition:
+	case actionInitCompetition, actionResetCompetition, actionSeedOrderScenario:
 		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0004_seed_competition_admin.sql")), nil
 	default:
 		return nil, fmt.Errorf("unsupported migration action: %s", action)
