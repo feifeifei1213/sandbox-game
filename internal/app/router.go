@@ -224,6 +224,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 
 		gameConfig := protected.Group("/game-config")
 		gameConfig.GET("/get-current", gameConfigHandler.GetCurrent)
+		gameConfig.GET("/list-game-editions", gameConfigHandler.ListGameEditions)
 		gameConfig.GET("/get-year-tabs", gameConfigHandler.GetYearTabs)
 
 		playerOperating := protected.Group("/player-operating")

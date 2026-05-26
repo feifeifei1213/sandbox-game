@@ -20,11 +20,30 @@ export interface AdminActionSummary {
   targetYearNo?: number | null
 }
 
+export interface GameEdition {
+  editionCode: string
+  editionName: string
+  description: string
+  defaultEdition: boolean
+  ruleVersion: string
+  formulaVersion: string
+  templateVersion: string
+  operatingTemplateVersion: string
+  reportTemplateVersion: string
+  orderTemplateVersion: string
+  processRuleVersion: string
+}
+
 export interface AdminControlSetupStatusResult {
   initialized: boolean
   groupCount: number
   finalYear: number
   currentOpenYear: number
+  editionCode: string
+  editionName: string
+  ruleVersion: string
+  templateVersion: string
+  availableEditions: GameEdition[]
   initialBaselineSubmitted: boolean
   defaultRoute: string
 }
@@ -35,8 +54,15 @@ export interface AdminControlConfigResult {
   canOpenNextYear: boolean
   nextOpenableYear: number
   openNextYearBlockedReason: string
+  editionCode: string
+  editionName: string
   ruleVersion: string
+  formulaVersion: string
   templateVersion: string
+  operatingTemplateVersion: string
+  reportTemplateVersion: string
+  orderTemplateVersion: string
+  processRuleVersion: string
   initialBaselineSubmitted: boolean
   initialBaselineSubmittedAt: string | null
   initialBaselineSubmitterName: string | null
@@ -46,6 +72,10 @@ export interface AdminControlConfigResult {
 export interface InitializeGameResult {
   initialized: boolean
   groupCount: number
+  editionCode: string
+  editionName: string
+  ruleVersion: string
+  templateVersion: string
   createdGroupCount: number
   createdAccountCount: number
   createdYearStateCount: number

@@ -149,6 +149,7 @@ func resolveMigrationFiles(projectRoot string, action string) ([]string, error) 
 		filepath.Join(projectRoot, "migrations", "mysql", "0006_order_generation_refactor.sql"),
 		filepath.Join(projectRoot, "migrations", "mysql", "0007_order_market_enable.sql"),
 		filepath.Join(projectRoot, "migrations", "mysql", "0008_order_forecast_control.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0009_game_edition.sql"),
 	}
 
 	switch action {

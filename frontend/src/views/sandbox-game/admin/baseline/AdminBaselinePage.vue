@@ -89,7 +89,7 @@
         <section class="panel-card">
           <div class="panel-head">
             <strong>首版约束</strong>
-            <span>保持轻量，避免把版本管理做到首版里。</span>
+            <span>当前按赛前锁定的沙盘版本展示字段名。</span>
           </div>
           <ul class="note-list">
             <li>提交前可编辑，提交后锁定只读。</li>
@@ -106,6 +106,7 @@
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 
+import { serviceBaselineLabels } from '@/configs/sandbox-game-service-labels'
 import { useAdminBaselineStore } from '@/stores/admin-baseline'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import type { BaselinePayload } from '@/types/sandbox-game-admin'
@@ -123,15 +124,15 @@ const fieldDefs: Array<{
   { key: 'baselineFinanceIncomeExpense', section: '损益', label: '财务收入/支出', note: '共享模板基线输入项' },
   { key: 'baselineExtraIncomeExpense', section: '损益', label: '额外收入/支出', note: '共享模板基线输入项' },
   { key: 'baselineIncomeTax', section: '损益', label: '所得税', note: '共享模板基线输入项' },
-  { key: 'baselineWorkInConstruction', section: '资产', label: '在建生产线', note: '共享模板基线输入项' },
-  { key: 'baselineFactoryAsset', section: '资产', label: '厂房', note: '共享模板基线输入项' },
-  { key: 'baselineLineResidual', section: '资产', label: '生产线残值', note: '共享模板基线输入项' },
+  { key: 'baselineWorkInConstruction', section: '资产', label: serviceBaselineLabels.workInConstruction, note: '共享模板基线输入项' },
+  { key: 'baselineFactoryAsset', section: '资产', label: serviceBaselineLabels.factoryAsset, note: '共享模板基线输入项' },
+  { key: 'baselineLineResidual', section: '资产', label: serviceBaselineLabels.lineResidual, note: '共享模板基线输入项' },
   { key: 'baselineDepreciableAsset', section: '资产', label: '待折资产', note: '共享模板基线输入项' },
   { key: 'baselineCash', section: '资产', label: '现金', note: '共享模板基线输入项' },
   { key: 'baselineReceivable', section: '资产', label: '应收款', note: '共享模板基线输入项' },
-  { key: 'baselineWorkInProgress', section: '存货', label: '在制品', note: '共享模板基线输入项' },
-  { key: 'baselineFinishedGoods', section: '存货', label: '成品', note: '共享模板基线输入项' },
-  { key: 'baselineRawMaterials', section: '存货', label: '材料', note: '共享模板基线输入项' },
+  { key: 'baselineWorkInProgress', section: '存货', label: serviceBaselineLabels.workInProgress, note: '共享模板基线输入项' },
+  { key: 'baselineFinishedGoods', section: '存货', label: serviceBaselineLabels.finishedGoods, note: '共享模板基线输入项' },
+  { key: 'baselineRawMaterials', section: '存货', label: serviceBaselineLabels.rawMaterials, note: '共享模板基线输入项' },
   { key: 'baselineShortTermLoan', section: '负债', label: '短期负债', note: '共享模板基线输入项' },
   { key: 'baselineLongTermLoan', section: '负债', label: '长期负债', note: '共享模板基线输入项' },
   { key: 'baselineShareCapital', section: '权益', label: '股东资本', note: '共享模板基线输入项' },

@@ -46,6 +46,25 @@ func (h *GameConfigHandler) GetCurrent(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 
+func (h *GameConfigHandler) ListGameEditions(c *gin.Context) {
+	if !ensureAdminIdentity(c, "当前身份无权查看沙盘版本包") {
+		return
+	}
+
+	result, err := h.queryService.ListGameEditions(c.Request.Context())
+	if err != nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusInternalServerError,
+			enum.InternalServerErrorCode,
+			"获取沙盘版本包失败",
+			err,
+		))
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *GameConfigHandler) GetYearTabs(c *gin.Context) {
 	identity, ok := middleware.GetAuthIdentity(c)
 	if !ok {

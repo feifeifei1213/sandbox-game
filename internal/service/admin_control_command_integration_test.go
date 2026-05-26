@@ -249,6 +249,7 @@ func TestInitializeGameCreatesGroupsAccountsAndYearStates(t *testing.T) {
 	service := NewAdminControlCommandService(tx)
 	result, err := service.InitializeGame(ctx, InitializeGameCommand{
 		GroupCount:   3,
+		EditionCode:  GameEditionVIPServiceV1,
 		OperatorID:   90013,
 		OperatorName: "integration-admin",
 	})
@@ -264,6 +265,9 @@ func TestInitializeGameCreatesGroupsAccountsAndYearStates(t *testing.T) {
 	}
 	if result.CreatedYearStateCount != 12 {
 		t.Fatalf("expected 12 year states for 3 groups x 4 years, got %d", result.CreatedYearStateCount)
+	}
+	if result.EditionCode != GameEditionVIPServiceV1 || result.RuleVersion != FormulaVersionCommonV1 || result.TemplateVersion != TemplateVersionVIPServiceV1 {
+		t.Fatalf("unexpected edition result after initialization: %#v", result)
 	}
 
 	groupRepo := repository.NewGroupRepository(tx)
@@ -323,6 +327,9 @@ func TestInitializeGameCreatesGroupsAccountsAndYearStates(t *testing.T) {
 	}
 	if gameConfig.CurrentOpenYear != 0 || gameConfig.InitialBaselineSubmitted {
 		t.Fatalf("expected game config reset to year 0 and baseline unsubmitted, got %#v", gameConfig)
+	}
+	if gameConfig.EditionCode != GameEditionVIPServiceV1 || gameConfig.RuleVersion != FormulaVersionCommonV1 || gameConfig.OperatingTemplateVersion != OperatingTemplateVersionVIPServiceV1 {
+		t.Fatalf("expected game config edition fields to be locked to VIP service, got %#v", gameConfig)
 	}
 
 	var actionLogCount int64
@@ -406,8 +413,14 @@ func ensureIntegrationGameConfig(t *testing.T, ctx context.Context, tx *gorm.DB,
 		item = entity.GameConfig{
 			FinalYear:                finalYear,
 			CurrentOpenYear:          currentOpenYear,
-			RuleVersion:              "excel-final-2026-03-25",
-			TemplateVersion:          "excel-page-v1",
+			EditionCode:              GameEditionVIPServiceV1,
+			EditionName:              GameEditionVIPServiceV1Name,
+			RuleVersion:              FormulaVersionCommonV1,
+			TemplateVersion:          TemplateVersionVIPServiceV1,
+			OperatingTemplateVersion: OperatingTemplateVersionVIPServiceV1,
+			ReportTemplateVersion:    ReportTemplateVersionVIPServiceV1,
+			OrderTemplateVersion:     OrderTemplateVersionVIPServiceV1,
+			ProcessRuleVersion:       ProcessRuleVersionCommonV1,
 			InitialBaselineSubmitted: baselineSubmitted,
 			BaseEntity: entity.BaseEntity{
 				Creator:    "integration-test",
@@ -428,8 +441,14 @@ func ensureIntegrationGameConfig(t *testing.T, ctx context.Context, tx *gorm.DB,
 			Updates(map[string]any{
 				"final_year":                 finalYear,
 				"current_open_year":          currentOpenYear,
-				"rule_version":               "excel-final-2026-03-25",
-				"template_version":           "excel-page-v1",
+				"edition_code":               GameEditionVIPServiceV1,
+				"edition_name":               GameEditionVIPServiceV1Name,
+				"rule_version":               FormulaVersionCommonV1,
+				"template_version":           TemplateVersionVIPServiceV1,
+				"operating_template_version": OperatingTemplateVersionVIPServiceV1,
+				"report_template_version":    ReportTemplateVersionVIPServiceV1,
+				"order_template_version":     OrderTemplateVersionVIPServiceV1,
+				"process_rule_version":       ProcessRuleVersionCommonV1,
 				"initial_baseline_submitted": baselineSubmitted,
 				"updater":                    "integration-test",
 				"update_time":                now,

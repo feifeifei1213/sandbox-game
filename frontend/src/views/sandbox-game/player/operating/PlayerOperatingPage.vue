@@ -147,8 +147,15 @@ const previewYear = computed(() => readRouteYear() ?? 0)
 const previewConfig = computed<CurrentGameConfigResult>(() => ({
   currentOpenYear: previewYear.value,
   finalYear: 8,
-  ruleVersion: 'preview',
-  templateVersion: 'preview',
+  editionCode: 'VIP_SERVICE_V1',
+  editionName: '贵宾服务版 V1',
+  ruleVersion: 'COMMON_FORMULA_V1',
+  formulaVersion: 'COMMON_FORMULA_V1',
+  templateVersion: 'VIP_SERVICE_V1',
+  operatingTemplateVersion: 'VIP_OPERATING_TEMPLATE_V1',
+  reportTemplateVersion: 'VIP_REPORT_TEMPLATE_V1',
+  orderTemplateVersion: 'VIP_ORDER_TEMPLATE_V1',
+  processRuleVersion: 'COMMON_PROCESS_V1',
   demoYearEnabled: true,
 }))
 const previewYearTabs = computed<YearTabItem[]>(() => {

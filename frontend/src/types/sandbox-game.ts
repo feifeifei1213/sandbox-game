@@ -22,8 +22,15 @@ export interface PlayerNoticeBoard {
 export interface CurrentGameConfigResult {
   currentOpenYear: number
   finalYear: number
+  editionCode: string
+  editionName: string
   ruleVersion: string
+  formulaVersion: string
   templateVersion: string
+  operatingTemplateVersion: string
+  reportTemplateVersion: string
+  orderTemplateVersion: string
+  processRuleVersion: string
   demoYearEnabled: boolean
 }
 

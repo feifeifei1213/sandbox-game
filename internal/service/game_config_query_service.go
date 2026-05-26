@@ -20,11 +20,18 @@ const (
 )
 
 type CurrentGameConfigResult struct {
-	CurrentOpenYear int    `json:"currentOpenYear"`
-	FinalYear       int    `json:"finalYear"`
-	RuleVersion     string `json:"ruleVersion"`
-	TemplateVersion string `json:"templateVersion"`
-	DemoYearEnabled bool   `json:"demoYearEnabled"`
+	CurrentOpenYear          int    `json:"currentOpenYear"`
+	FinalYear                int    `json:"finalYear"`
+	EditionCode              string `json:"editionCode"`
+	EditionName              string `json:"editionName"`
+	RuleVersion              string `json:"ruleVersion"`
+	FormulaVersion           string `json:"formulaVersion"`
+	TemplateVersion          string `json:"templateVersion"`
+	OperatingTemplateVersion string `json:"operatingTemplateVersion"`
+	ReportTemplateVersion    string `json:"reportTemplateVersion"`
+	OrderTemplateVersion     string `json:"orderTemplateVersion"`
+	ProcessRuleVersion       string `json:"processRuleVersion"`
+	DemoYearEnabled          bool   `json:"demoYearEnabled"`
 }
 
 type YearTabItem struct {
@@ -66,14 +73,26 @@ func (s *GameConfigQueryService) GetCurrent(ctx context.Context) (*CurrentGameCo
 	if err != nil {
 		return nil, fmt.Errorf("load game config: %w", err)
 	}
+	edition := normalizeGameConfigEdition(*gameConfig)
 
 	return &CurrentGameConfigResult{
-		CurrentOpenYear: gameConfig.CurrentOpenYear,
-		FinalYear:       gameConfig.FinalYear,
-		RuleVersion:     gameConfig.RuleVersion,
-		TemplateVersion: gameConfig.TemplateVersion,
-		DemoYearEnabled: true,
+		CurrentOpenYear:          gameConfig.CurrentOpenYear,
+		FinalYear:                gameConfig.FinalYear,
+		EditionCode:              edition.EditionCode,
+		EditionName:              edition.EditionName,
+		RuleVersion:              edition.RuleVersion,
+		FormulaVersion:           edition.FormulaVersion,
+		TemplateVersion:          edition.TemplateVersion,
+		OperatingTemplateVersion: edition.OperatingTemplateVersion,
+		ReportTemplateVersion:    edition.ReportTemplateVersion,
+		OrderTemplateVersion:     edition.OrderTemplateVersion,
+		ProcessRuleVersion:       edition.ProcessRuleVersion,
+		DemoYearEnabled:          true,
 	}, nil
+}
+
+func (s *GameConfigQueryService) ListGameEditions(ctx context.Context) ([]GameEdition, error) {
+	return ListGameEditions(), nil
 }
 
 func (s *GameConfigQueryService) GetYearTabs(ctx context.Context, roleType string, groupID *int64) (*YearTabsResult, error) {

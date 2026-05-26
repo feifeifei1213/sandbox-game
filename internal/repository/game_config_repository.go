@@ -70,14 +70,35 @@ func (r *GameConfigRepository) UpdateInitialBaselineSubmitted(ctx context.Contex
 		}).Error
 }
 
-func (r *GameConfigRepository) PrepareForInitialization(ctx context.Context, id int64, operatorName string, updateTime time.Time) error {
+type PrepareGameConfigInitializationCommand struct {
+	EditionCode              string
+	EditionName              string
+	RuleVersion              string
+	TemplateVersion          string
+	OperatingTemplateVersion string
+	ReportTemplateVersion    string
+	OrderTemplateVersion     string
+	ProcessRuleVersion       string
+	OperatorName             string
+	OperateTime              time.Time
+}
+
+func (r *GameConfigRepository) PrepareForInitialization(ctx context.Context, id int64, cmd PrepareGameConfigInitializationCommand) error {
 	return r.db.WithContext(ctx).
 		Model(&entity.GameConfig{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
 			"current_open_year":          0,
+			"edition_code":               cmd.EditionCode,
+			"edition_name":               cmd.EditionName,
+			"rule_version":               cmd.RuleVersion,
+			"template_version":           cmd.TemplateVersion,
+			"operating_template_version": cmd.OperatingTemplateVersion,
+			"report_template_version":    cmd.ReportTemplateVersion,
+			"order_template_version":     cmd.OrderTemplateVersion,
+			"process_rule_version":       cmd.ProcessRuleVersion,
 			"initial_baseline_submitted": false,
-			"updater":                    operatorName,
-			"update_time":                updateTime,
+			"updater":                    cmd.OperatorName,
+			"update_time":                cmd.OperateTime,
 		}).Error
 }

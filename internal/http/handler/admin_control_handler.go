@@ -84,6 +84,7 @@ func (h *AdminControlHandler) InitializeGame(c *gin.Context) {
 	identity, _ := middleware.GetAuthIdentity(c)
 	result, err := h.commandService.InitializeGame(c.Request.Context(), service.InitializeGameCommand{
 		GroupCount:   *req.GroupCount,
+		EditionCode:  req.EditionCode,
 		OperatorID:   identity.UserID,
 		OperatorName: identity.Username,
 	})
@@ -112,6 +113,20 @@ func (h *AdminControlHandler) InitializeGame(c *gin.Context) {
 				http.StatusUnprocessableEntity,
 				enum.UnprocessableEntityCode,
 				msg,
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlEditionRequired):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"请选择沙盘版本",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlEditionInvalid):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"沙盘版本不合法",
 				err,
 			))
 		default:

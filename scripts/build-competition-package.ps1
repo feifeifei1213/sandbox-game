@@ -33,7 +33,6 @@ New-Item -ItemType Directory -Force -Path (Join-Path $releaseRoot 'frontend\dist
 New-Item -ItemType Directory -Force -Path (Join-Path $releaseRoot 'configs') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $releaseRoot 'scripts') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $releaseRoot 'migrations\mysql') | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $releaseRoot 'nginx') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $releaseRoot 'docs') | Out-Null
 
 Push-Location $projectRoot
@@ -63,10 +62,14 @@ try {
     Copy-Item -Path (Join-Path $projectRoot 'scripts\init-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\init-competition.ps1') -Force
     Copy-Item -Path (Join-Path $projectRoot 'scripts\reset-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\reset-competition.ps1') -Force
     Copy-Item -Path (Join-Path $projectRoot 'scripts\start-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\start-competition.ps1') -Force
-    Copy-Item -Path (Join-Path $projectRoot 'scripts\nginx\sandbox-game.competition.conf') -Destination (Join-Path $releaseRoot 'nginx\sandbox-game.competition.conf') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0001_init.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0001_init.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0003_notice_adjustment.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0003_notice_adjustment.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0004_seed_competition_admin.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0004_seed_competition_admin.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0005_order_admin.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0005_order_admin.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0006_order_generation_refactor.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0006_order_generation_refactor.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0007_order_market_enable.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0007_order_market_enable.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0008_order_forecast_control.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0008_order_forecast_control.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0009_game_edition.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0009_game_edition.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\competition_launch_runbook.md') -Destination (Join-Path $releaseRoot 'docs\competition_launch_runbook.md') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\competition_deploy_checklist.md') -Destination (Join-Path $releaseRoot 'docs\competition_deploy_checklist.md') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\README.md') -Destination (Join-Path $releaseRoot 'README.md') -Force

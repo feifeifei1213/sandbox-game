@@ -38,6 +38,8 @@ var (
 	ErrAdminControlOpenNextYearBlocked      = errors.New("admin control open next year blocked")
 	ErrAdminControlInitialBaselineSubmitted = errors.New("admin control initial baseline already submitted")
 	ErrAdminControlInitialBaselineInvalid   = errors.New("admin control initial baseline invalid")
+	ErrAdminControlEditionRequired          = errors.New("admin control edition required")
+	ErrAdminControlEditionInvalid           = errors.New("admin control edition invalid")
 	ErrAdminControlUnlockReasonRequired     = errors.New("admin control unlock reason required")
 	ErrAdminControlUnlockTargetTypeRequired = errors.New("admin control unlock target type required")
 	ErrAdminControlUnlockTargetTypeInvalid  = errors.New("admin control unlock target type invalid")
@@ -107,6 +109,7 @@ type UpdateFinalYearCommand struct {
 
 type InitializeGameCommand struct {
 	GroupCount   int
+	EditionCode  string
 	OperatorID   int64
 	OperatorName string
 }
@@ -114,6 +117,10 @@ type InitializeGameCommand struct {
 type InitializeGameResult struct {
 	Initialized           bool   `json:"initialized"`
 	GroupCount            int    `json:"groupCount"`
+	EditionCode           string `json:"editionCode"`
+	EditionName           string `json:"editionName"`
+	RuleVersion           string `json:"ruleVersion"`
+	TemplateVersion       string `json:"templateVersion"`
 	CreatedGroupCount     int    `json:"createdGroupCount"`
 	CreatedAccountCount   int    `json:"createdAccountCount"`
 	CreatedYearStateCount int    `json:"createdYearStateCount"`
@@ -203,6 +210,10 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 	if err := validateInitializeGameInput(cmd.GroupCount); err != nil {
 		return nil, err
 	}
+	edition, err := validateInitializeGameEdition(cmd.EditionCode)
+	if err != nil {
+		return nil, err
+	}
 
 	var result *InitializeGameResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -253,20 +264,35 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 			return fmt.Errorf("create group year states: %w", err)
 		}
 
-		if err := txGameConfigRepo.PrepareForInitialization(ctx, gameConfig.ID, operatorName, now); err != nil {
+		if err := txGameConfigRepo.PrepareForInitialization(ctx, gameConfig.ID, repository.PrepareGameConfigInitializationCommand{
+			EditionCode:              edition.EditionCode,
+			EditionName:              edition.EditionName,
+			RuleVersion:              edition.RuleVersion,
+			TemplateVersion:          edition.TemplateVersion,
+			OperatingTemplateVersion: edition.OperatingTemplateVersion,
+			ReportTemplateVersion:    edition.ReportTemplateVersion,
+			OrderTemplateVersion:     edition.OrderTemplateVersion,
+			ProcessRuleVersion:       edition.ProcessRuleVersion,
+			OperatorName:             operatorName,
+			OperateTime:              now,
+		}); err != nil {
 			return fmt.Errorf("prepare game config for initialization: %w", err)
 		}
 
-		stateBefore, err := buildInitializeGameStateSnapshot(int(existingGroupCount), gameConfig.CurrentOpenYear, gameConfig.FinalYear, gameConfig.InitialBaselineSubmitted)
+		stateBefore, err := buildInitializeGameStateSnapshot(int(existingGroupCount), gameConfig.CurrentOpenYear, gameConfig.FinalYear, gameConfig.InitialBaselineSubmitted, normalizeGameConfigEdition(*gameConfig))
 		if err != nil {
 			return fmt.Errorf("build initialize game before state: %w", err)
 		}
-		stateAfter, err := buildInitializeGameStateSnapshot(len(groups), 0, gameConfig.FinalYear, false)
+		stateAfter, err := buildInitializeGameStateSnapshot(len(groups), 0, gameConfig.FinalYear, false, edition)
 		if err != nil {
 			return fmt.Errorf("build initialize game after state: %w", err)
 		}
 		actionPayload, err := json.Marshal(map[string]any{
 			"groupCount":            len(groups),
+			"editionCode":           edition.EditionCode,
+			"editionName":           edition.EditionName,
+			"ruleVersion":           edition.RuleVersion,
+			"templateVersion":       edition.TemplateVersion,
 			"createdGroupCount":     len(groups),
 			"createdAccountCount":   len(accounts),
 			"createdYearStateCount": len(yearStates),
@@ -291,6 +317,10 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 		result = &InitializeGameResult{
 			Initialized:           true,
 			GroupCount:            len(groups),
+			EditionCode:           edition.EditionCode,
+			EditionName:           edition.EditionName,
+			RuleVersion:           edition.RuleVersion,
+			TemplateVersion:       edition.TemplateVersion,
 			CreatedGroupCount:     len(groups),
 			CreatedAccountCount:   len(accounts),
 			CreatedYearStateCount: len(yearStates),
@@ -780,6 +810,17 @@ func validateInitializeGameInput(groupCount int) error {
 	return nil
 }
 
+func validateInitializeGameEdition(editionCode string) (GameEdition, error) {
+	if strings.TrimSpace(editionCode) == "" {
+		return GameEdition{}, ErrAdminControlEditionRequired
+	}
+	edition, ok := FindGameEdition(editionCode)
+	if !ok {
+		return GameEdition{}, ErrAdminControlEditionInvalid
+	}
+	return edition, nil
+}
+
 func ensureInitializeGameEnvironmentClean(existingGroupAccountCount int64, existingYearStateCount int64) error {
 	if existingGroupAccountCount > 0 {
 		return &InitializeInvalidError{Reason: "检测到未清理的玩家账号数据，请清理后再初始化比赛"}
@@ -908,13 +949,17 @@ func buildInitialBaselineStateSnapshot(submitted bool, appliedGroupCount int) ([
 	})
 }
 
-func buildInitializeGameStateSnapshot(groupCount int, currentOpenYear int, finalYear int, baselineSubmitted bool) ([]byte, error) {
+func buildInitializeGameStateSnapshot(groupCount int, currentOpenYear int, finalYear int, baselineSubmitted bool, edition GameEdition) ([]byte, error) {
 	return json.Marshal(map[string]any{
 		"initialized":              groupCount > 0,
 		"groupCount":               groupCount,
 		"currentOpenYear":          currentOpenYear,
 		"finalYear":                finalYear,
 		"initialBaselineSubmitted": baselineSubmitted,
+		"editionCode":              edition.EditionCode,
+		"editionName":              edition.EditionName,
+		"ruleVersion":              edition.RuleVersion,
+		"templateVersion":          edition.TemplateVersion,
 	})
 }
 

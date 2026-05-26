@@ -19,16 +19,28 @@ ON DUPLICATE KEY UPDATE
     update_time = NOW();
 
 INSERT INTO sg_game_config (
-    id, final_year, current_open_year, rule_version, template_version, initial_baseline_submitted,
+    id, final_year, current_open_year, edition_code, edition_name, rule_version, template_version,
+    operating_template_version, report_template_version, order_template_version, process_rule_version,
+    initial_baseline_submitted,
     creator, create_time, updater, update_time
 )
 VALUES
-    (1, 8, 0, 'excel-final-2026-03-25', 'excel-page-v1', 0, 'seed-competition', NOW(), 'seed-competition', NOW())
+    (
+        1, 8, 0, 'VIP_SERVICE_V1', '贵宾服务版 V1', 'COMMON_FORMULA_V1', 'VIP_SERVICE_V1',
+        'VIP_OPERATING_TEMPLATE_V1', 'VIP_REPORT_TEMPLATE_V1', 'VIP_ORDER_TEMPLATE_V1', 'COMMON_PROCESS_V1',
+        0, 'seed-competition', NOW(), 'seed-competition', NOW()
+    )
 ON DUPLICATE KEY UPDATE
     final_year = VALUES(final_year),
     current_open_year = VALUES(current_open_year),
+    edition_code = VALUES(edition_code),
+    edition_name = VALUES(edition_name),
     rule_version = VALUES(rule_version),
     template_version = VALUES(template_version),
+    operating_template_version = VALUES(operating_template_version),
+    report_template_version = VALUES(report_template_version),
+    order_template_version = VALUES(order_template_version),
+    process_rule_version = VALUES(process_rule_version),
     initial_baseline_submitted = VALUES(initial_baseline_submitted),
     updater = 'seed-competition',
     update_time = NOW();

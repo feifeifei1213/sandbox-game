@@ -130,9 +130,31 @@ func openIntegrationMySQL(t *testing.T) *gorm.DB {
 		t.Skipf("skip integration test: ping mysql failed: %v", err)
 	}
 
+	ensureIntegrationGameConfigEditionColumns(t, db)
 	ensureIntegrationNoticeTables(t, db)
 	ensureIntegrationOrderTables(t, db)
 	return db
+}
+
+func ensureIntegrationGameConfigEditionColumns(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	columns := []string{
+		"EditionCode",
+		"EditionName",
+		"OperatingTemplateVersion",
+		"ReportTemplateVersion",
+		"OrderTemplateVersion",
+		"ProcessRuleVersion",
+	}
+	for _, column := range columns {
+		if db.Migrator().HasColumn(&entity.GameConfig{}, column) {
+			continue
+		}
+		if err := db.Migrator().AddColumn(&entity.GameConfig{}, column); err != nil {
+			t.Fatalf("ensure game config edition column %s: %v", column, err)
+		}
+	}
 }
 
 func ensureIntegrationNoticeTables(t *testing.T, db *gorm.DB) {
@@ -487,8 +509,14 @@ func ensureGameConfigExists(t *testing.T, ctx context.Context, tx *gorm.DB) {
 	item := entity.GameConfig{
 		FinalYear:                8,
 		CurrentOpenYear:          0,
-		RuleVersion:              "integration-test",
-		TemplateVersion:          "integration-test",
+		EditionCode:              GameEditionVIPServiceV1,
+		EditionName:              GameEditionVIPServiceV1Name,
+		RuleVersion:              FormulaVersionCommonV1,
+		TemplateVersion:          TemplateVersionVIPServiceV1,
+		OperatingTemplateVersion: OperatingTemplateVersionVIPServiceV1,
+		ReportTemplateVersion:    ReportTemplateVersionVIPServiceV1,
+		OrderTemplateVersion:     OrderTemplateVersionVIPServiceV1,
+		ProcessRuleVersion:       ProcessRuleVersionCommonV1,
 		InitialBaselineSubmitted: true,
 		BaseEntity: entity.BaseEntity{
 			Creator:    "integration-test",

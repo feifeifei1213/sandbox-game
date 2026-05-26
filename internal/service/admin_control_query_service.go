@@ -32,11 +32,18 @@ type AdminActionSummary struct {
 type AdminControlConfigResult struct {
 	FinalYear                  int                 `json:"finalYear"`
 	CurrentOpenYear            int                 `json:"currentOpenYear"`
+	EditionCode                string              `json:"editionCode"`
+	EditionName                string              `json:"editionName"`
 	CanOpenNextYear            bool                `json:"canOpenNextYear"`
 	NextOpenableYear           int                 `json:"nextOpenableYear"`
 	OpenNextYearBlockedReason  string              `json:"openNextYearBlockedReason"`
 	RuleVersion                string              `json:"ruleVersion"`
+	FormulaVersion             string              `json:"formulaVersion"`
 	TemplateVersion            string              `json:"templateVersion"`
+	OperatingTemplateVersion   string              `json:"operatingTemplateVersion"`
+	ReportTemplateVersion      string              `json:"reportTemplateVersion"`
+	OrderTemplateVersion       string              `json:"orderTemplateVersion"`
+	ProcessRuleVersion         string              `json:"processRuleVersion"`
 	InitialBaselineSubmitted   bool                `json:"initialBaselineSubmitted"`
 	InitialBaselineSubmittedAt *string             `json:"initialBaselineSubmittedAt"`
 	InitialBaselineSubmitter   *string             `json:"initialBaselineSubmitterName"`
@@ -44,12 +51,17 @@ type AdminControlConfigResult struct {
 }
 
 type AdminControlSetupStatusResult struct {
-	Initialized              bool   `json:"initialized"`
-	GroupCount               int    `json:"groupCount"`
-	FinalYear                int    `json:"finalYear"`
-	CurrentOpenYear          int    `json:"currentOpenYear"`
-	InitialBaselineSubmitted bool   `json:"initialBaselineSubmitted"`
-	DefaultRoute             string `json:"defaultRoute"`
+	Initialized              bool          `json:"initialized"`
+	GroupCount               int           `json:"groupCount"`
+	FinalYear                int           `json:"finalYear"`
+	CurrentOpenYear          int           `json:"currentOpenYear"`
+	EditionCode              string        `json:"editionCode"`
+	EditionName              string        `json:"editionName"`
+	RuleVersion              string        `json:"ruleVersion"`
+	TemplateVersion          string        `json:"templateVersion"`
+	AvailableEditions        []GameEdition `json:"availableEditions"`
+	InitialBaselineSubmitted bool          `json:"initialBaselineSubmitted"`
+	DefaultRoute             string        `json:"defaultRoute"`
 }
 
 type InitialBaselineViewResult struct {
@@ -120,15 +132,23 @@ func (s *AdminControlQueryService) GetConfig(ctx context.Context) (*AdminControl
 	if err != nil {
 		return nil, err
 	}
+	edition := normalizeGameConfigEdition(*gameConfig)
 
 	return &AdminControlConfigResult{
 		FinalYear:                  gameConfig.FinalYear,
 		CurrentOpenYear:            gameConfig.CurrentOpenYear,
+		EditionCode:                edition.EditionCode,
+		EditionName:                edition.EditionName,
 		CanOpenNextYear:            openStatus.CanOpenNextYear,
 		NextOpenableYear:           openStatus.NextOpenableYear,
 		OpenNextYearBlockedReason:  openStatus.BlockedReason,
-		RuleVersion:                gameConfig.RuleVersion,
-		TemplateVersion:            gameConfig.TemplateVersion,
+		RuleVersion:                edition.RuleVersion,
+		FormulaVersion:             edition.FormulaVersion,
+		TemplateVersion:            edition.TemplateVersion,
+		OperatingTemplateVersion:   edition.OperatingTemplateVersion,
+		ReportTemplateVersion:      edition.ReportTemplateVersion,
+		OrderTemplateVersion:       edition.OrderTemplateVersion,
+		ProcessRuleVersion:         edition.ProcessRuleVersion,
 		InitialBaselineSubmitted:   gameConfig.InitialBaselineSubmitted,
 		InitialBaselineSubmittedAt: baselineSubmittedAt,
 		InitialBaselineSubmitter:   baselineSubmitterName,
@@ -152,12 +172,18 @@ func (s *AdminControlQueryService) GetSetupStatus(ctx context.Context) (*AdminCo
 	if initialized {
 		defaultRoute = "/sandbox-game/admin/summary"
 	}
+	edition := normalizeGameConfigEdition(*gameConfig)
 
 	return &AdminControlSetupStatusResult{
 		Initialized:              initialized,
 		GroupCount:               int(groupCount),
 		FinalYear:                gameConfig.FinalYear,
 		CurrentOpenYear:          gameConfig.CurrentOpenYear,
+		EditionCode:              edition.EditionCode,
+		EditionName:              edition.EditionName,
+		RuleVersion:              edition.RuleVersion,
+		TemplateVersion:          edition.TemplateVersion,
+		AvailableEditions:        ListGameEditions(),
 		InitialBaselineSubmitted: gameConfig.InitialBaselineSubmitted,
 		DefaultRoute:             defaultRoute,
 	}, nil

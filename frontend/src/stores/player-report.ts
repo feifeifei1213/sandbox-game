@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
 import { getPlayerReportView, savePlayerReportDraft, submitPlayerReport } from '@/api/sandbox-game/player-report'
+import { serviceReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
 import {
   buildReportComputedPreview,
   cloneReportManualPayload,
@@ -46,25 +47,25 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
   const missingFields = computed(() => {
     const missing: string[] = []
     if (draftManualPayload.value.workInProgress === null) {
-      missing.push('在制品')
+      missing.push(serviceReportRequiredFieldLabels.workInProgress)
     }
     if (draftManualPayload.value.finishedGoods === null) {
-      missing.push('成品')
+      missing.push(serviceReportRequiredFieldLabels.finishedGoods)
     }
     if (draftManualPayload.value.rawMaterials === null) {
-      missing.push('材料')
+      missing.push(serviceReportRequiredFieldLabels.rawMaterials)
     }
     if (draftManualPayload.value.incomeTaxRate === null) {
-      missing.push('所得税税率')
+      missing.push(serviceReportRequiredFieldLabels.incomeTaxRate)
     }
     if (draftManualPayload.value.enterpriseCertificationScore === null) {
-      missing.push('企业认证得分')
+      missing.push(serviceReportRequiredFieldLabels.enterpriseCertificationScore)
     }
     if (draftManualPayload.value.productionHumanScore === null) {
-      missing.push('最佳生产人力总监得分')
+      missing.push(serviceReportRequiredFieldLabels.productionHumanScore)
     }
     if (draftManualPayload.value.closingSpeedScore === null) {
-      missing.push('关账速度得分')
+      missing.push(serviceReportRequiredFieldLabels.closingSpeedScore)
     }
     return missing
   })

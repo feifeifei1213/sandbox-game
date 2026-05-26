@@ -75,6 +75,7 @@
 import { computed } from 'vue'
 
 import PlayerNoticePanel from '@/components/sandbox-game/player/PlayerNoticePanel.vue'
+import { serviceReportLabels } from '@/configs/sandbox-game-service-labels'
 import type { PlayerReportView, ReportComputedPayload } from '@/types/sandbox-game'
 import {
   formatBusinessStatus,
@@ -129,7 +130,7 @@ function formatTaxRate(value: number) {
     return '0.25 一般企业'
   }
   if (value === 0.15) {
-    return '0.15 高新企业'
+    return serviceReportLabels.taxRateEnterprise15
   }
   return '0 全额弥补亏损'
 }

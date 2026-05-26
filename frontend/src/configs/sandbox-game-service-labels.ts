@@ -1,0 +1,83 @@
+export const serviceOperatingLabels = {
+  taxPolicyNote: '一般企业 25%，支线机场贵宾 15%',
+  materialGroupTitle: '2. 支付前期花费费用',
+  productionAdjustmentGroupTitle: '3. 贵宾厅调整',
+  humanResourceGroupTitle: '5. 人力资源管理',
+  humanResourceLabel: '支付招聘、辞退、培训、待岗费用',
+  salaryGroupTitle: '6. 贵宾厅空位开始服务，发放服务人员工资',
+  salaryLabel: '支付贵宾厅的服务人员工资',
+  researchAndManagementGroupTitle: '7. 新服务研创 / 8. 管理体系投入',
+  newOrderReminder: '9. 下新服务订单',
+  receivableGroupTitle: '10. 更新应收账款',
+  receivableLabel: '如应收账款进入现金区做记录',
+  receivableReminder: '所有应收向左移动一格',
+  deliveryGroupTitle: '11. 服务验收交付',
+  deliveryRevenueLabel: '服务订单销售额',
+  deliveryCostLabel: '服务订单成本',
+  managementStaffGroupTitle: '12. 支付管理人员费用',
+  lineMaintenanceGroupTitle: '2. 支付贵宾厅年度维护费',
+  lineMaintenanceNote: '1M / 间',
+  assetGroupTitle: '3. 贵宾区资产',
+  assetValueNote: '贵宾A / B / C区 价值（40M、32M、16M）',
+  rentGroupTitle: '4. 贵宾区租金',
+  rentValueNote: '贵宾A / B / C区 租金（4M、3M、2M）',
+  residualGroupTitle: '5. 贵宾厅残值',
+  depreciationGroupTitle: '6. 贵宾厅折旧',
+  workInConstructionLabel: '未完工贵宾厅价值',
+  marketProductFields: [
+    { key: 'agencyInspectionTotal', label: '代办过检服务总价' },
+    { key: 'twoCabinVipTotal', label: '两舱贵宾服务总价' },
+    { key: 'businessVipTotal', label: '商务贵宾服务总价' },
+    { key: 'memberCustomTotal', label: '会员定制服务总价' },
+  ],
+  materialFields: [
+    { key: 'basicProduct', label: '代办过检服务' },
+    { key: 'standardProduct', label: '两舱贵宾服务' },
+    { key: 'precisionProduct', label: '商务贵宾服务' },
+    { key: 'intelligentProduct', label: '会员定制服务' },
+  ],
+  productionLineRows: [
+    { key: 'changeProduct', label: '变更服务', labelColspan: 2 },
+    { key: 'dismantleCost', label: '贵宾厅拆除 1M / 间', labelColspan: 2 },
+    { key: 'lineSale', label: '贵宾厅出售', labelColspan: 2 },
+    { key: 'newLineInstall', label: '新贵宾厅建造', labelColspan: 2 },
+    { key: 'constructionToFixed', label: '贵宾厅残值', groupLabel: '建成贵宾厅转固', groupRowspan: 2 },
+    { key: 'newDepreciableAsset', label: '待折资产', useExistingGroupCell: true },
+  ],
+  researchFields: [
+    { key: 'technologyResearch', label: '新服务研创' },
+    { key: 'managementSystem', label: '质量环境健康费用' },
+  ],
+} as const
+
+export const serviceReportLabels = {
+  workInConstruction: '在建贵宾厅',
+  factoryAsset: '贵宾区',
+  lineResidual: '贵宾厅残值',
+  workInProgress: '在途服务',
+  finishedGoods: '服务验收',
+  rawMaterials: '前期花费',
+  row19Label: '3.服务进度更新',
+  totalLiabilityEquity: '总负债权益',
+  bestProductionHumanDirector: '最佳服务人力总监得分',
+  taxRateEnterprise15: '0.15 支线机场贵宾',
+} as const
+
+export const serviceReportRequiredFieldLabels = {
+  workInProgress: '在途服务',
+  finishedGoods: '服务验收',
+  rawMaterials: '前期花费',
+  incomeTaxRate: '所得税税率',
+  enterpriseCertificationScore: '企业认证得分',
+  productionHumanScore: '最佳服务人力总监得分',
+  closingSpeedScore: '关账速度得分',
+} as const
+
+export const serviceBaselineLabels = {
+  workInConstruction: '在建贵宾厅',
+  factoryAsset: '贵宾区',
+  lineResidual: '贵宾厅残值',
+  workInProgress: '在途服务',
+  finishedGoods: '服务验收',
+  rawMaterials: '前期花费',
+} as const

@@ -39,6 +39,10 @@
         <span class="card-label">当前开放年份</span>
         <strong>{{ setupStatus?.currentOpenYear ?? '--' }}</strong>
       </article>
+      <article class="card">
+        <span class="card-label">沙盘版本</span>
+        <strong>{{ setupStatus?.editionName ?? '--' }}</strong>
+      </article>
     </div>
 
     <div class="split-layout">
@@ -51,6 +55,17 @@
         </div>
 
         <div class="form-grid">
+          <label class="field">
+            <span>沙盘版本</span>
+            <select
+              v-model="editionCodeDraft"
+              :disabled="setupStatus?.initialized || initializing || availableEditions.length === 0"
+            >
+              <option v-for="item in availableEditions" :key="item.editionCode" :value="item.editionCode">
+                {{ item.editionName }}
+              </option>
+            </select>
+          </label>
           <label class="field">
             <span>小组数量</span>
             <input
@@ -71,6 +86,7 @@
         <div class="note-list">
           <span>管理员账号继续保留为 `admin`。</span>
           <span>玩家账号将按 `group01 ~ groupNN` 自动生成，默认密码沿用 `123456`。</span>
+          <span>沙盘版本只允许赛前选择，初始化完成后锁定。</span>
           <span>初始化完成后默认打开 `0年`，正式年份预置但保持锁定。</span>
         </div>
 
@@ -104,6 +120,14 @@
             <span>{{ setupStatus?.initialBaselineSubmitted ? '已提交' : '未提交' }}</span>
           </div>
           <div class="timeline-item">
+            <strong>当前版本</strong>
+            <span>{{ currentEditionDescription }}</span>
+          </div>
+          <div class="timeline-item">
+            <strong>字段模板</strong>
+            <span>{{ currentEditionTemplateText }}</span>
+          </div>
+          <div class="timeline-item">
             <strong>初始化后</strong>
             <span>系统会生成小组主数据、玩家账号与全部年份主状态数据。</span>
           </div>
@@ -132,8 +156,11 @@ const authStore = useAuthStore()
 const { config, setupStatus, loading: shellLoading } = storeToRefs(shellStore)
 
 const groupCountDraft = ref(10)
+const editionCodeDraft = ref('VIP_SERVICE_V1')
 const initializing = ref(false)
 const pageMessage = ref<PageMessage | null>(null)
+
+const availableEditions = computed(() => setupStatus.value?.availableEditions ?? [])
 
 const accountPreviewText = computed(() => {
   const count = normalizeGroupCount(groupCountDraft.value)
@@ -143,12 +170,35 @@ const accountPreviewText = computed(() => {
   return `group01 ~ group${String(count).padStart(2, '0')}`
 })
 
+const selectedEdition = computed(() =>
+  availableEditions.value.find((item) => item.editionCode === editionCodeDraft.value)
+  ?? availableEditions.value.find((item) => item.defaultEdition)
+  ?? null,
+)
+
+const currentEditionDescription = computed(() => {
+  const edition = selectedEdition.value
+  if (edition) {
+    return `${edition.editionName} · ${edition.description}`
+  }
+  return setupStatus.value?.editionName ?? '--'
+})
+
+const currentEditionTemplateText = computed(() => {
+  const edition = selectedEdition.value
+  if (!edition) {
+    return setupStatus.value?.templateVersion ?? '--'
+  }
+  return `${edition.operatingTemplateVersion} / ${edition.reportTemplateVersion} / ${edition.orderTemplateVersion}`
+})
+
 onMounted(async () => {
   try {
     if (!setupStatus.value || !config.value) {
       await shellStore.bootstrap()
     }
     syncGroupCountDraft()
+    syncEditionCodeDraft()
   } catch {
     // 错误消息由 shell store 统一展示。
   }
@@ -161,11 +211,19 @@ watch(
   },
 )
 
+watch(
+  () => [setupStatus.value?.editionCode, setupStatus.value?.availableEditions?.length],
+  () => {
+    syncEditionCodeDraft()
+  },
+)
+
 async function handleRefresh() {
   pageMessage.value = null
   try {
     await shellStore.refreshAll({ silent: true })
     syncGroupCountDraft()
+    syncEditionCodeDraft()
   } catch {
     pageMessage.value = { type: 'error', text: '刷新赛前配置状态失败。' }
   }
@@ -175,7 +233,7 @@ async function handleInitialize() {
   initializing.value = true
   pageMessage.value = null
   try {
-    const result = await initializeAdminGame(normalizeGroupCount(groupCountDraft.value))
+    const result = await initializeAdminGame(normalizeGroupCount(groupCountDraft.value), editionCodeDraft.value)
     await shellStore.refreshAll({ silent: true })
     await authStore.refreshCurrentUser()
     pageMessage.value = {
@@ -197,6 +255,16 @@ async function goToSummary() {
 function syncGroupCountDraft() {
   const nextGroupCount = setupStatus.value?.groupCount
   groupCountDraft.value = nextGroupCount && nextGroupCount > 0 ? nextGroupCount : 10
+}
+
+function syncEditionCodeDraft() {
+  const statusEditionCode = setupStatus.value?.editionCode
+  if (statusEditionCode) {
+    editionCodeDraft.value = statusEditionCode
+    return
+  }
+  const defaultEdition = availableEditions.value.find((item) => item.defaultEdition) ?? availableEditions.value[0]
+  editionCodeDraft.value = defaultEdition?.editionCode ?? 'VIP_SERVICE_V1'
 }
 
 function normalizeGroupCount(value: number) {
@@ -282,7 +350,7 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -348,7 +416,8 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
   color: var(--muted);
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;

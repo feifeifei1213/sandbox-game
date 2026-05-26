@@ -98,6 +98,7 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import ReportSheet from '@/components/sandbox-game/player/ReportSheet.vue'
 import ReportSidebar from '@/components/sandbox-game/player/ReportSidebar.vue'
+import { serviceReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
 import { useAuthStore } from '@/stores/auth'
 import { formatBusinessStatus, formatReportStatus, formatYearStatus } from '@/utils/sandbox-game-display'
 import { usePlayerReportStore } from '@/stores/player-report'
@@ -167,8 +168,15 @@ const previewYear = computed(() => readRouteYear() ?? 0)
 const previewConfig = computed<CurrentGameConfigResult>(() => ({
   currentOpenYear: previewYear.value,
   finalYear: 8,
-  ruleVersion: 'preview',
-  templateVersion: 'preview',
+  editionCode: 'VIP_SERVICE_V1',
+  editionName: '贵宾服务版 V1',
+  ruleVersion: 'COMMON_FORMULA_V1',
+  formulaVersion: 'COMMON_FORMULA_V1',
+  templateVersion: 'VIP_SERVICE_V1',
+  operatingTemplateVersion: 'VIP_OPERATING_TEMPLATE_V1',
+  reportTemplateVersion: 'VIP_REPORT_TEMPLATE_V1',
+  orderTemplateVersion: 'VIP_ORDER_TEMPLATE_V1',
+  processRuleVersion: 'COMMON_PROCESS_V1',
   demoYearEnabled: true,
 }))
 const previewYearTabs = computed<YearTabItem[]>(() => {
@@ -239,25 +247,25 @@ const previewBalancePassed = computed(() => Math.abs(previewBalanceGap.value) <=
 const previewMissingFields = computed(() => {
   const missing: string[] = []
   if (previewDraftManualPayload.value.workInProgress === null) {
-    missing.push('在制品')
+    missing.push(serviceReportRequiredFieldLabels.workInProgress)
   }
   if (previewDraftManualPayload.value.finishedGoods === null) {
-    missing.push('成品')
+    missing.push(serviceReportRequiredFieldLabels.finishedGoods)
   }
   if (previewDraftManualPayload.value.rawMaterials === null) {
-    missing.push('材料')
+    missing.push(serviceReportRequiredFieldLabels.rawMaterials)
   }
   if (previewDraftManualPayload.value.incomeTaxRate === null) {
-    missing.push('所得税税率')
+    missing.push(serviceReportRequiredFieldLabels.incomeTaxRate)
   }
   if (previewDraftManualPayload.value.enterpriseCertificationScore === null) {
-    missing.push('企业认证得分')
+    missing.push(serviceReportRequiredFieldLabels.enterpriseCertificationScore)
   }
   if (previewDraftManualPayload.value.productionHumanScore === null) {
-    missing.push('最佳生产人力总监得分')
+    missing.push(serviceReportRequiredFieldLabels.productionHumanScore)
   }
   if (previewDraftManualPayload.value.closingSpeedScore === null) {
-    missing.push('关账速度得分')
+    missing.push(serviceReportRequiredFieldLabels.closingSpeedScore)
   }
   return missing
 })

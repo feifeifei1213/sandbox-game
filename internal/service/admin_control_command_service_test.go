@@ -102,6 +102,26 @@ func TestValidateInitialBaselineSubmissionAllowsFreshSubmit(t *testing.T) {
 	}
 }
 
+func TestValidateInitializeGameEditionRequiresKnownEdition(t *testing.T) {
+	_, err := validateInitializeGameEdition("")
+	if !errors.Is(err, ErrAdminControlEditionRequired) {
+		t.Fatalf("expected ErrAdminControlEditionRequired, got %v", err)
+	}
+
+	_, err = validateInitializeGameEdition("UNKNOWN")
+	if !errors.Is(err, ErrAdminControlEditionInvalid) {
+		t.Fatalf("expected ErrAdminControlEditionInvalid, got %v", err)
+	}
+
+	edition, err := validateInitializeGameEdition("vip_service_v1")
+	if err != nil {
+		t.Fatalf("expected known edition to pass, got %v", err)
+	}
+	if edition.EditionCode != GameEditionVIPServiceV1 || edition.RuleVersion != FormulaVersionCommonV1 {
+		t.Fatalf("unexpected edition: %#v", edition)
+	}
+}
+
 func TestEnsureUnlockYearAllowedRejectsBlankReason(t *testing.T) {
 	current := state.RuntimeState{
 		YearNo:           2,

@@ -16,10 +16,10 @@ export function getAdminControlSetupStatus() {
   return request<AdminControlSetupStatusResult>('/api/v1/sandbox-game/admin-control/get-setup-status')
 }
 
-export function initializeAdminGame(groupCount: number) {
+export function initializeAdminGame(groupCount: number, editionCode: string) {
   return request<InitializeGameResult>('/api/v1/sandbox-game/admin-control/initialize-game', {
     method: 'POST',
-    body: JSON.stringify({ groupCount }),
+    body: JSON.stringify({ groupCount, editionCode }),
   })
 }
 
