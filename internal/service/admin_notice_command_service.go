@@ -194,6 +194,9 @@ func (s *AdminNoticeCommandService) SendAdjustment(
 	if cmd.Amount <= 0 {
 		return nil, ErrAdminAdjustmentAmountInvalid
 	}
+	if !isWholeNumber(cmd.Amount) {
+		return nil, ErrManualNumberNotInteger
+	}
 	if reason == "" {
 		return nil, ErrAdminAdjustmentReasonRequired
 	}

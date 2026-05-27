@@ -31,6 +31,7 @@ import type {
   UploadOrderExcelResult,
 } from '@/types/sandbox-game-admin'
 import type { AdminMarketSelectionStatus } from '@/types/sandbox-game-order'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 type MessageType = 'success' | 'error' | 'info'
 
@@ -152,6 +153,14 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   }
 
   async function saveConfig() {
+    const sequenceInvalid = editableItems.value.find((item) => !Number.isInteger(Number(item.releaseSequenceNo)) || Number(item.releaseSequenceNo) < 1)
+    if (sequenceInvalid) {
+      pageMessage.value = {
+        type: 'error',
+        text: '释放顺序必须填写正整数',
+      }
+      return
+    }
     savingConfig.value = true
     pageMessage.value = null
     try {
@@ -192,6 +201,14 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   }
 
   async function saveForecastControl() {
+    const forecastInvalid = editableForecastItems.value.find((item) => hasFractionInput(item.orderCount) || Number(item.orderCount) < 0)
+    if (forecastInvalid) {
+      pageMessage.value = {
+        type: 'error',
+        text: '订单数量控制台只能填写非负整数',
+      }
+      return
+    }
     savingForecastControl.value = true
     pageMessage.value = null
     try {

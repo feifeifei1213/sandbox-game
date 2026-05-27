@@ -78,6 +78,7 @@
           :balance-passed="activeBalancePassed"
           :tax-rate-options="activeView?.manualFieldOptions.incomeTaxRateOptions ?? []"
           :missing-fields="activeMissingFields"
+          :integer-issues="activeManualIntegerIssues"
           :dirty="activeDirty"
           :saving="activeSaving"
           :submitting="activeSubmitting"
@@ -139,6 +140,7 @@ const {
   balanceGap,
   balancePassed,
   missingFields,
+  manualIntegerIssues,
   submitReady,
 } = storeToRefs(store)
 const { currentUser } = storeToRefs(authStore)
@@ -301,6 +303,7 @@ const activeComputedPayload = computed(() => (previewMode.value ? previewCompute
 const activeBalanceGap = computed(() => (previewMode.value ? previewBalanceGap.value : balanceGap.value))
 const activeBalancePassed = computed(() => (previewMode.value ? previewBalancePassed.value : balancePassed.value))
 const activeMissingFields = computed(() => (previewMode.value ? previewMissingFields.value : missingFields.value))
+const activeManualIntegerIssues = computed(() => (previewMode.value ? [] : manualIntegerIssues.value))
 const activeSubmitReady = computed(() => (previewMode.value ? previewSubmitReady.value : submitReady.value))
 const activePageMessage = computed(() => (previewMode.value ? previewPageMessage.value : pageMessage.value))
 const activeDirty = computed(() => (previewMode.value ? previewDirty.value : dirty.value))

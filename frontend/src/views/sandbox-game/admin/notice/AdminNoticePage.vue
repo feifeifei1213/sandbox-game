@@ -99,7 +99,15 @@
 
             <label class="field">
               <span>金额</span>
-              <input v-model="store.adjustmentForm.amount" type="number" min="0" step="0.01" placeholder="请输入金额" />
+              <input
+                v-model="store.adjustmentForm.amount"
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric"
+                placeholder="请输入整数金额"
+                :class="{ invalid: hasFractionInput(store.adjustmentForm.amount) }"
+              />
             </label>
           </div>
 
@@ -197,6 +205,7 @@ import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useAdminNoticeStore } from '@/stores/admin-notice'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
 const store = useAdminNoticeStore()
@@ -406,6 +415,12 @@ function formatAmount(value: number) {
   background: #ffffff;
   padding: 10px 12px;
   font: inherit;
+}
+
+.field input.invalid {
+  border-color: var(--danger);
+  background: #fff5f5;
+  color: var(--danger);
 }
 
 .checkbox-field {

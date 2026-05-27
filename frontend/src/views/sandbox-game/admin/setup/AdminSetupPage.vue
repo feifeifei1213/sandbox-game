@@ -74,6 +74,8 @@
               min="1"
               max="10"
               step="1"
+              inputmode="numeric"
+              :class="{ invalid: hasFractionInput(groupCountDraft) }"
               :disabled="setupStatus?.initialized || initializing"
             >
           </label>
@@ -149,6 +151,7 @@ import { useRouter } from 'vue-router'
 import { initializeAdminGame } from '@/api/sandbox-game/admin-control'
 import { useAdminShellStore, type PageMessage } from '@/stores/admin-shell'
 import { useAuthStore } from '@/stores/auth'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 const router = useRouter()
 const shellStore = useAdminShellStore()
@@ -230,6 +233,10 @@ async function handleRefresh() {
 }
 
 async function handleInitialize() {
+  if (hasFractionInput(groupCountDraft.value)) {
+    pageMessage.value = { type: 'error', text: '小组数量必须填写整数。' }
+    return
+  }
   initializing.value = true
   pageMessage.value = null
   try {
@@ -423,6 +430,12 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
   border-radius: 12px;
   border: 1px solid var(--line);
   background: #fbfcfe;
+}
+
+.field input.invalid {
+  border-color: #e17979;
+  background: #fff6f6;
+  color: var(--danger);
 }
 
 .note-list,

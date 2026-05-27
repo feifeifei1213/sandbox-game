@@ -165,6 +165,7 @@ func (h *AdminNoticeHandler) SendAdjustment(c *gin.Context) {
 		case errors.Is(err, service.ErrAdminAdjustmentStageInvalid),
 			errors.Is(err, service.ErrAdminAdjustmentTypeInvalid),
 			errors.Is(err, service.ErrAdminAdjustmentAmountInvalid),
+			errors.Is(err, service.ErrManualNumberNotInteger),
 			errors.Is(err, service.ErrAdminAdjustmentReasonRequired),
 			errors.Is(err, service.ErrAdminAdjustmentYearNotOpen),
 			errors.Is(err, service.ErrAdminAdjustmentStageLocked),
@@ -203,6 +204,8 @@ func resolveAdminNoticeErrorMessage(err error) string {
 		return "奖惩类型不合法"
 	case errors.Is(err, service.ErrAdminAdjustmentAmountInvalid):
 		return "奖惩金额必须大于 0"
+	case errors.Is(err, service.ErrManualNumberNotInteger):
+		return "奖惩金额必须为整数"
 	case errors.Is(err, service.ErrAdminAdjustmentReasonRequired):
 		return "奖惩原因不能为空"
 	case errors.Is(err, service.ErrAdminAdjustmentYearNotOpen):

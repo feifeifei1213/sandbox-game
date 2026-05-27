@@ -165,6 +165,9 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 	}
 
 	normalizedPayload := cmd.OperatingPayload.Normalize().WithoutDerivedValues()
+	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
+		return nil, err
+	}
 	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
@@ -217,6 +220,9 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	}
 
 	normalizedPayload := cmd.OperatingPayload.Normalize().WithoutDerivedValues()
+	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
+		return nil, err
+	}
 	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)

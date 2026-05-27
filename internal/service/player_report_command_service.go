@@ -132,6 +132,10 @@ func (s *PlayerReportCommandService) SaveDraft(ctx context.Context, cmd SavePlay
 		return nil, ErrPlayerReportDraftNotEditable
 	}
 
+	if err := validateReportManualIntegers(cmd.ReportManualPayload); err != nil {
+		return nil, err
+	}
+
 	validation := s.validator.ValidateDraft(&cmd.ReportManualPayload)
 	if !validation.Passed {
 		return nil, ErrPlayerReportDraftInvalid
@@ -171,6 +175,10 @@ func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlaye
 	yearState, err := s.groupYearRepo.GetByGroupIDAndYear(ctx, cmd.GroupID, cmd.YearNo)
 	if err != nil {
 		return nil, fmt.Errorf("load group year state: %w", err)
+	}
+
+	if err := validateReportManualIntegers(cmd.ReportManualPayload); err != nil {
+		return nil, err
 	}
 
 	calcContext, err := s.buildCalculationContext(ctx, *group, *yearState, *gameConfig, cmd.ReportManualPayload)

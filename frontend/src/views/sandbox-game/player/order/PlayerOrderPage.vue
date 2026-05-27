@@ -134,7 +134,7 @@
                   v-for="orderType in orderTypeOptions"
                   :key="`${market.code}-${orderType.code}`"
                   class="investment-cell"
-                  :class="{ disabled: isMarketDisabled(market.code), invalid: investmentErrors[investmentKey(market.code, orderType.code)] }"
+                  :class="{ disabled: isMarketDisabled(market.code), invalid: investmentErrors[investmentKey(market.code, orderType.code)] || hasFractionInput(store.investmentDraft[investmentKey(market.code, orderType.code)]) }"
                   :title="investmentErrors[investmentKey(market.code, orderType.code)] ?? ''"
                 >
                   <input
@@ -142,6 +142,7 @@
                     type="number"
                     min="0"
                     step="1"
+                    inputmode="numeric"
                     :disabled="!currentView.canSubmitInvestment || submittingInvestment || isMarketDisabled(market.code)"
                     @input="handleInvestmentInput(market.code, orderType.code, $event)"
                   >
@@ -377,6 +378,7 @@ import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { investmentKey, PLAYER_ORDER_MARKETS, PLAYER_ORDER_TYPES, usePlayerOrderStore } from '@/stores/player-order'
 import type { OrderDeliveryStageCode, OrderMarketCode, OrderMarketForecastMarket, OrderTypeCode, PlayerOrderPoolItem, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 const route = useRoute()
 const router = useRouter()

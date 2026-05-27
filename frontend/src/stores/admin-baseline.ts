@@ -11,6 +11,7 @@ import type {
 } from '@/types/sandbox-game-admin'
 import { cloneBaselinePayload, createEmptyBaselinePayload } from '@/types/sandbox-game-admin'
 import type { PageMessage } from '@/stores/admin-shell'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 export const useAdminBaselineStore = defineStore('sandbox-admin-baseline', () => {
   const view = ref<InitialBaselineViewResult | null>(null)
@@ -48,6 +49,14 @@ export const useAdminBaselineStore = defineStore('sandbox-admin-baseline', () =>
     if (!view.value?.editable) {
       return
     }
+    const integerIssues = collectBaselineIntegerIssues(draftPayload.value)
+    if (integerIssues.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: `初始基线手工数字必须填写整数：${integerIssues.join('、')}`,
+      }
+      return
+    }
 
     submitting.value = true
     try {
@@ -80,8 +89,15 @@ export const useAdminBaselineStore = defineStore('sandbox-admin-baseline', () =>
     bootstrap,
     updateField,
     submit,
+    collectBaselineIntegerIssues,
   }
 })
+
+function collectBaselineIntegerIssues(payload: BaselinePayload) {
+  return Object.entries(payload)
+    .filter(([, value]) => hasFractionInput(value))
+    .map(([key]) => key)
+}
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {
   if (error instanceof Error && error.message) {

@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
 import { formatStageCode } from '@/utils/sandbox-game-display'
 import { buildOperatingPreviewCalculation } from '@/utils/sandbox-game-operating-preview'
+import { hasFractionInput } from '@/utils/manual-integer'
 import {
   getPlayerOperatingYearView,
   savePlayerOperatingDraft,
@@ -62,6 +63,7 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
         : null,
     }),
   )
+  const manualIntegerIssues = computed(() => collectOperatingIntegerIssues(draftPayload.value))
 
   async function bootstrap(preferredYear?: number) {
     loading.value = true
@@ -113,6 +115,13 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
     if (!view) {
       return
     }
+    if (manualIntegerIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: buildIntegerIssueMessage('经营页手工数字', manualIntegerIssues.value),
+      }
+      return
+    }
     saving.value = true
     try {
       const result = await savePlayerOperatingDraft({
@@ -143,6 +152,13 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
   async function submitCurrentStage() {
     const view = currentView.value
     if (!view) {
+      return
+    }
+    if (manualIntegerIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: buildIntegerIssueMessage('经营页手工数字', manualIntegerIssues.value),
+      }
       return
     }
     submitting.value = true
@@ -184,6 +200,7 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
     reportEnabled,
     currentTab,
     previewCalculation,
+    manualIntegerIssues,
     bootstrap,
     loadYearView,
     updateDraft,
@@ -228,4 +245,54 @@ function formatDateTime(value: string) {
     return value
   }
   return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function collectOperatingIntegerIssues(payload: OperatingPayload) {
+  const issues: string[] = []
+  const normalized = cloneOperatingPayload(payload)
+  collectManualIntegerIssues('年初规划', normalized.beginning.taxAndPlanning, issues)
+  collectManualIntegerIssues('年初市场竞标', normalized.beginning.marketBid, issues)
+  collectManualIntegerIssues('短期贷款', normalized.quarter.shortTermLoan, issues)
+  collectManualIntegerIssues('材料费', normalized.quarter.materialPayment, issues)
+  collectManualIntegerIssues('生产线调整', normalized.quarter.productionLineAdjustment, issues)
+  collectManualIntegerIssues('人力资源', normalized.quarter.humanResource, issues)
+  collectManualIntegerIssues('工资与生产', normalized.quarter.salaryAndProduction, issues)
+  collectManualIntegerIssues('研发与管理', normalized.quarter.researchAndManagement, issues)
+  collectManualIntegerIssues('应收更新', normalized.quarter.receivableUpdate, issues)
+  collectManualIntegerIssues('交货结算', normalized.quarter.deliverySettlement, issues)
+  collectManualIntegerIssues('长期贷款', normalized.yearEnd.longTermLoan, issues)
+  collectManualIntegerIssues('资产调整', normalized.yearEnd.assetAdjustment, issues)
+  collectManualIntegerIssues('其他收支', normalized.extra.incomeAndPenalty, issues)
+  return issues
+}
+
+function collectManualIntegerIssues(label: string, value: unknown, issues: string[]) {
+  if (value === null || value === undefined || value === '') {
+    return
+  }
+  if (typeof value === 'number' || typeof value === 'string') {
+    if (hasFractionInput(value)) {
+      issues.push(label)
+    }
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectManualIntegerIssues(`${label}${index + 1}`, item, issues))
+    return
+  }
+  if (typeof value === 'object') {
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (key === 'orderLinked') {
+        continue
+      }
+      collectManualIntegerIssues(`${label}.${key}`, child, issues)
+    }
+  }
+}
+
+function buildIntegerIssueMessage(scope: string, issues: string[]) {
+  const uniqueIssues = Array.from(new Set(issues))
+  const preview = uniqueIssues.slice(0, 3).join('、')
+  const suffix = uniqueIssues.length > 3 ? `等 ${uniqueIssues.length} 项` : ''
+  return `${scope}必须填写整数，发现小数：${preview}${suffix}`
 }

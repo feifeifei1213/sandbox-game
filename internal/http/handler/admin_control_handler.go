@@ -392,6 +392,13 @@ func (h *AdminControlHandler) SubmitInitialBaseline(c *gin.Context) {
 				"初始基线数据不完整",
 				err,
 			))
+		case errors.Is(err, service.ErrManualNumberNotInteger):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				err.Error(),
+				err,
+			))
 		default:
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,

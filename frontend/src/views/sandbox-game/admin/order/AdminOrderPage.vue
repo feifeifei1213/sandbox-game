@@ -77,6 +77,7 @@
                       max="15"
                       step="1"
                       class="compact-input"
+                      :class="{ invalid: hasFractionInput(getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0) }"
                       :disabled="savingForecastControl || generatingPool || !config?.canUpdateConfig"
                       @input="handleForecastCountInput(yearNo, market.code, orderType.code, $event)"
                     >
@@ -158,7 +159,9 @@
               type="number"
               min="0"
               step="1"
+              inputmode="numeric"
               placeholder="无上限"
+              :class="{ invalid: hasFractionInput(market.marketInvestmentLimit ?? '') }"
               :disabled="savingMarketConfig || !config?.canUpdateConfig || !market.enabled"
               @input="handleMarketLimitInput(market.marketCode, $event)"
             >
@@ -197,7 +200,7 @@
             </tr>
             <tr v-for="item in sortedItems" :key="`${item.marketCode}-${item.orderType}`" :class="{ 'row-disabled': !item.marketEnabled }">
               <td>
-                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input">
+                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" inputmode="numeric" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input" :class="{ invalid: hasFractionInput(item.releaseSequenceNo) }">
               </td>
               <td>
                 {{ item.marketName }}
@@ -473,6 +476,7 @@ import { useAdminShellStore } from '@/stores/admin-shell'
 import { MARKET_OPTIONS, ORDER_TYPE_OPTIONS, useAdminOrderStore } from '@/stores/admin-order'
 import type { OrderPoolStatus } from '@/types/sandbox-game-admin'
 import type { AdminOrderSegmentStatus, OrderMarketForecastMarket } from '@/types/sandbox-game-order'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
 const store = useAdminOrderStore()
@@ -661,7 +665,7 @@ function getForecastYear(stageCode: string, marketCode: string, yearNo: number) 
 function handleForecastCountInput(yearNo: number, marketCode: string, orderType: string, event: Event) {
   const input = event.target as HTMLInputElement
   const raw = Number(input.value)
-  const value = Number.isFinite(raw) ? Math.min(Math.max(Math.trunc(raw), 0), 15) : 0
+  const value = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 15) : 0
   const item = getForecastItem(yearNo, marketCode, orderType)
   if (item) {
     item.orderCount = value
@@ -1089,6 +1093,13 @@ function formatGroupName(groupId?: number | null) {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 8px 10px;
+}
+
+.compact-input.invalid,
+.limit-field input.invalid {
+  border-color: var(--danger);
+  background: #fff5f5;
+  color: var(--danger);
 }
 
 .number-cell {

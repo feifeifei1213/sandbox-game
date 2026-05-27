@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
 import { getPlayerReportView, savePlayerReportDraft, submitPlayerReport } from '@/api/sandbox-game/player-report'
 import { resolveReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
+import { hasFractionInput } from '@/utils/manual-integer'
 import {
   buildReportComputedPreview,
   cloneReportManualPayload,
@@ -44,6 +45,7 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
   )
   const balanceGap = computed(() => reportBalanceGap(previewComputedPayload.value))
   const balancePassed = computed(() => Math.abs(balanceGap.value) <= balanceTolerance)
+  const manualIntegerIssues = computed(() => collectReportIntegerIssues(draftManualPayload.value))
   const missingFields = computed(() => {
     const missing: string[] = []
     const requiredFieldLabels = resolveReportRequiredFieldLabels(currentConfig.value?.editionCode)
@@ -70,7 +72,7 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     }
     return missing
   })
-  const submitReady = computed(() => Boolean(currentView.value?.canSubmit) && missingFields.value.length === 0 && balancePassed.value)
+  const submitReady = computed(() => Boolean(currentView.value?.canSubmit) && missingFields.value.length === 0 && manualIntegerIssues.value.length === 0 && balancePassed.value)
 
   async function bootstrap(preferredYear?: number) {
     loading.value = true
@@ -122,6 +124,13 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     if (!view) {
       return
     }
+    if (manualIntegerIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: `财报手工数字必须填写整数：${manualIntegerIssues.value.join('、')}`,
+      }
+      return
+    }
     saving.value = true
     try {
       const result = await savePlayerReportDraft({
@@ -154,6 +163,13 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
   async function submitCurrentReport() {
     const view = currentView.value
     if (!view) {
+      return
+    }
+    if (manualIntegerIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: `财报手工数字必须填写整数：${manualIntegerIssues.value.join('、')}`,
+      }
       return
     }
     submitting.value = true
@@ -197,6 +213,7 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     balanceGap,
     balancePassed,
     missingFields,
+    manualIntegerIssues,
     submitReady,
     bootstrap,
     loadYearView,
@@ -227,6 +244,21 @@ function resolveInitialYear(result: YearTabsResult, preferredYear?: number) {
   }
 
   return 0
+}
+
+function collectReportIntegerIssues(payload: ReportManualPayload) {
+  const labels = resolveReportRequiredFieldLabels()
+  const entries: Array<[keyof ReportManualPayload, string]> = [
+    ['workInProgress', labels.workInProgress],
+    ['finishedGoods', labels.finishedGoods],
+    ['rawMaterials', labels.rawMaterials],
+    ['enterpriseCertificationScore', labels.enterpriseCertificationScore],
+    ['productionHumanScore', labels.productionHumanScore],
+    ['closingSpeedScore', labels.closingSpeedScore],
+  ]
+  return entries
+    .filter(([key]) => hasFractionInput(payload[key]))
+    .map(([, label]) => label)
 }
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {

@@ -1,4 +1,4 @@
-﻿export type NumericCellValue = number | ''
+﻿export type NumericCellValue = number | string | ''
 export type CellValue = number | string | boolean | null
 export type QuarterValueMap = Record<string, Record<string, NumericCellValue>>
 

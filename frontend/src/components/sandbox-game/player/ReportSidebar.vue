@@ -65,6 +65,7 @@
       <p class="hint">绿色单元格为手工项，黄色单元格为系统计算结果。</p>
       <p v-if="view?.hasInvalidDraft" class="warning">当前为失效草稿状态，必须重新提交后才会恢复正式结果。</p>
       <p v-if="missingFields.length" class="warning">待填写：{{ missingFields.join('、') }}</p>
+      <p v-else-if="integerIssues.length" class="warning">必须为整数：{{ integerIssues.join('、') }}</p>
       <p v-else-if="!balancePassed" class="warning">当前资产负债尚未平衡，不能提交。</p>
       <p v-else-if="!view?.canEdit" class="hint">当前年份财报未开放或已提交，页面为只读状态。</p>
     </section>
@@ -91,6 +92,7 @@ const props = defineProps<{
   balancePassed: boolean
   taxRateOptions: number[]
   missingFields: string[]
+  integerIssues: string[]
   dirty: boolean
   saving: boolean
   submitting: boolean

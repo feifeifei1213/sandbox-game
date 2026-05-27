@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-05-22
+> 更新日期：2026-05-27
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -21,11 +21,11 @@
 ## 开发执行层任务总览
 
 - 总任务数：`39`
-- 已完成：`36`
+- 已完成：`37`
 - 部分完成：`2`
-- 未开始：`1`
+- 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`?? 进行中`
+- 当前状态：`I6-02 已完成，等待页面人工验收或下一任务`
 
 ---
 
@@ -509,7 +509,7 @@
 | Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
 |---|---|---|---|---|---|---|---|
 | I6-01 | 实现市场投入上限与未开启市场自动置零 | P0 | 已完成 | 用户 2026-05-27 确认、`I4-08`、`I4-09` | `migrations/mysql/0010_order_market_investment_limit.sql`、`cmd/dbtool/main.go`、`internal/model/entity/order.go`、`internal/repository/order_repository.go`、`internal/service/admin_order_service.go`、`internal/service/player_order_service.go`、`internal/http/dto/admin_order_dto.go`、`internal/http/handler/admin_order_handler.go`、`internal/http/handler/player_order_handler.go`、`internal/app/router.go`、`frontend/src/types/sandbox-game-admin.ts`、`frontend/src/types/sandbox-game-order.ts`、`frontend/src/stores/admin-order.ts`、`frontend/src/stores/player-order.ts`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`internal/service/order_generation_engine_test.go`、`internal/service/order_workflow_integration_test.go`、`internal/service/player_operating_command_service_test.go` | 未开启市场在玩家端禁用并自动按 `0` 提交；管理员可按 `年份 + 市场` 配置非负整数单市场投入上限，空值为无上限；已有任意小组提交本年投入后市场开启与上限锁定；玩家端展示“未开启 / 无上限 / 上限 XM”；提交时校验市场投入为非负整数且单市场 4 项合计不超过上限，错误提示精确到市场和字段 | 已通过 `GOCACHE=.go-build-cache go test ./...` 与 `frontend/npm.cmd run build`；本轮仅实现 I6-01，不扩大到 I6-02 全局手工数字整数校验 |
-| I6-02 | 实现全局手工数字整数校验 | P0 | 未开始 | 用户 2026-05-27 确认 | 前端整数输入约束、后端统一整数校验工具、经营页/财报页/初始基线/订单数量控制台/通知奖惩等提交链路测试 | 所有用户手工填写的金额、数量、费用、成本、投入、上限、分数等数字均不允许小数；所得税税率下拉、系统计算结果、系统生成订单单价、历史/导入/公式结果展示不受限制；前端提示并高亮小数输入，后端硬校验防绕过 | 范围较大，建议在 `I6-01` 后单独实施 |
+| I6-02 | 实现全局手工数字整数校验 | P0 | 已完成 | 用户 2026-05-27 确认、`I6-01` | `internal/service/manual_integer_validation.go`、`internal/service/manual_integer_validation_test.go`、`internal/service/player_operating_command_service.go`、`internal/service/player_report_command_service.go`、`internal/service/admin_control_command_service.go`、`internal/service/admin_notice_command_service.go`、`internal/http/handler/player_operating_handler.go`、`internal/http/handler/player_report_handler.go`、`internal/http/handler/admin_control_handler.go`、`internal/http/handler/admin_notice_handler.go`、`frontend/src/utils/manual-integer.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSidebar.vue`、`frontend/src/stores/player-operating.ts`、`frontend/src/stores/player-report.ts`、`frontend/src/stores/admin-baseline.ts`、`frontend/src/stores/admin-notice.ts`、`frontend/src/stores/admin-order.ts`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/notice/AdminNoticePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/admin/control/AdminControlPage.vue`、`frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue` | 所有用户手工填写的金额、数量、费用、成本、投入、上限、分数、最终年份、小组数量等数字均按整数口径校验；所得税税率下拉、系统计算结果、系统生成订单单价、历史/导入/公式结果展示不受限制；前端对小数输入高亮并阻止提交，后端在经营页、财报页、初始基线、奖惩金额等提交链路硬校验防绕过 | 已通过 `GOCACHE=.go-build-cache go test ./...` 与 `frontend/npm.cmd run build`；Go telemetry 仍因用户目录权限打印 token 告警但测试退出码为 0 |
 
 ### 12.1 本轮新增记录
 
@@ -576,6 +576,7 @@
 | 2026-05-27 | 任务状态：✅ 已完成；落点：`frontend/src/views/sandbox-game/admin/AdminLayout.vue`、`docs/implementation_plan.md`；偏差说明：用户验收生产制造版字段模板时，希望管理员端顶部状态条直接显示当前比赛版本。本轮在管理员端顶部状态 pill 中新增“版本：{editionName}”，优先读取当前游戏配置，未加载配置时使用赛前状态兜底，不改变赛前选择和初始化锁定逻辑；下一步：运行前端构建验证并由用户页面确认显示位置。 |
 | 2026-05-27 | 任务状态：⏳ 未开始；落点：`docs/requirements_spec.md`、`docs/api_design.md`、`docs/database_design.md`、`docs/excel_field_mapping.md`、`docs/calculation_rule_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/minimal_state_machine.md`、`docs/order_module_acceptance_checklist.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md`；偏差说明：本轮仅按用户要求完成新功能方案文档，不进入代码实现。新增 `I6-01 / I6-02`：未开启市场改为玩家端禁用并由系统自动按 `0` 提交；管理员可按 `年份 + 市场` 配置单市场投入上限，空值为无上限；市场投入和上限均必须为非负整数；已有任意小组提交本年市场投入后市场配置锁定；暂不做可用资金总额校验；同时确认全局“用户手工填写数字必须为整数”，但所得税税率下拉、系统计算结果、系统生成订单单价、历史/导入/公式结果展示除外。下一步：用户确认文档后，先实现 `I6-01`。 |
 | 2026-05-27 | 任务状态：✅ 已完成；落点：`migrations/mysql/0010_order_market_investment_limit.sql`、`cmd/dbtool/main.go`、`internal/model/entity/order.go`、`internal/repository/order_repository.go`、`internal/service/admin_order_service.go`、`internal/service/player_order_service.go`、`internal/http/dto/admin_order_dto.go`、`internal/http/handler/admin_order_handler.go`、`internal/http/handler/player_order_handler.go`、`internal/app/router.go`、`frontend/src/types/sandbox-game-admin.ts`、`frontend/src/types/sandbox-game-order.ts`、`frontend/src/stores/admin-order.ts`、`frontend/src/stores/player-order.ts`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`internal/service/order_generation_engine_test.go`、`internal/service/order_workflow_integration_test.go`、`internal/service/player_operating_command_service_test.go`、`internal/service/admin_control_command_integration_test.go`、`docs/implementation_plan.md`；偏差说明：本轮按已确认范围完成 `I6-01`，未扩展到 `I6-02` 全局手工数字整数校验；未开启市场玩家端输入禁用并由提交 payload 自动置 `0`，后端继续硬校验非 `0` 绕过；管理员端新增单市场投入上限输入，订单池确认或已有任意小组提交本年市场投入后锁定；同时补充初始化集成测试的动作日志隔离，避免本地测试库历史记录影响全量测试；验证：已通过 `GOCACHE=.go-build-cache go test ./...` 与 `frontend/npm.cmd run build`，Go telemetry 仍因用户目录权限打印 token 告警但测试退出码为 0；下一步：进入 I6-02 前先再次确认全局整数输入覆盖范围与页面改动优先级。 |
+| 2026-05-27 | 任务状态：✅ 已完成；落点：`internal/service/manual_integer_validation.go`、`internal/service/manual_integer_validation_test.go`、`internal/service/player_operating_command_service.go`、`internal/service/player_report_command_service.go`、`internal/service/admin_control_command_service.go`、`internal/service/admin_notice_command_service.go`、`internal/http/handler/player_operating_handler.go`、`internal/http/handler/player_report_handler.go`、`internal/http/handler/admin_control_handler.go`、`internal/http/handler/admin_notice_handler.go`、`frontend/src/utils/manual-integer.ts`、`frontend/src/types/sandbox-game.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSidebar.vue`、`frontend/src/stores/player-operating.ts`、`frontend/src/stores/player-report.ts`、`frontend/src/stores/admin-baseline.ts`、`frontend/src/stores/admin-notice.ts`、`frontend/src/stores/admin-order.ts`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/notice/AdminNoticePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/admin/control/AdminControlPage.vue`、`frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue`、`docs/implementation_plan.md`；偏差说明：本轮完成 `I6-02` 全局手工数字整数校验；经营页与财报页为保留用户输入的小数字符串，将手工数字类型扩展为 `number | string | ''`，只对手工输入区生效，派生值、系统计算结果、订单单价、历史展示和所得税税率下拉不纳入整数限制；管理员最终年份和赛前小组数量补充前端整数提示，但后端仍沿用原有整数 DTO/业务校验。验证：已通过 `GOCACHE=.go-build-cache go test ./...` 与 `frontend/npm.cmd run build`，Go telemetry 仍因用户目录权限打印 token 告警但测试退出码为 0；下一步：用户可按经营页/财报页/初始基线/订单页/通知奖惩页面做小数输入人工验收。 |
 
 
 

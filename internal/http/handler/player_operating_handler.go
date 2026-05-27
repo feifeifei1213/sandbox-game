@@ -165,6 +165,13 @@ func (h *PlayerOperatingHandler) SaveDraft(c *gin.Context) {
 				"当前年份不允许保存经营页草稿",
 				err,
 			))
+		case errors.Is(err, service.ErrManualNumberNotInteger):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				err.Error(),
+				err,
+			))
 		default:
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,
@@ -261,6 +268,13 @@ func (h *PlayerOperatingHandler) SubmitStage(c *gin.Context) {
 				http.StatusUnprocessableEntity,
 				enum.UnprocessableEntityCode,
 				"本年订单选择尚未完成，不能提交 Q1",
+				err,
+			))
+		case errors.Is(err, service.ErrManualNumberNotInteger):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				err.Error(),
 				err,
 			))
 		default:

@@ -61,21 +61,23 @@
           <tr v-for="(region, index) in marketRegions" :key="region.key">
             <th class="row-head">{{ 4 + index }}</th>
             <td class="note-cell center">{{ region.label }}</td>
-            <td v-for="field in marketProductFields" :key="`${region.key}-${field.key}`" :class="editableCellClass('YEAR_START')">
+            <td v-for="field in marketProductFields" :key="`${region.key}-${field.key}`" :class="editableCellClass('YEAR_START', marketBidRows[index][field.key])">
               <input
                 :value="displayCell(marketBidRows[index][field.key])"
                 :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateMarketBidField(index, field.key, $event)"
               />
             </td>
             <td class="result-cell">{{ formatNumber(getMarketRowTotal(index)) }}</td>
             <td v-if="index === 0" class="result-cell" :rowspan="marketRegions.length">{{ formatNumber(marketOrderTotal) }}</td>
-            <td v-if="index === 0" :class="editableCellClass('YEAR_START')" :rowspan="marketRegions.length">
+            <td v-if="index === 0" :class="editableCellClass('YEAR_START', marketInvestmentTotal)" :rowspan="marketRegions.length">
               <input
                 :value="displayCell(marketInvestmentTotal)"
                 :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateMarketInvestmentTotal($event)"
               />
             </td>
@@ -95,11 +97,12 @@
           <tr v-for="(field, index) in shortTermLoanFields" :key="`loan-${field.key}`">
             <th class="row-head">{{ 9 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
-            <td v-for="quarter in quarterList" :key="`loan-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`loan-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('shortTermLoan', quarter.key, field.key))">
               <input
                 :value="displayCell(getQuarterFieldValue('shortTermLoan', quarter.key, field.key))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('shortTermLoan', quarter.key, field.key, $event)"
               />
             </td>
@@ -123,11 +126,12 @@
           <tr v-for="(field, index) in materialFields" :key="`material-${field.key}`">
             <th class="row-head">{{ 14 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
-            <td v-for="quarter in quarterList" :key="`material-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`material-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('materialPayment', quarter.key, field.key))">
               <input
                 :value="displayCell(getQuarterFieldValue('materialPayment', quarter.key, field.key))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('materialPayment', quarter.key, field.key, $event)"
               />
             </td>
@@ -168,11 +172,12 @@
             <template v-else>
               <td class="note-cell" colspan="2">{{ field.label }}</td>
             </template>
-            <td v-for="quarter in quarterList" :key="`line-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`line-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('productionLineAdjustment', quarter.key, field.key))">
               <input
                 :value="displayCell(getQuarterFieldValue('productionLineAdjustment', quarter.key, field.key))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('productionLineAdjustment', quarter.key, field.key, $event)"
               />
             </td>
@@ -191,11 +196,12 @@
           <tr>
             <th class="row-head">28</th>
             <td class="note-cell">{{ labels.humanResourceLabel }}</td>
-            <td v-for="quarter in quarterList" :key="`hr-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`hr-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('humanResource', quarter.key, 'staffCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('humanResource', quarter.key, 'staffCost'))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('humanResource', quarter.key, 'staffCost', $event)"
               />
             </td>
@@ -214,11 +220,12 @@
           <tr>
             <th class="row-head">30</th>
             <td class="note-cell">{{ labels.salaryLabel }}</td>
-            <td v-for="quarter in quarterList" :key="`salary-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`salary-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('salaryAndProduction', quarter.key, 'salaryCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('salaryAndProduction', quarter.key, 'salaryCost'))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('salaryAndProduction', quarter.key, 'salaryCost', $event)"
               />
             </td>
@@ -237,11 +244,12 @@
           <tr v-for="(field, index) in researchFields" :key="`research-${field.key}`">
             <th class="row-head">{{ 32 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
-            <td v-for="quarter in quarterList" :key="`research-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`research-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('researchAndManagement', quarter.key, field.key))">
               <input
                 :value="displayCell(getQuarterFieldValue('researchAndManagement', quarter.key, field.key))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('researchAndManagement', quarter.key, field.key, $event)"
               />
             </td>
@@ -264,11 +272,12 @@
           <tr>
             <th class="row-head">36</th>
             <td class="note-cell">{{ labels.receivableLabel }}</td>
-            <td v-for="quarter in quarterList" :key="`receivable-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`receivable-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('receivableUpdate', quarter.key, 'receivableCollection'))">
               <input
                 :value="displayCell(getQuarterFieldValue('receivableUpdate', quarter.key, 'receivableCollection'))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('receivableUpdate', quarter.key, 'receivableCollection', $event)"
               />
             </td>
@@ -291,11 +300,12 @@
           <tr>
             <th class="row-head">39</th>
             <td class="note-cell">{{ labels.deliveryRevenueLabel }}</td>
-            <td v-for="quarter in quarterList" :key="`sales-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`sales-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('deliverySettlement', quarter.key, 'salesRevenue', $event)"
               />
             </td>
@@ -305,11 +315,12 @@
           <tr>
             <th class="row-head">40</th>
             <td class="note-cell">{{ labels.deliveryCostLabel }}</td>
-            <td v-for="quarter in quarterList" :key="`cost-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`cost-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'directCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'directCost'))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('deliverySettlement', quarter.key, 'directCost', $event)"
               />
             </td>
@@ -328,11 +339,12 @@
           <tr>
             <th class="row-head">42</th>
             <td class="note-cell">管理人员费用</td>
-            <td v-for="quarter in quarterList" :key="`management-${quarter.key}`" :class="editableCellClass(quarter.scope)">
+            <td v-for="quarter in quarterList" :key="`management-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'managementStaffCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'managementStaffCost'))"
                 :disabled="!isScopeEditable(quarter.scope)"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateQuarterField('deliverySettlement', quarter.key, 'managementStaffCost', $event)"
               />
             </td>
@@ -357,11 +369,12 @@
             <td class="group-title" rowspan="3">1. 办理长期贷款账期更新</td>
             <td class="note-cell">付利息</td>
             <td class="note-cell center" colspan="5">年利率 5%</td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('longTermLoan', 'interest'))">
               <input
                 :value="displayCell(getYearEndFieldValue('longTermLoan', 'interest'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('longTermLoan', 'interest', $event)"
               />
             </td>
@@ -372,11 +385,12 @@
             <th class="row-head">45</th>
             <td class="note-cell">到期还款</td>
             <td class="note-cell center" colspan="5">------------------------------</td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('longTermLoan', 'repayment'))">
               <input
                 :value="displayCell(getYearEndFieldValue('longTermLoan', 'repayment'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('longTermLoan', 'repayment', $event)"
               />
             </td>
@@ -385,11 +399,12 @@
             <th class="row-head">46</th>
             <td class="note-cell">办理新贷款</td>
             <td class="note-cell center" colspan="5">------------------------------</td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('longTermLoan', 'newLoan'))">
               <input
                 :value="displayCell(getYearEndFieldValue('longTermLoan', 'newLoan'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('longTermLoan', 'newLoan', $event)"
               />
             </td>
@@ -400,11 +415,12 @@
             <td class="group-title">{{ labels.lineMaintenanceGroupTitle }}</td>
             <td class="note-cell center">{{ labels.lineMaintenanceNote }}</td>
             <td class="empty-cell" colspan="5"></td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'lineMaintenance'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'lineMaintenance'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('assetAdjustment', 'lineMaintenance', $event)"
               />
             </td>
@@ -416,11 +432,12 @@
             <td class="group-title" rowspan="2">{{ labels.assetGroupTitle }}</td>
             <td class="note-cell center">购买</td>
             <td class="note-cell center" colspan="5">{{ labels.assetValueNote }}</td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'purchase'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'purchase'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('assetAdjustment', 'purchase', $event)"
               />
             </td>
@@ -430,11 +447,12 @@
             <th class="row-head">49</th>
             <td class="note-cell center">出售</td>
             <td class="note-cell center" colspan="5">{{ labels.assetValueNote }}</td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'sale'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'sale'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('assetAdjustment', 'sale', $event)"
               />
             </td>
@@ -446,11 +464,12 @@
             <td class="group-title">{{ labels.rentGroupTitle }}</td>
             <td class="note-cell center">付租金</td>
             <td class="note-cell center" colspan="5">{{ labels.rentValueNote }}</td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'rent'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'rent'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('assetAdjustment', 'rent', $event)"
               />
             </td>
@@ -483,11 +502,12 @@
             <th class="row-head">54</th>
             <td class="note-cell">{{ labels.workInConstructionLabel }}</td>
             <td class="empty-cell" colspan="5"></td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'workInConstruction'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'workInConstruction'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('assetAdjustment', 'workInConstruction', $event)"
               />
             </td>
@@ -499,11 +519,12 @@
             <td class="group-title">7. 新市场培育</td>
             <td class="empty-cell"></td>
             <td class="note-cell center" colspan="5">每年可向区域、全国、全球各投 1M</td>
-            <td :class="editableCellClass('YEAR_END')">
+            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'marketCultivation'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'marketCultivation'))"
                 :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="decimal"
+                inputmode="numeric"
+                pattern="[0-9-]*"
                 @input="updateYearEndField('assetAdjustment', 'marketCultivation', $event)"
               />
             </td>
@@ -530,7 +551,8 @@
                 <input
                   :value="displayCell(getQuarterFieldValue('incomeAndPenalty', quarter.key, field.key))"
                   :disabled="!isScopeEditable(quarter.scope)"
-                  inputmode="decimal"
+                  inputmode="numeric"
+                  pattern="[0-9-]*"
                   @input="updateQuarterField('incomeAndPenalty', quarter.key, field.key, $event)"
                 />
               </template>
@@ -597,6 +619,7 @@ import { computed } from 'vue'
 
 import { serviceOperatingLabels, type SandboxGameOperatingLabels } from '@/configs/sandbox-game-service-labels'
 import { cloneOperatingPayload, type CellValue, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 type MarketBidKey =
   | 'basicProductTotal'
@@ -761,9 +784,9 @@ function isScopeInvalidDraft(scope: string) {
   return props.invalidScopes.includes(scope)
 }
 
-function editableCellClass(scope: string) {
+function editableCellClass(scope: string, value?: unknown) {
   if (isScopeEditable(scope)) {
-    return 'input-cell'
+    return hasFractionInput(value) ? 'input-cell manual-integer-invalid-cell' : 'input-cell'
   }
   if (isScopeInvalidDraft(scope)) {
     return 'invalid-draft-cell'
@@ -779,7 +802,7 @@ function extraCellClass(fieldKey: string, scope: string) {
   if (isAdminIssuedExtraField(fieldKey)) {
     return 'admin-issued-cell'
   }
-  return editableCellClass(scope)
+  return editableCellClass(scope, getQuarterFieldValue('incomeAndPenalty', scope.toLowerCase(), fieldKey))
 }
 
 function displayExtraReadonlyCell(quarterKey: string, fieldKey: string) {
@@ -799,7 +822,10 @@ function normalizeNumericValue(raw: string): NumericCellValue {
     return ''
   }
   const parsed = Number(value)
-  return Number.isNaN(parsed) ? '' : parsed
+  if (Number.isNaN(parsed)) {
+    return ''
+  }
+  return Number.isInteger(parsed) ? parsed : value
 }
 
 function parseNumber(value: unknown): number | null {
@@ -1277,6 +1303,14 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   color: #8a5a17;
 }
 
+.manual-integer-invalid-cell {
+  background: #fff5f5;
+}
+
+.manual-integer-invalid-cell input {
+  color: var(--danger);
+}
+
 .result-cell,
 .quarter-cash-cell {
   background: var(--calc-bg);
@@ -1302,6 +1336,9 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   }
 }
 </style>
+
+
+
 
 
 

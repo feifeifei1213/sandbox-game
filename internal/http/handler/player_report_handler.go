@@ -171,6 +171,13 @@ func (h *PlayerReportHandler) SaveDraft(c *gin.Context) {
 				"当前财报草稿不符合保存要求",
 				err,
 			))
+		case errors.Is(err, service.ErrManualNumberNotInteger):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				err.Error(),
+				err,
+			))
 		default:
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,
@@ -261,6 +268,13 @@ func (h *PlayerReportHandler) Submit(c *gin.Context) {
 				http.StatusUnprocessableEntity,
 				enum.UnprocessableEntityCode,
 				"当前财报不满足提交要求",
+				err,
+			))
+		case errors.Is(err, service.ErrManualNumberNotInteger):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				err.Error(),
 				err,
 			))
 		default:

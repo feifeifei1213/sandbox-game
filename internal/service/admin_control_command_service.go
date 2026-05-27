@@ -868,6 +868,9 @@ func validateInitialBaselineSubmission(alreadySubmitted bool, baselinePayload *p
 	if alreadySubmitted {
 		return ErrAdminControlInitialBaselineSubmitted
 	}
+	if err := validateBaselineManualIntegers(*baselinePayload); err != nil {
+		return err
+	}
 	return nil
 }
 

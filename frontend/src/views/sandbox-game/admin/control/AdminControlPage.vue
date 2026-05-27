@@ -48,7 +48,15 @@
         <div class="form-grid">
           <label class="field">
             <span>最终年份</span>
-            <input v-model.number="finalYearDraft" type="number" min="0" step="1" :disabled="updatingFinalYear || shellLoading">
+            <input
+              v-model.number="finalYearDraft"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+              :class="{ invalid: hasFractionInput(finalYearDraft) }"
+              :disabled="updatingFinalYear || shellLoading"
+            >
           </label>
           <label class="field">
             <span>准备开放到</span>
@@ -108,6 +116,7 @@ import { storeToRefs } from 'pinia'
 
 import { openAdminNextYear, updateAdminFinalYear } from '@/api/sandbox-game/admin-control'
 import { useAdminShellStore, type PageMessage } from '@/stores/admin-shell'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
 const { config, loading: shellLoading } = storeToRefs(shellStore)
@@ -155,6 +164,10 @@ async function handleRefresh() {
 
 async function handleUpdateFinalYear() {
   if (!config.value) {
+    return
+  }
+  if (hasFractionInput(finalYearDraft.value)) {
+    pageMessage.value = { type: 'error', text: '最终年份必须填写整数。' }
     return
   }
   updatingFinalYear.value = true
@@ -349,6 +362,12 @@ function formatDateTime(value?: string | null) {
   border-radius: 12px;
   background: #ffffff;
   padding: 10px 12px;
+}
+
+.field input.invalid {
+  border-color: #e17979;
+  background: #fff6f6;
+  color: var(--danger);
 }
 
 .state-line {

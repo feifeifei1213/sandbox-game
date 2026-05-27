@@ -68,7 +68,8 @@
                 <input
                   :value="manualInputValue(row.profit.manualKey)"
                   :disabled="!canEdit"
-                  inputmode="decimal"
+                  inputmode="numeric"
+                  pattern="[0-9-]*"
                   @input="updateManualNumber(row.profit.manualKey, $event)"
                 />
               </template>
@@ -83,7 +84,8 @@
                 <input
                   :value="manualInputValue(row.asset.manualKey)"
                   :disabled="!canEdit"
-                  inputmode="decimal"
+                  inputmode="numeric"
+                  pattern="[0-9-]*"
                   @input="updateManualNumber(row.asset.manualKey, $event)"
                 />
               </template>
@@ -104,7 +106,8 @@
                 <input
                   :value="manualInputValue(row.liability.manualKey)"
                   :disabled="!canEdit"
-                  inputmode="decimal"
+                  inputmode="numeric"
+                  pattern="[0-9-]*"
                   @input="updateManualNumber(row.liability.manualKey, $event)"
                 />
               </template>
@@ -151,6 +154,7 @@ import { computed } from 'vue'
 import { serviceReportLabels, type SandboxGameReportLabels } from '@/configs/sandbox-game-service-labels'
 import type { ReportComputedPayload, ReportManualPayload } from '@/types/sandbox-game'
 import { cloneReportManualPayload } from '@/types/sandbox-game'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 type ManualKey = keyof ReportManualPayload
 type ComputedKey = keyof ReportComputedPayload
@@ -239,11 +243,13 @@ function labelCellClass(cell: SheetCell) {
 
 function valueCellClass(cell: SheetCell) {
   const isManualCell = cell.kind === 'manual-number' || cell.kind === 'manual-select'
+  const hasManualFraction = cell.kind === 'manual-number' && hasFractionInput(manualInputValue(cell.manualKey))
   return {
     'value-cell': true,
     'auto-cell': cell.kind === 'computed',
     'manual-cell': isManualCell,
     'manual-invalid-cell': isManualCell && props.hasInvalidDraft,
+    'manual-integer-invalid-cell': hasManualFraction,
     'blank-cell': cell.kind === 'blank',
   }
 }
@@ -434,6 +440,10 @@ function formatTaxRate(value: number) {
   background: #f7e3c1;
 }
 
+.manual-integer-invalid-cell {
+  background: #fff5f5;
+}
+
 .blank-cell {
   background: #ffffff;
 }
@@ -497,6 +507,11 @@ function formatTaxRate(value: number) {
   color: #7a5419;
 }
 
+.manual-integer-invalid-cell input,
+.manual-integer-invalid-cell input:disabled {
+  color: var(--danger);
+}
+
 @media (max-width: 1024px) {
   .sheet-table th,
   .sheet-table td {
@@ -509,4 +524,5 @@ function formatTaxRate(value: number) {
   }
 }
 </style>
+
 

@@ -131,6 +131,38 @@ func TestAdminNoticeCommandServiceRejectsAdjustmentForLockedStage(t *testing.T) 
 	}
 }
 
+func TestAdminNoticeCommandServiceRejectsDecimalAdjustmentAmount(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureGameConfigExists(t, ctx, tx)
+
+	groupID := createAdminNoticeFixtures(t, ctx, tx, enum.YearStatusOperating, enum.StageStatusQ1Open)
+	commandService := NewAdminNoticeCommandService(tx)
+
+	_, err := commandService.SendAdjustment(ctx, SendAdjustmentCommand{
+		GroupID:        groupID,
+		YearNo:         0,
+		StageCode:      state.StageCodeQ1,
+		AdjustmentType: adjustmentTypeReward,
+		Amount:         6.5,
+		Reason:         "decimal amount should reject",
+		OperatorID:     1,
+		OperatorName:   "integration-test",
+	})
+	if !errors.Is(err, ErrManualNumberNotInteger) {
+		t.Fatalf("expected ErrManualNumberNotInteger, got %v", err)
+	}
+}
+
 func buildPlayerNoticeService(db *gorm.DB) *PlayerNoticeService {
 	return NewPlayerNoticeService(
 		repository.NewNoticeRepository(db),

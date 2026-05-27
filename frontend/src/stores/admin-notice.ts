@@ -14,6 +14,7 @@ import type {
   AdjustmentType,
   NoticeTargetScope,
 } from '@/types/sandbox-game-admin'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 type MessageType = 'success' | 'error' | 'info'
 
@@ -102,6 +103,13 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
   }
 
   async function sendAdjustmentNotice() {
+    if (hasFractionInput(adjustmentForm.amount)) {
+      pageMessage.value = {
+        type: 'error',
+        text: '奖惩金额必须填写整数',
+      }
+      return
+    }
     sendingAdjustment.value = true
     pageMessage.value = null
     try {

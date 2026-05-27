@@ -44,11 +44,12 @@
               <tr v-for="field in fieldDefs" :key="field.key">
                 <td class="section-cell">{{ field.section }}</td>
                 <td class="row-title">{{ field.label }}</td>
-                <td class="input-cell">
+                <td class="input-cell" :class="{ invalid: hasFractionValue(draftPayload[field.key]) }">
                   <input
                     :value="draftPayload[field.key]"
                     type="number"
-                    step="0.01"
+                    step="1"
+                    inputmode="numeric"
                     :disabled="!view?.editable"
                     @input="handleFieldInput(field.key, $event)"
                   >
@@ -110,6 +111,7 @@ import { resolveBaselineLabels } from '@/configs/sandbox-game-service-labels'
 import { useAdminBaselineStore } from '@/stores/admin-baseline'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import type { BaselinePayload } from '@/types/sandbox-game-admin'
+import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
 const baselineStore = useAdminBaselineStore()
@@ -176,6 +178,10 @@ function handleFieldInput(key: keyof BaselinePayload, event: Event) {
   const target = event.target as HTMLInputElement
   const nextValue = Number(target.value)
   baselineStore.updateField(key, Number.isFinite(nextValue) ? nextValue : 0)
+}
+
+function hasFractionValue(value: number) {
+  return hasFractionInput(value)
 }
 
 function formatDateTime(value?: string | null) {
@@ -329,6 +335,12 @@ function formatDateTime(value?: string | null) {
 
 .input-cell input:disabled {
   background: var(--readonly-bg);
+}
+
+.input-cell.invalid input {
+  border-color: var(--danger);
+  background: #fff5f5;
+  color: var(--danger);
 }
 
 .note-cell {
