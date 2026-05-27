@@ -137,19 +137,33 @@
     <section class="panel-card">
       <div class="panel-head">
         <div>
-          <strong>市场开启设置</strong>
-          <span>本地市场默认开启；未开启市场不生成订单、不进入抢单，玩家仍需填写 0。</span>
+          <strong>市场开启与投入上限</strong>
+          <span>本地市场默认开启；未开启市场不生成订单、不进入抢单，玩家端自动按 0 提交。</span>
         </div>
         <button type="button" class="btn primary" :disabled="savingMarketConfig || !config?.canUpdateConfig" @click="handleSaveMarketConfig">
           {{ savingMarketConfig ? '保存中...' : '保存市场' }}
         </button>
       </div>
       <div class="market-config-grid">
-        <label v-for="market in editableMarketConfigs" :key="market.marketCode" class="market-config-item" :class="{ disabled: !market.enabled }">
-          <input v-model="market.enabled" type="checkbox" :disabled="savingMarketConfig || !config?.canUpdateConfig" @change="syncMarketDraftToItems">
-          <span>{{ market.marketName }}</span>
-          <em>{{ market.enabled ? '已开启' : '未开启' }}</em>
-        </label>
+        <div v-for="market in editableMarketConfigs" :key="market.marketCode" class="market-config-item" :class="{ disabled: !market.enabled }">
+          <label class="market-toggle">
+            <input v-model="market.enabled" type="checkbox" :disabled="savingMarketConfig || !config?.canUpdateConfig" @change="syncMarketDraftToItems">
+            <span>{{ market.marketName }}</span>
+            <em>{{ market.enabled ? '已开启' : '未开启' }}</em>
+          </label>
+          <label class="limit-field">
+            <span>单市场上限（M）</span>
+            <input
+              :value="market.marketInvestmentLimit ?? ''"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="无上限"
+              :disabled="savingMarketConfig || !config?.canUpdateConfig || !market.enabled"
+              @input="handleMarketLimitInput(market.marketCode, $event)"
+            >
+          </label>
+        </div>
       </div>
     </section>
 
@@ -613,6 +627,20 @@ function syncMarketDraftToItems() {
   for (const item of sortedItems.value) {
     item.marketEnabled = enabledMap.get(item.marketCode) ?? item.marketEnabled
   }
+}
+
+function handleMarketLimitInput(marketCode: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  const market = editableMarketConfigs.value.find((item) => item.marketCode === marketCode)
+  if (!market) {
+    return
+  }
+  if (input.value === '') {
+    market.marketInvestmentLimit = null
+    return
+  }
+  const raw = Number(input.value)
+  market.marketInvestmentLimit = Number.isFinite(raw) ? raw : null
 }
 
 function getForecastItem(yearNo: number, marketCode: string, orderType: string) {
@@ -1291,9 +1319,7 @@ function formatGroupName(groupId?: number | null) {
 
 .market-config-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 10px;
-  align-items: center;
+  gap: 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px;
@@ -1306,10 +1332,34 @@ function formatGroupName(groupId?: number | null) {
 }
 
 .market-config-item em {
-  grid-column: 2;
   color: var(--muted);
   font-size: 12px;
   font-style: normal;
+}
+
+.market-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.limit-field {
+  display: grid;
+  gap: 5px;
+}
+
+.limit-field span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.limit-field input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
 }
 
 .pool-filter {

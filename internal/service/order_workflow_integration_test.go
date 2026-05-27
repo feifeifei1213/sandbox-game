@@ -536,6 +536,131 @@ func TestOrderMarketDisabledRequiresZeroInvestment(t *testing.T) {
 	}
 }
 
+func TestOrderMarketInvestmentLimitAndConfigLock(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	yearNo := 1
+	now := time.Now()
+
+	ensureIntegrationGameConfig(t, ctx, tx, yearNo, yearNo, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, yearNo)
+	isolateOrderIntegrationGroups(t, ctx, tx)
+
+	groupID := createOrderIntegrationGroup(t, ctx, tx, "I6 limited market group", enum.BusinessStatusNormal, nil)
+	createPreviousFormalReportRecord(t, ctx, tx, groupID, yearNo-1, now)
+	createGroupYearStateRecord(t, ctx, tx, groupID, yearNo, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked)
+
+	adminOrderService := NewAdminOrderCommandService(tx)
+	playerOrderService := NewPlayerOrderCommandService(tx)
+	localLimit := 10.0
+
+	if _, err := adminOrderService.UpdateMarketConfig(ctx, UpdateOrderMarketConfigCommand{
+		YearNo: yearNo,
+		Markets: []UpdateOrderMarketConfigItem{
+			{MarketCode: enum.MarketCodeLocal, Enabled: true, MarketInvestmentLimit: &localLimit},
+			{MarketCode: enum.MarketCodeRegional, Enabled: false},
+			{MarketCode: enum.MarketCodeNational, Enabled: false},
+			{MarketCode: enum.MarketCodeGlobal, Enabled: false},
+		},
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); err != nil {
+		t.Fatalf("update market config with limit: %v", err)
+	}
+	if _, err := adminOrderService.UpdateForecastControl(ctx, UpdateOrderForecastControlCommand{
+		Items: buildTestForecastControlItems(map[string]int{
+			testForecastSegmentKey(yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 1,
+		}),
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); err != nil {
+		t.Fatalf("update forecast control: %v", err)
+	}
+	if _, err := adminOrderService.UpdateControlConfig(ctx, UpdateOrderControlConfigCommand{
+		YearNo:       yearNo,
+		Items:        buildTestControlConfigItems(yearNo, nil),
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); err != nil {
+		t.Fatalf("update order config: %v", err)
+	}
+	generateResult, err := adminOrderService.GenerateOrderPool(ctx, GenerateOrderPoolCommand{
+		YearNo:       yearNo,
+		Overwrite:    true,
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	})
+	if err != nil {
+		t.Fatalf("generate order pool: %v", err)
+	}
+	if _, err := adminOrderService.ConfirmOrderPool(ctx, ConfirmOrderPoolCommand{
+		YearNo:       yearNo,
+		BatchID:      generateResult.BatchID,
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); err != nil {
+		t.Fatalf("confirm order pool: %v", err)
+	}
+
+	overLimitInvestments := buildTestMarketInvestments(func(segment OrderSegmentDefinition) float64 {
+		if segment.MarketCode == enum.MarketCodeLocal {
+			if segment.OrderType == enum.OrderTypeAgencyInspection {
+				return 6
+			}
+			if segment.OrderType == enum.OrderTypeTwoCabinVIP {
+				return 5
+			}
+		}
+		return 0
+	})
+	if _, err := playerOrderService.SubmitMarketInvestment(ctx, SubmitMarketInvestmentCommand{
+		GroupID:      groupID,
+		YearNo:       yearNo,
+		Investments:  overLimitInvestments,
+		OperatorName: "group-limited",
+	}); !errors.Is(err, ErrOrderInvestmentLimitExceeded) {
+		t.Fatalf("expected over-limit investment to be rejected, got %v", err)
+	}
+
+	withinLimitInvestments := buildTestMarketInvestments(func(segment OrderSegmentDefinition) float64 {
+		if segment.MarketCode == enum.MarketCodeLocal && segment.OrderType == enum.OrderTypeAgencyInspection {
+			return 10
+		}
+		return 0
+	})
+	if _, err := playerOrderService.SubmitMarketInvestment(ctx, SubmitMarketInvestmentCommand{
+		GroupID:      groupID,
+		YearNo:       yearNo,
+		Investments:  withinLimitInvestments,
+		OperatorName: "group-limited",
+	}); err != nil {
+		t.Fatalf("submit within limit investments: %v", err)
+	}
+
+	if _, err := adminOrderService.UpdateMarketConfig(ctx, UpdateOrderMarketConfigCommand{
+		YearNo: yearNo,
+		Markets: []UpdateOrderMarketConfigItem{
+			{MarketCode: enum.MarketCodeLocal, Enabled: true, MarketInvestmentLimit: &localLimit},
+			{MarketCode: enum.MarketCodeRegional, Enabled: false},
+			{MarketCode: enum.MarketCodeNational, Enabled: false},
+			{MarketCode: enum.MarketCodeGlobal, Enabled: false},
+		},
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); !errors.Is(err, ErrAdminOrderMarketConfigLocked) {
+		t.Fatalf("expected market config to lock after investment submission, got %v", err)
+	}
+}
+
 func isolateOrderIntegrationGroups(t *testing.T, ctx context.Context, tx *gorm.DB) {
 	t.Helper()
 

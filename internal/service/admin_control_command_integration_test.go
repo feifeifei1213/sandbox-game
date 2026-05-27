@@ -411,6 +411,9 @@ func markAllExistingGroupsBankrupt(t *testing.T, ctx context.Context, tx *gorm.D
 func clearInitializationFixtures(t *testing.T, ctx context.Context, tx *gorm.DB) {
 	t.Helper()
 
+	if err := tx.WithContext(ctx).Where("1 = 1").Delete(&entity.AdminActionLog{}).Error; err != nil {
+		t.Fatalf("clear admin action logs: %v", err)
+	}
 	if err := tx.WithContext(ctx).Where("role_type = ?", enum.RoleTypeGroup).Delete(&entity.Account{}).Error; err != nil {
 		t.Fatalf("clear group accounts: %v", err)
 	}

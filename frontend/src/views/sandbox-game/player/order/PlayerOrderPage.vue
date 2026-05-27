@@ -128,15 +128,21 @@
               <template v-for="market in marketOptions" :key="market.code">
                 <div class="investment-market-name">
                   {{ market.name }}
-                  <small v-if="isMarketDisabled(market.code)">未开启</small>
+                  <small>{{ marketLimitText(market.code) }}</small>
                 </div>
-                <label v-for="orderType in orderTypeOptions" :key="`${market.code}-${orderType.code}`" class="investment-cell">
+                <label
+                  v-for="orderType in orderTypeOptions"
+                  :key="`${market.code}-${orderType.code}`"
+                  class="investment-cell"
+                  :class="{ disabled: isMarketDisabled(market.code), invalid: investmentErrors[investmentKey(market.code, orderType.code)] }"
+                  :title="investmentErrors[investmentKey(market.code, orderType.code)] ?? ''"
+                >
                   <input
                     :value="store.investmentDraft[investmentKey(market.code, orderType.code)] ?? 0"
                     type="number"
                     min="0"
-                    step="0.01"
-                    :disabled="!currentView.canSubmitInvestment || submittingInvestment"
+                    step="1"
+                    :disabled="!currentView.canSubmitInvestment || submittingInvestment || isMarketDisabled(market.code)"
                     @input="handleInvestmentInput(market.code, orderType.code, $event)"
                   >
                 </label>
@@ -390,6 +396,7 @@ const {
   passingSegment,
   deliveringOrders,
   pageMessage,
+  investmentErrors,
   markets,
   selectedMarket,
   currentSegment,
@@ -496,12 +503,23 @@ async function handleRefresh() {
 function handleInvestmentInput(marketCode: OrderMarketCode, orderType: OrderTypeCode, event: Event) {
   const input = event.target as HTMLInputElement
   const next = input.value === '' ? 0 : Number(input.value)
-  store.setInvestmentDraft(marketCode, orderType, Number.isFinite(next) ? Math.max(next, 0) : 0)
+  store.setInvestmentDraft(marketCode, orderType, Number.isFinite(next) ? next : 0)
 }
 
 function isMarketDisabled(marketCode: OrderMarketCode) {
   const market = markets.value.find((item) => item.marketCode === marketCode)
   return market?.marketEnabled === false
+}
+
+function marketLimitText(marketCode: OrderMarketCode) {
+  const market = markets.value.find((item) => item.marketCode === marketCode)
+  if (market?.marketEnabled === false) {
+    return '未开启'
+  }
+  if (market?.marketInvestmentLimit !== null && market?.marketInvestmentLimit !== undefined) {
+    return `上限 ${formatIntegerAmount(market.marketInvestmentLimit)}M`
+  }
+  return '无上限'
 }
 
 async function handleSubmitInvestments() {
@@ -1068,12 +1086,25 @@ function formatDeliveryStage(value: string) {
   background: #ffffff;
 }
 
+.investment-cell.disabled {
+  background: #f1f5f9;
+}
+
+.investment-cell.invalid {
+  background: #fff5f5;
+}
+
 .investment-cell input {
   width: 100%;
   height: 34px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 6px 8px;
+}
+
+.investment-cell.invalid input {
+  border-color: var(--danger);
+  background: #fffafa;
 }
 
 .market-tab {

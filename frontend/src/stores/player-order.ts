@@ -58,6 +58,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   const pageMessage = ref<PageMessage | null>(null)
   const investmentDraft = reactive<Record<string, number | null>>(createEmptyInvestmentDraft())
   const investmentDraftYear = ref<number | null>(null)
+  const investmentErrors = ref<Record<string, string>>({})
 
   const markets = computed(() => currentView.value?.markets ?? [])
   const selectedMarket = computed<PlayerOrderMarketView | null>(
@@ -125,17 +126,27 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   }
 
   async function submitInvestments() {
+    const validation = validateInvestmentDraft(currentView.value, investmentDraft)
+    investmentErrors.value = validation.errors
+    if (validation.message) {
+      pageMessage.value = {
+        type: 'error',
+        text: validation.message,
+      }
+      return
+    }
     submittingInvestment.value = true
     pageMessage.value = null
     try {
       await submitPlayerMarketInvestment({
         yearNo: selectedYear.value,
-        investments: buildInvestmentPayload(investmentDraft),
+        investments: buildInvestmentPayload(investmentDraft, currentView.value),
       })
       pageMessage.value = {
         type: 'success',
         text: '16 项市场投入已提交。',
       }
+      investmentErrors.value = {}
       await loadYearView(selectedYear.value, { silent: true })
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '提交市场投入失败')
@@ -229,6 +240,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
 
   function setInvestmentDraft(marketCode: OrderMarketCode, orderType: OrderTypeCode, value: number | null) {
     investmentDraft[investmentKey(marketCode, orderType)] = value
+    investmentErrors.value = {}
   }
 
   return {
@@ -246,6 +258,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     deliveringOrders,
     pageMessage,
     investmentDraft,
+    investmentErrors,
     markets,
     selectedMarket,
     currentSegment,
@@ -272,7 +285,11 @@ function applyInvestmentDraft(view: PlayerOrderYearView, draft: Record<string, n
   for (const market of view.markets ?? []) {
     for (const segment of market.segments) {
       const key = investmentKey(segment.marketCode, segment.orderType)
-      draft[key] = segment.investmentSubmitted ? segment.marketInvestment : previousDraft[key] ?? 0
+      if (!segment.marketEnabled) {
+        draft[key] = 0
+      } else {
+        draft[key] = segment.investmentSubmitted ? segment.marketInvestment : previousDraft[key] ?? 0
+      }
     }
   }
 }
@@ -313,17 +330,56 @@ function createEmptyInvestmentDraft() {
   return result
 }
 
-function buildInvestmentPayload(draft: Record<string, number | null>) {
+function buildInvestmentPayload(draft: Record<string, number | null>, view: PlayerOrderYearView | null) {
+  const marketEnabledMap = new Map((view?.markets ?? []).map((market) => [market.marketCode, market.marketEnabled]))
   return PLAYER_ORDER_MARKETS.flatMap((market) =>
     PLAYER_ORDER_TYPES.map((orderType) => {
       const raw = Number(draft[investmentKey(market.code, orderType.code)] ?? 0)
+      if (marketEnabledMap.get(market.code) === false) {
+        return {
+          marketCode: market.code,
+          orderType: orderType.code,
+          marketInvestment: 0,
+        }
+      }
       return {
         marketCode: market.code,
         orderType: orderType.code,
-        marketInvestment: Number.isFinite(raw) ? Math.max(raw, 0) : 0,
+        marketInvestment: Number.isFinite(raw) ? raw : 0,
       }
     }),
   )
+}
+
+function validateInvestmentDraft(view: PlayerOrderYearView | null, draft: Record<string, number | null>) {
+  const errors: Record<string, string> = {}
+  if (!view?.markets) {
+    return { errors, message: '当前没有可提交的市场投入数据。' }
+  }
+  for (const market of view.markets) {
+    let marketTotal = 0
+    for (const orderType of PLAYER_ORDER_TYPES) {
+      const key = investmentKey(market.marketCode, orderType.code)
+      const rawValue = market.marketEnabled ? draft[key] : 0
+      const value = Number(rawValue ?? 0)
+      if (!Number.isFinite(value) || value < 0) {
+        errors[key] = `${market.marketName} ${orderType.name} 投入必须为非负整数`
+        continue
+      }
+      if (!Number.isInteger(value)) {
+        errors[key] = `${market.marketName} ${orderType.name} 投入必须为整数`
+        continue
+      }
+      marketTotal += value
+    }
+    if (market.marketEnabled && market.marketInvestmentLimit !== null && market.marketInvestmentLimit !== undefined && marketTotal > market.marketInvestmentLimit) {
+      for (const orderType of PLAYER_ORDER_TYPES) {
+        errors[investmentKey(market.marketCode, orderType.code)] = `${market.marketName} 4项投入合计不能超过 ${market.marketInvestmentLimit}M`
+      }
+    }
+  }
+  const firstMessage = Object.values(errors)[0] ?? ''
+  return { errors, message: firstMessage }
 }
 
 function formatOrderNo(businessOrderNo: string | undefined, orderId: number) {

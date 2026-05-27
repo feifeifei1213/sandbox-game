@@ -351,7 +351,7 @@ func mapOrderTypeName(name string) (string, bool) {
 }
 
 func marketName(code string) string {
-	switch code {
+	switch normalizeMarketCode(code) {
 	case enum.MarketCodeLocal:
 		return "本地市场"
 	case enum.MarketCodeRegional:
@@ -366,7 +366,7 @@ func marketName(code string) string {
 }
 
 func orderTypeName(code string) string {
-	switch code {
+	switch normalizeOrderType(code) {
 	case enum.OrderTypeAgencyInspection:
 		return "代办过检"
 	case enum.OrderTypeTwoCabinVIP:

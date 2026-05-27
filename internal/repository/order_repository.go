@@ -239,6 +239,7 @@ func (r *OrderMarketConfigRepository) UpsertBatch(ctx context.Context, items []e
 		},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"market_enabled",
+			"market_investment_limit",
 			"config_status",
 			"locked_batch_id",
 			"updater",
@@ -800,6 +801,17 @@ func (r *GroupMarketBidRepository) CountByGroupYear(ctx context.Context, groupID
 	if err := r.db.WithContext(ctx).
 		Model(&entity.GroupMarketBid{}).
 		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *GroupMarketBidRepository) CountByYear(ctx context.Context, yearNo int) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.GroupMarketBid{}).
+		Where("year_no = ?", yearNo).
 		Count(&count).Error; err != nil {
 		return 0, err
 	}

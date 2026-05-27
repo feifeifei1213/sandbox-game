@@ -269,8 +269,9 @@ func (h *AdminOrderHandler) UpdateMarketConfig(c *gin.Context) {
 	markets := make([]service.UpdateOrderMarketConfigItem, 0, len(req.Markets))
 	for _, item := range req.Markets {
 		markets = append(markets, service.UpdateOrderMarketConfigItem{
-			MarketCode: item.MarketCode,
-			Enabled:    item.Enabled,
+			MarketCode:            item.MarketCode,
+			Enabled:               item.Enabled,
+			MarketInvestmentLimit: item.MarketInvestmentLimit,
 		})
 	}
 
@@ -599,6 +600,7 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 	case errors.Is(err, service.ErrAdminOrderYearInvalid),
 		errors.Is(err, service.ErrAdminOrderParseFailed),
 		errors.Is(err, service.ErrAdminOrderConfigInvalid),
+		errors.Is(err, service.ErrAdminOrderMarketInvestmentLimitInvalid),
 		errors.Is(err, service.ErrAdminOrderForecastControlInvalid),
 		errors.Is(err, service.ErrAdminOrderReleaseSequenceDuplicated),
 		errors.Is(err, service.ErrAdminOrderSourceInsufficient),
@@ -629,6 +631,8 @@ func resolveAdminOrderErrorMessage(err error) string {
 		return "订单 Excel 解析失败，请确认文件格式与订单推算模板一致"
 	case errors.Is(err, service.ErrAdminOrderConfigInvalid):
 		return "订单数量或标段释放顺序配置不合法"
+	case errors.Is(err, service.ErrAdminOrderMarketInvestmentLimitInvalid):
+		return "市场投入上限必须为空或非负整数"
 	case errors.Is(err, service.ErrAdminOrderForecastControlInvalid):
 		return "订单数量控制台配置不合法"
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceDuplicated):

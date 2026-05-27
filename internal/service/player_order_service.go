@@ -42,6 +42,8 @@ var (
 	ErrOrderMarketAlreadyClosed         = errors.New("order market already closed")
 	ErrOrderInvestmentAlreadySubmitted  = errors.New("order investment already submitted")
 	ErrOrderInvestmentInvalid           = errors.New("order investment invalid")
+	ErrOrderInvestmentNotInteger        = errors.New("order investment not integer")
+	ErrOrderInvestmentLimitExceeded     = errors.New("order investment limit exceeded")
 	ErrOrderMarketDisabledInvestment    = errors.New("order market disabled investment must be zero")
 	ErrOrderSegmentNotReady             = errors.New("order segment not ready")
 	ErrOrderSegmentNotSelecting         = errors.New("order segment not selecting")
@@ -62,6 +64,7 @@ type PlayerOrderQueryService struct {
 	groupRepo      *repository.GroupRepository
 	groupYearRepo  *repository.GroupYearStateRepository
 	batchRepo      *repository.OrderGenerationBatchRepository
+	marketRepo     *repository.OrderMarketConfigRepository
 	bidRepo        *repository.GroupMarketBidRepository
 	stateRepo      *repository.MarketBiddingStateRepository
 	sequenceRepo   *repository.MarketSelectionOrderRepository
@@ -74,6 +77,7 @@ func NewPlayerOrderQueryService(
 	groupRepo *repository.GroupRepository,
 	groupYearRepo *repository.GroupYearStateRepository,
 	batchRepo *repository.OrderGenerationBatchRepository,
+	marketRepo *repository.OrderMarketConfigRepository,
 	bidRepo *repository.GroupMarketBidRepository,
 	stateRepo *repository.MarketBiddingStateRepository,
 	sequenceRepo *repository.MarketSelectionOrderRepository,
@@ -85,6 +89,7 @@ func NewPlayerOrderQueryService(
 		groupRepo:      groupRepo,
 		groupYearRepo:  groupYearRepo,
 		batchRepo:      batchRepo,
+		marketRepo:     marketRepo,
 		bidRepo:        bidRepo,
 		stateRepo:      stateRepo,
 		sequenceRepo:   sequenceRepo,
@@ -147,37 +152,39 @@ type PlayerOrderYearView struct {
 }
 
 type PlayerOrderMarketView struct {
-	MarketCode          string                   `json:"marketCode"`
-	MarketName          string                   `json:"marketName"`
-	MarketBidStatus     string                   `json:"marketBidStatus"`
-	InvestmentSubmitted bool                     `json:"investmentSubmitted"`
-	MarketInvestment    float64                  `json:"marketInvestment"`
-	CanSubmitInvestment bool                     `json:"canSubmitInvestment"`
-	CanSelectOrder      bool                     `json:"canSelectOrder"`
-	SelectionSequenceNo *int                     `json:"selectionSequenceNo"`
-	IsMarketLeader      bool                     `json:"isMarketLeader"`
-	MarketEnabled       bool                     `json:"marketEnabled"`
-	Segments            []PlayerOrderSegmentView `json:"segments"`
+	MarketCode            string                   `json:"marketCode"`
+	MarketName            string                   `json:"marketName"`
+	MarketBidStatus       string                   `json:"marketBidStatus"`
+	InvestmentSubmitted   bool                     `json:"investmentSubmitted"`
+	MarketInvestment      float64                  `json:"marketInvestment"`
+	MarketInvestmentLimit *float64                 `json:"marketInvestmentLimit"`
+	CanSubmitInvestment   bool                     `json:"canSubmitInvestment"`
+	CanSelectOrder        bool                     `json:"canSelectOrder"`
+	SelectionSequenceNo   *int                     `json:"selectionSequenceNo"`
+	IsMarketLeader        bool                     `json:"isMarketLeader"`
+	MarketEnabled         bool                     `json:"marketEnabled"`
+	Segments              []PlayerOrderSegmentView `json:"segments"`
 }
 
 type PlayerOrderSegmentView struct {
-	MarketCode          string                    `json:"marketCode"`
-	MarketName          string                    `json:"marketName"`
-	OrderType           string                    `json:"orderType"`
-	OrderTypeName       string                    `json:"orderTypeName"`
-	MarketEnabled       bool                      `json:"marketEnabled"`
-	MarketInvestment    float64                   `json:"marketInvestment"`
-	InvestmentSubmitted bool                      `json:"investmentSubmitted"`
-	ReleaseSequenceNo   int                       `json:"releaseSequenceNo"`
-	SegmentStatus       string                    `json:"segmentStatus"`
-	SelectionOrder      []PlayerOrderSequenceView `json:"selectionOrder"`
-	CurrentGroupID      *int64                    `json:"currentGroupId"`
-	AvailableOrders     []PlayerOrderPoolItem     `json:"availableOrders"`
-	LockedOrders        []PlayerOrderPoolItem     `json:"lockedOrders"`
-	SelectedOrder       *PlayerOrderPoolItem      `json:"selectedOrder"`
-	DeliveryStatus      string                    `json:"deliveryStatus"`
-	CanSelectOrder      bool                      `json:"canSelectOrder"`
-	CanPassSegment      bool                      `json:"canPassSegment"`
+	MarketCode            string                    `json:"marketCode"`
+	MarketName            string                    `json:"marketName"`
+	OrderType             string                    `json:"orderType"`
+	OrderTypeName         string                    `json:"orderTypeName"`
+	MarketEnabled         bool                      `json:"marketEnabled"`
+	MarketInvestmentLimit *float64                  `json:"marketInvestmentLimit"`
+	MarketInvestment      float64                   `json:"marketInvestment"`
+	InvestmentSubmitted   bool                      `json:"investmentSubmitted"`
+	ReleaseSequenceNo     int                       `json:"releaseSequenceNo"`
+	SegmentStatus         string                    `json:"segmentStatus"`
+	SelectionOrder        []PlayerOrderSequenceView `json:"selectionOrder"`
+	CurrentGroupID        *int64                    `json:"currentGroupId"`
+	AvailableOrders       []PlayerOrderPoolItem     `json:"availableOrders"`
+	LockedOrders          []PlayerOrderPoolItem     `json:"lockedOrders"`
+	SelectedOrder         *PlayerOrderPoolItem      `json:"selectedOrder"`
+	DeliveryStatus        string                    `json:"deliveryStatus"`
+	CanSelectOrder        bool                      `json:"canSelectOrder"`
+	CanPassSegment        bool                      `json:"canPassSegment"`
 }
 
 type PlayerOrderSequenceView struct {
@@ -426,8 +433,12 @@ func (s *PlayerOrderQueryService) GetYearView(ctx context.Context, groupID int64
 	if err != nil {
 		return nil, fmt.Errorf("list groups: %w", err)
 	}
+	marketConfigs, err := s.marketRepo.ListByYear(ctx, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("list order market configs: %w", err)
+	}
 
-	return buildPlayerOrderYearView(groupID, yearNo, states, selfBids, sequences, selected, groups, true, s.poolRepo, ctx)
+	return buildPlayerOrderYearView(groupID, yearNo, states, selfBids, sequences, selected, groups, marketConfigs, true, s.poolRepo, ctx)
 }
 
 func (s *PlayerOrderCommandService) SubmitMarketInvestment(ctx context.Context, cmd SubmitMarketInvestmentCommand) (*SubmitMarketInvestmentResult, error) {
@@ -481,6 +492,9 @@ func (s *PlayerOrderCommandService) SubmitMarketInvestment(ctx context.Context, 
 			return fmt.Errorf("list order market configs: %w", err)
 		}
 		if err := validateDisabledMarketInvestmentsAreZero(normalizedInvestments, buildMarketEnabledMap(marketConfigs)); err != nil {
+			return err
+		}
+		if err := validateMarketInvestmentLimits(normalizedInvestments, buildMarketConfigSnapshotMap(marketConfigs)); err != nil {
 			return err
 		}
 		items := make([]entity.GroupMarketBid, 0, len(normalizedInvestments))
@@ -1417,6 +1431,13 @@ func normalizeMarketInvestmentInputs(inputs []MarketInvestmentInput) ([]MarketIn
 		if !enum.IsValidMarketCode(marketCode) || !enum.IsValidOrderType(orderType) || input.MarketInvestment < 0 {
 			return nil, ErrOrderInvestmentInvalid
 		}
+		if !isWholeNumber(input.MarketInvestment) {
+			return nil, &OrderInvestmentIntegerError{
+				MarketCode: marketCode,
+				OrderType:  orderType,
+				Value:      input.MarketInvestment,
+			}
+		}
 		key := segmentKey(0, marketCode, orderType)
 		if seen[key] {
 			return nil, ErrOrderInvestmentInvalid
@@ -1425,7 +1446,7 @@ func normalizeMarketInvestmentInputs(inputs []MarketInvestmentInput) ([]MarketIn
 		result = append(result, MarketInvestmentInput{
 			MarketCode:       marketCode,
 			OrderType:        orderType,
-			MarketInvestment: input.MarketInvestment,
+			MarketInvestment: math.Trunc(input.MarketInvestment),
 		})
 	}
 	for _, market := range defaultOrderMarkets() {
@@ -1445,6 +1466,63 @@ func validateDisabledMarketInvestmentsAreZero(inputs []MarketInvestmentInput, ma
 		}
 	}
 	return nil
+}
+
+type OrderInvestmentIntegerError struct {
+	MarketCode string
+	OrderType  string
+	Value      float64
+}
+
+func (e *OrderInvestmentIntegerError) Error() string {
+	return fmt.Sprintf("%s %s 市场投入必须为非负整数，当前值为 %s", marketName(e.MarketCode), orderTypeName(e.OrderType), formatValidationAmount(e.Value))
+}
+
+func (e *OrderInvestmentIntegerError) Unwrap() error {
+	return ErrOrderInvestmentNotInteger
+}
+
+type OrderInvestmentLimitExceededError struct {
+	MarketCode string
+	Actual     float64
+	Limit      float64
+}
+
+func (e *OrderInvestmentLimitExceededError) Error() string {
+	return fmt.Sprintf("%s 4项市场投入合计 %sM，超过上限 %sM", marketName(e.MarketCode), formatValidationAmount(e.Actual), formatValidationAmount(e.Limit))
+}
+
+func (e *OrderInvestmentLimitExceededError) Unwrap() error {
+	return ErrOrderInvestmentLimitExceeded
+}
+
+func validateMarketInvestmentLimits(inputs []MarketInvestmentInput, marketConfigMap map[string]orderMarketConfigSnapshot) error {
+	totals := make(map[string]float64, len(defaultOrderMarkets()))
+	for _, input := range inputs {
+		totals[normalizeMarketCode(input.MarketCode)] += input.MarketInvestment
+	}
+	for _, market := range defaultOrderMarkets() {
+		config := marketConfigMap[market.code]
+		if !config.Enabled || config.InvestmentLimit == nil {
+			continue
+		}
+		total := totals[market.code]
+		if total-*config.InvestmentLimit > 0.000001 {
+			return &OrderInvestmentLimitExceededError{
+				MarketCode: market.code,
+				Actual:     total,
+				Limit:      *config.InvestmentLimit,
+			}
+		}
+	}
+	return nil
+}
+
+func formatValidationAmount(value float64) string {
+	if isWholeNumber(value) {
+		return strconv.FormatInt(int64(math.Round(value)), 10)
+	}
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
 func ensureAllActiveGroupsSubmittedInvestments(ctx context.Context, groupRepo *repository.GroupRepository, bidRepo *repository.GroupMarketBidRepository, yearNo int) error {
@@ -1482,10 +1560,11 @@ func hasPositiveSegmentInvestment(groups []entity.Group, bids []entity.GroupMark
 	return false
 }
 
-func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketBiddingState, bids map[string]entity.GroupMarketBid, sequences []entity.MarketSelectionOrder, selected []entity.GroupOrderSelection, groups []entity.Group, poolConfirmed bool, poolRepo *repository.OrderPoolRepository, ctx context.Context) (*PlayerOrderYearView, error) {
+func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketBiddingState, bids map[string]entity.GroupMarketBid, sequences []entity.MarketSelectionOrder, selected []entity.GroupOrderSelection, groups []entity.Group, marketConfigs []entity.OrderMarketConfig, poolConfirmed bool, poolRepo *repository.OrderPoolRepository, ctx context.Context) (*PlayerOrderYearView, error) {
 	groupNames := buildGroupNameMap(groups)
 	investmentSubmitted := len(bids) >= requiredOrderInvestmentSegmentCount
 	canSubmitInvestment := poolConfirmed && !investmentSubmitted
+	marketConfigMap := buildMarketConfigSnapshotMap(marketConfigs)
 	sequenceMap := make(map[string][]entity.MarketSelectionOrder)
 	selfSequence := make(map[string]entity.MarketSelectionOrder)
 	for _, sequence := range sequences {
@@ -1511,10 +1590,8 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 		isMarketLeader := false
 		marketInvestment := 0.0
 		marketSubmittedCount := 0
-		marketEnabled := true
-		if len(stateMap[market.code]) > 0 {
-			marketEnabled = !allMarketStatesDisabled(stateMap[market.code])
-		}
+		marketConfig := marketConfigMap[market.code]
+		marketEnabled := marketConfig.Enabled
 		for _, state := range stateMap[market.code] {
 			key := segmentKey(state.YearNo, state.MarketCode, state.OrderType)
 			bid, bidSubmitted := bids[key]
@@ -1532,7 +1609,7 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 			if err != nil {
 				return nil, err
 			}
-			segment := buildPlayerSegmentView(groupID, state, bid, bidSubmitted, sequenceMap[key], selfSeq, hasSelfSeq, selectedMap[key], pools, groupNames)
+			segment := buildPlayerSegmentView(groupID, state, bid, bidSubmitted, marketConfig.InvestmentLimit, sequenceMap[key], selfSeq, hasSelfSeq, selectedMap[key], pools, groupNames)
 			canSelectMarket = canSelectMarket || segment.CanSelectOrder
 			segments = append(segments, segment)
 		}
@@ -1540,17 +1617,18 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 			return segments[i].ReleaseSequenceNo < segments[j].ReleaseSequenceNo
 		})
 		markets = append(markets, PlayerOrderMarketView{
-			MarketCode:          market.code,
-			MarketName:          market.name,
-			MarketBidStatus:     resolveMarketBidStatus(stateMap[market.code]),
-			InvestmentSubmitted: marketSubmittedCount >= len(defaultOrderTypes()),
-			MarketInvestment:    marketInvestment,
-			CanSubmitInvestment: canSubmitInvestment,
-			CanSelectOrder:      canSelectMarket,
-			SelectionSequenceNo: selfMarketSequenceNo,
-			IsMarketLeader:      isMarketLeader,
-			MarketEnabled:       marketEnabled,
-			Segments:            segments,
+			MarketCode:            market.code,
+			MarketName:            market.name,
+			MarketBidStatus:       resolveMarketBidStatus(stateMap[market.code]),
+			InvestmentSubmitted:   marketSubmittedCount >= len(defaultOrderTypes()),
+			MarketInvestment:      marketInvestment,
+			MarketInvestmentLimit: marketConfig.InvestmentLimit,
+			CanSubmitInvestment:   canSubmitInvestment,
+			CanSelectOrder:        canSelectMarket,
+			SelectionSequenceNo:   selfMarketSequenceNo,
+			IsMarketLeader:        isMarketLeader,
+			MarketEnabled:         marketEnabled,
+			Segments:              segments,
 		})
 	}
 	return &PlayerOrderYearView{
@@ -1576,7 +1654,7 @@ func allMarketStatesDisabled(states []entity.MarketBiddingState) bool {
 	return true
 }
 
-func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid entity.GroupMarketBid, bidSubmitted bool, sequences []entity.MarketSelectionOrder, selfSequence entity.MarketSelectionOrder, hasSelfSequence bool, selected entity.GroupOrderSelection, pools []entity.OrderPool, groupNames map[int64]string) PlayerOrderSegmentView {
+func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid entity.GroupMarketBid, bidSubmitted bool, marketInvestmentLimit *float64, sequences []entity.MarketSelectionOrder, selfSequence entity.MarketSelectionOrder, hasSelfSequence bool, selected entity.GroupOrderSelection, pools []entity.OrderPool, groupNames map[int64]string) PlayerOrderSegmentView {
 	available := make([]PlayerOrderPoolItem, 0)
 	locked := make([]PlayerOrderPoolItem, 0)
 	var selectedOrder *PlayerOrderPoolItem
@@ -1620,23 +1698,24 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 	}
 	canAct := state.SegmentStatus == enum.OrderSegmentStatusSelecting && state.CurrentGroupID != nil && *state.CurrentGroupID == groupID && hasSelfSequence && selfSequence.SelectionStatus == enum.OrderSelectionStatusCurrent
 	return PlayerOrderSegmentView{
-		MarketCode:          state.MarketCode,
-		MarketName:          marketName(state.MarketCode),
-		OrderType:           state.OrderType,
-		OrderTypeName:       orderTypeName(state.OrderType),
-		MarketEnabled:       state.SegmentStatus != enum.OrderSegmentStatusMarketDisabled,
-		MarketInvestment:    bid.MarketInvestment,
-		InvestmentSubmitted: bidSubmitted,
-		ReleaseSequenceNo:   state.ReleaseSequenceNo,
-		SegmentStatus:       state.SegmentStatus,
-		SelectionOrder:      sequenceViews,
-		CurrentGroupID:      state.CurrentGroupID,
-		AvailableOrders:     available,
-		LockedOrders:        locked,
-		SelectedOrder:       selectedOrder,
-		DeliveryStatus:      deliveryStatus,
-		CanSelectOrder:      canAct && len(available) > 0,
-		CanPassSegment:      canAct,
+		MarketCode:            state.MarketCode,
+		MarketName:            marketName(state.MarketCode),
+		OrderType:             state.OrderType,
+		OrderTypeName:         orderTypeName(state.OrderType),
+		MarketEnabled:         state.SegmentStatus != enum.OrderSegmentStatusMarketDisabled,
+		MarketInvestmentLimit: marketInvestmentLimit,
+		MarketInvestment:      bid.MarketInvestment,
+		InvestmentSubmitted:   bidSubmitted,
+		ReleaseSequenceNo:     state.ReleaseSequenceNo,
+		SegmentStatus:         state.SegmentStatus,
+		SelectionOrder:        sequenceViews,
+		CurrentGroupID:        state.CurrentGroupID,
+		AvailableOrders:       available,
+		LockedOrders:          locked,
+		SelectedOrder:         selectedOrder,
+		DeliveryStatus:        deliveryStatus,
+		CanSelectOrder:        canAct && len(available) > 0,
+		CanPassSegment:        canAct,
 	}
 }
 

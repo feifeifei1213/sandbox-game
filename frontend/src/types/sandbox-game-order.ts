@@ -87,6 +87,7 @@ export interface PlayerOrderSegmentView {
   orderType: OrderTypeCode
   orderTypeName: string
   marketEnabled: boolean
+  marketInvestmentLimit: number | null
   marketInvestment: number
   investmentSubmitted: boolean
   releaseSequenceNo: number
@@ -112,6 +113,7 @@ export interface PlayerOrderMarketView {
   selectionSequenceNo: number | null
   isMarketLeader: boolean
   marketEnabled: boolean
+  marketInvestmentLimit: number | null
   segments: PlayerOrderSegmentView[]
 }
 

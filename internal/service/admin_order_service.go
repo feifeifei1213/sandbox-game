@@ -33,22 +33,23 @@ const (
 )
 
 var (
-	ErrAdminOrderYearInvalid               = errors.New("admin order year invalid")
-	ErrAdminOrderFileRequired              = errors.New("admin order file required")
-	ErrAdminOrderParseFailed               = errors.New("admin order parse failed")
-	ErrAdminOrderConfigInvalid             = errors.New("admin order config invalid")
-	ErrAdminOrderReleaseSequenceDuplicated = errors.New("admin order release sequence duplicated")
-	ErrAdminOrderReleaseSequenceLocked     = errors.New("admin order release sequence locked")
-	ErrAdminOrderPoolLocked                = errors.New("admin order pool locked")
-	ErrAdminOrderConfigNotFound            = errors.New("admin order config not found")
-	ErrAdminOrderBatchNotFound             = errors.New("admin order batch not found")
-	ErrAdminOrderSourceInsufficient        = errors.New("admin order source insufficient")
-	ErrAdminOrderPreviewNotFound           = errors.New("admin order preview not found")
-	ErrAdminOrderPoolNotConfirmed          = errors.New("admin order pool not confirmed")
-	ErrAdminOrderInvestmentIncomplete      = errors.New("admin order investment incomplete")
-	ErrAdminOrderSequenceAlreadyGenerated  = errors.New("admin order sequence already generated")
-	ErrAdminOrderMarketConfigLocked        = errors.New("admin order market config locked")
-	ErrAdminOrderForecastControlInvalid    = errors.New("admin order forecast control invalid")
+	ErrAdminOrderYearInvalid                  = errors.New("admin order year invalid")
+	ErrAdminOrderFileRequired                 = errors.New("admin order file required")
+	ErrAdminOrderParseFailed                  = errors.New("admin order parse failed")
+	ErrAdminOrderConfigInvalid                = errors.New("admin order config invalid")
+	ErrAdminOrderReleaseSequenceDuplicated    = errors.New("admin order release sequence duplicated")
+	ErrAdminOrderReleaseSequenceLocked        = errors.New("admin order release sequence locked")
+	ErrAdminOrderPoolLocked                   = errors.New("admin order pool locked")
+	ErrAdminOrderConfigNotFound               = errors.New("admin order config not found")
+	ErrAdminOrderBatchNotFound                = errors.New("admin order batch not found")
+	ErrAdminOrderSourceInsufficient           = errors.New("admin order source insufficient")
+	ErrAdminOrderPreviewNotFound              = errors.New("admin order preview not found")
+	ErrAdminOrderPoolNotConfirmed             = errors.New("admin order pool not confirmed")
+	ErrAdminOrderInvestmentIncomplete         = errors.New("admin order investment incomplete")
+	ErrAdminOrderSequenceAlreadyGenerated     = errors.New("admin order sequence already generated")
+	ErrAdminOrderMarketConfigLocked           = errors.New("admin order market config locked")
+	ErrAdminOrderForecastControlInvalid       = errors.New("admin order forecast control invalid")
+	ErrAdminOrderMarketInvestmentLimitInvalid = errors.New("admin order market investment limit invalid")
 )
 
 type OrderSegmentDefinition struct {
@@ -160,12 +161,13 @@ type OrderControlConfigItem struct {
 }
 
 type OrderMarketConfigItem struct {
-	YearNo        int    `json:"yearNo"`
-	MarketCode    string `json:"marketCode"`
-	MarketName    string `json:"marketName"`
-	Enabled       bool   `json:"enabled"`
-	ConfigStatus  string `json:"configStatus"`
-	LockedBatchID *int64 `json:"lockedBatchId,omitempty"`
+	YearNo                int      `json:"yearNo"`
+	MarketCode            string   `json:"marketCode"`
+	MarketName            string   `json:"marketName"`
+	Enabled               bool     `json:"enabled"`
+	MarketInvestmentLimit *float64 `json:"marketInvestmentLimit"`
+	ConfigStatus          string   `json:"configStatus"`
+	LockedBatchID         *int64   `json:"lockedBatchId,omitempty"`
 }
 
 type OrderGenerationBatchSummary struct {
@@ -212,8 +214,9 @@ type UpdateOrderMarketConfigCommand struct {
 }
 
 type UpdateOrderMarketConfigItem struct {
-	MarketCode string
-	Enabled    bool
+	MarketCode            string
+	Enabled               bool
+	MarketInvestmentLimit *float64
 }
 
 type UpdateOrderMarketConfigResult struct {
@@ -350,6 +353,7 @@ type AdminOrderQueryService struct {
 	forecastRepo       *repository.OrderForecastControlRepository
 	marketForecastRepo *repository.OrderMarketForecastRepository
 	marketRepo         *repository.OrderMarketConfigRepository
+	bidRepo            *repository.GroupMarketBidRepository
 	poolRepo           *repository.OrderPoolRepository
 	stateRepo          *repository.MarketBiddingStateRepository
 }
@@ -363,6 +367,7 @@ func NewAdminOrderQueryService(
 	forecastRepo *repository.OrderForecastControlRepository,
 	marketForecastRepo *repository.OrderMarketForecastRepository,
 	marketRepo *repository.OrderMarketConfigRepository,
+	bidRepo *repository.GroupMarketBidRepository,
 	poolRepo *repository.OrderPoolRepository,
 	stateRepo *repository.MarketBiddingStateRepository,
 ) *AdminOrderQueryService {
@@ -375,6 +380,7 @@ func NewAdminOrderQueryService(
 		forecastRepo:       forecastRepo,
 		marketForecastRepo: marketForecastRepo,
 		marketRepo:         marketRepo,
+		bidRepo:            bidRepo,
 		poolRepo:           poolRepo,
 		stateRepo:          stateRepo,
 	}
@@ -449,6 +455,10 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 	if confirmedErr != nil && !repository.IsRecordNotFound(confirmedErr) {
 		return nil, fmt.Errorf("load confirmed order batch: %w", confirmedErr)
 	}
+	submittedInvestmentCount, err := s.bidRepo.CountByYear(ctx, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("count submitted market investments: %w", err)
+	}
 	states, err := s.stateRepo.ListByYear(ctx, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list order states: %w", err)
@@ -472,7 +482,7 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 		GenerationStatus:      resolveOrderGenerationStatus(latestPreview, confirmed, states),
 		LatestPreviewBatch:    buildOrderGenerationBatchSummary(latestPreview),
 		ConfirmedBatch:        buildOrderGenerationBatchSummary(confirmed),
-		CanUpdateConfig:       confirmed == nil,
+		CanUpdateConfig:       confirmed == nil && submittedInvestmentCount == 0,
 		CanGeneratePreview:    confirmed == nil,
 		CanConfirmPool:        latestPreview != nil && confirmed == nil,
 		MarketConfigs:         buildOrderMarketConfigItems(yearNo, marketConfigs),
@@ -755,6 +765,7 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		configRepo := repository.NewOrderGenerationConfigRepository(tx)
 		forecastRepo := repository.NewOrderForecastControlRepository(tx)
 		marketRepo := repository.NewOrderMarketConfigRepository(tx)
+		bidRepo := repository.NewGroupMarketBidRepository(tx)
 		poolRepo := repository.NewOrderPoolRepository(tx)
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
 		actionRepo := repository.NewAdminActionLogRepository(tx)
@@ -778,15 +789,23 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		} else if !repository.IsRecordNotFound(err) {
 			return fmt.Errorf("load confirmed order batch: %w", err)
 		}
+		submittedInvestmentCount, err := bidRepo.CountByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("count submitted market investments: %w", err)
+		}
+		if submittedInvestmentCount > 0 {
+			return ErrAdminOrderMarketConfigLocked
+		}
 
 		now := time.Now()
 		items := make([]entity.OrderMarketConfig, 0, len(cmd.Markets))
 		for _, market := range cmd.Markets {
 			items = append(items, entity.OrderMarketConfig{
-				YearNo:        cmd.YearNo,
-				MarketCode:    normalizeMarketCode(market.MarketCode),
-				MarketEnabled: market.Enabled,
-				ConfigStatus:  enum.OrderConfigStatusDraft,
+				YearNo:                cmd.YearNo,
+				MarketCode:            normalizeMarketCode(market.MarketCode),
+				MarketEnabled:         market.Enabled,
+				MarketInvestmentLimit: normalizeMarketInvestmentLimit(market.MarketInvestmentLimit),
+				ConfigStatus:          enum.OrderConfigStatusDraft,
 				BaseEntity: entity.BaseEntity{
 					Creator:    operatorName,
 					CreateTime: now,
@@ -1580,6 +1599,9 @@ func validateMarketConfigCommand(cmd UpdateOrderMarketConfigCommand) error {
 		if !enum.IsValidMarketCode(marketCode) {
 			return ErrAdminOrderConfigInvalid
 		}
+		if item.MarketInvestmentLimit != nil && (*item.MarketInvestmentLimit < 0 || !isWholeNumber(*item.MarketInvestmentLimit)) {
+			return ErrAdminOrderMarketInvestmentLimitInvalid
+		}
 		if seen[marketCode] {
 			return ErrAdminOrderConfigInvalid
 		}
@@ -1769,18 +1791,21 @@ func buildOrderMarketConfigItems(yearNo int, configs []entity.OrderMarketConfig)
 		enabled := defaultMarketEnabled(market.code)
 		status := enum.OrderConfigStatusDraft
 		var lockedBatchID *int64
+		var marketInvestmentLimit *float64
 		if exists {
 			enabled = config.MarketEnabled
 			status = config.ConfigStatus
 			lockedBatchID = config.LockedBatchID
+			marketInvestmentLimit = normalizeMarketInvestmentLimit(config.MarketInvestmentLimit)
 		}
 		items = append(items, OrderMarketConfigItem{
-			YearNo:        yearNo,
-			MarketCode:    market.code,
-			MarketName:    market.name,
-			Enabled:       enabled,
-			ConfigStatus:  status,
-			LockedBatchID: lockedBatchID,
+			YearNo:                yearNo,
+			MarketCode:            market.code,
+			MarketName:            market.name,
+			Enabled:               enabled,
+			MarketInvestmentLimit: marketInvestmentLimit,
+			ConfigStatus:          status,
+			LockedBatchID:         lockedBatchID,
 		})
 	}
 	return items
@@ -2025,12 +2050,33 @@ func applyForecastCountsToConfigs(configs []entity.OrderGenerationConfig, foreca
 }
 
 func buildMarketEnabledMap(configs []entity.OrderMarketConfig) map[string]bool {
-	result := make(map[string]bool, len(adminOrderMarkets()))
+	snapshotMap := buildMarketConfigSnapshotMap(configs)
+	result := make(map[string]bool, len(snapshotMap))
+	for marketCode, item := range snapshotMap {
+		result[marketCode] = item.Enabled
+	}
+	return result
+}
+
+type orderMarketConfigSnapshot struct {
+	Enabled         bool
+	InvestmentLimit *float64
+}
+
+func buildMarketConfigSnapshotMap(configs []entity.OrderMarketConfig) map[string]orderMarketConfigSnapshot {
+	result := make(map[string]orderMarketConfigSnapshot, len(adminOrderMarkets()))
 	for _, market := range adminOrderMarkets() {
-		result[market.code] = defaultMarketEnabled(market.code)
+		result[market.code] = orderMarketConfigSnapshot{
+			Enabled:         defaultMarketEnabled(market.code),
+			InvestmentLimit: nil,
+		}
 	}
 	for _, item := range configs {
-		result[normalizeMarketCode(item.MarketCode)] = item.MarketEnabled
+		marketCode := normalizeMarketCode(item.MarketCode)
+		result[marketCode] = orderMarketConfigSnapshot{
+			Enabled:         item.MarketEnabled,
+			InvestmentLimit: normalizeMarketInvestmentLimit(item.MarketInvestmentLimit),
+		}
 	}
 	return result
 }
@@ -2080,10 +2126,11 @@ func ensureDefaultMarketConfigs(ctx context.Context, repo *repository.OrderMarke
 			continue
 		}
 		items = append(items, entity.OrderMarketConfig{
-			YearNo:        yearNo,
-			MarketCode:    market.code,
-			MarketEnabled: defaultMarketEnabled(market.code),
-			ConfigStatus:  enum.OrderConfigStatusDraft,
+			YearNo:                yearNo,
+			MarketCode:            market.code,
+			MarketEnabled:         defaultMarketEnabled(market.code),
+			MarketInvestmentLimit: nil,
+			ConfigStatus:          enum.OrderConfigStatusDraft,
 			BaseEntity: entity.BaseEntity{
 				Creator:    operatorName,
 				CreateTime: now,
@@ -2093,6 +2140,23 @@ func ensureDefaultMarketConfigs(ctx context.Context, repo *repository.OrderMarke
 		})
 	}
 	return repo.UpsertBatch(ctx, items)
+}
+
+func normalizeMarketInvestmentLimit(limit *float64) *float64 {
+	if limit == nil {
+		return nil
+	}
+	value := *limit
+	if value == 0 {
+		normalized := 0.0
+		return &normalized
+	}
+	normalized := math.Trunc(value)
+	return &normalized
+}
+
+func isWholeNumber(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && math.Abs(value-math.Round(value)) < 0.000001
 }
 
 func summarizeParsedPayload(raw []byte) map[string]int {
@@ -2229,7 +2293,7 @@ func segmentKey(yearNo int, marketCode string, orderType string) string {
 }
 
 func marketSortIndex(code string) int {
-	switch code {
+	switch normalizeMarketCode(code) {
 	case enum.MarketCodeLocal:
 		return 1
 	case enum.MarketCodeRegional:
@@ -2244,7 +2308,7 @@ func marketSortIndex(code string) int {
 }
 
 func orderTypeSortIndex(code string) int {
-	switch code {
+	switch normalizeOrderType(code) {
 	case enum.OrderTypeAgencyInspection:
 		return 1
 	case enum.OrderTypeTwoCabinVIP:

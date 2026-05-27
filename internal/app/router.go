@@ -121,6 +121,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		groupRepo,
 		groupYearRepo,
 		orderBatchRepo,
+		orderMarketConfigRepo,
 		marketBidRepo,
 		marketStateRepo,
 		marketSequenceRepo,
@@ -189,6 +190,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		orderForecastRepo,
 		orderMarketForecastRepo,
 		orderMarketConfigRepo,
+		marketBidRepo,
 		orderPoolRepo,
 		marketStateRepo,
 	)

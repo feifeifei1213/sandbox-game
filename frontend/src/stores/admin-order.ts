@@ -223,6 +223,14 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   }
 
   async function saveMarketConfig() {
+    const marketConfigError = validateMarketConfigDraft(editableMarketConfigs.value)
+    if (marketConfigError) {
+      pageMessage.value = {
+        type: 'error',
+        text: marketConfigError,
+      }
+      return
+    }
     savingMarketConfig.value = true
     pageMessage.value = null
     try {
@@ -231,6 +239,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         markets: editableMarketConfigs.value.map((item) => ({
           marketCode: item.marketCode,
           enabled: Boolean(item.enabled),
+          marketInvestmentLimit: toNullableNumber(item.marketInvestmentLimit),
         })),
       })
       applyConfig({
@@ -555,9 +564,28 @@ function defaultMarketConfigs(yearNo: number): OrderMarketConfigItem[] {
     marketCode: item.code,
     marketName: item.name,
     enabled: item.code === 'LOCAL',
+    marketInvestmentLimit: null,
     configStatus: 'DRAFT',
     lockedBatchId: null,
   }))
+}
+
+function validateMarketConfigDraft(items: OrderMarketConfigItem[]) {
+  const invalid = items.find((item) => {
+    const value = toNullableNumber(item.marketInvestmentLimit)
+    return value !== null && (!Number.isInteger(value) || value < 0)
+  })
+  if (!invalid) {
+    return ''
+  }
+  return `${invalid.marketName} 单市场投入上限必须为空或非负整数`
+}
+
+function toNullableNumber(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return null
+  }
+  return Number(value)
 }
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {

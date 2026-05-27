@@ -95,6 +95,38 @@ func TestNormalizeMarketInvestmentInputsRequiresAllSixteenSegmentsAndAllowsZero(
 	if _, err := normalizeMarketInvestmentInputs(negative); !errors.Is(err, ErrOrderInvestmentInvalid) {
 		t.Fatalf("expected negative investment to be invalid, got %v", err)
 	}
+
+	decimal := append([]MarketInvestmentInput(nil), inputs...)
+	decimal[0].MarketInvestment = 1.5
+	if _, err := normalizeMarketInvestmentInputs(decimal); !errors.Is(err, ErrOrderInvestmentNotInteger) {
+		t.Fatalf("expected decimal investment to be invalid, got %v", err)
+	}
+}
+
+func TestValidateMarketConfigCommandRequiresIntegerInvestmentLimit(t *testing.T) {
+	validLimit := 20.0
+	valid := UpdateOrderMarketConfigCommand{
+		YearNo: 1,
+		Markets: []UpdateOrderMarketConfigItem{
+			{MarketCode: enum.MarketCodeLocal, Enabled: true, MarketInvestmentLimit: &validLimit},
+		},
+	}
+	if err := validateMarketConfigCommand(valid); err != nil {
+		t.Fatalf("expected integer market investment limit to be valid, got %v", err)
+	}
+
+	decimalLimit := 20.5
+	invalid := valid
+	invalid.Markets = []UpdateOrderMarketConfigItem{{MarketCode: enum.MarketCodeLocal, Enabled: true, MarketInvestmentLimit: &decimalLimit}}
+	if err := validateMarketConfigCommand(invalid); !errors.Is(err, ErrAdminOrderMarketInvestmentLimitInvalid) {
+		t.Fatalf("expected decimal market investment limit to be invalid, got %v", err)
+	}
+
+	negativeLimit := -1.0
+	invalid.Markets = []UpdateOrderMarketConfigItem{{MarketCode: enum.MarketCodeLocal, Enabled: true, MarketInvestmentLimit: &negativeLimit}}
+	if err := validateMarketConfigCommand(invalid); !errors.Is(err, ErrAdminOrderMarketInvestmentLimitInvalid) {
+		t.Fatalf("expected negative market investment limit to be invalid, got %v", err)
+	}
 }
 
 func TestBuildGeneratedOrderPoolItemsIsDeterministicAndCapsCardCount(t *testing.T) {

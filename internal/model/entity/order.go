@@ -68,12 +68,13 @@ func (OrderMarketForecast) TableName() string {
 }
 
 type OrderMarketConfig struct {
-	ID            int64  `gorm:"column:id;primaryKey"`
-	YearNo        int    `gorm:"column:year_no"`
-	MarketCode    string `gorm:"column:market_code"`
-	MarketEnabled bool   `gorm:"column:market_enabled"`
-	ConfigStatus  string `gorm:"column:config_status"`
-	LockedBatchID *int64 `gorm:"column:locked_batch_id"`
+	ID                    int64    `gorm:"column:id;primaryKey"`
+	YearNo                int      `gorm:"column:year_no"`
+	MarketCode            string   `gorm:"column:market_code"`
+	MarketEnabled         bool     `gorm:"column:market_enabled"`
+	MarketInvestmentLimit *float64 `gorm:"column:market_investment_limit"`
+	ConfigStatus          string   `gorm:"column:config_status"`
+	LockedBatchID         *int64   `gorm:"column:locked_batch_id"`
 	BaseEntity
 }
 

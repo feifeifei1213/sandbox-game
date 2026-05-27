@@ -356,6 +356,7 @@ export interface OrderMarketConfigItem {
   marketCode: OrderMarketCode
   marketName: string
   enabled: boolean
+  marketInvestmentLimit: number | null
   configStatus: OrderConfigStatus
   lockedBatchId?: number | null
 }
@@ -401,6 +402,7 @@ export interface UpdateOrderMarketConfigRequest {
   markets: Array<{
     marketCode: OrderMarketCode
     enabled: boolean
+    marketInvestmentLimit: number | null
   }>
 }
 

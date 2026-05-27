@@ -309,6 +309,7 @@ func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
 			year_no INT NOT NULL,
 			market_code VARCHAR(32) NOT NULL,
 			market_enabled TINYINT(1) NOT NULL DEFAULT 0,
+			market_investment_limit DECIMAL(18,2) NULL,
 			config_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
 			locked_batch_id BIGINT NULL,
 			creator VARCHAR(64) NOT NULL DEFAULT 'system',
@@ -453,6 +454,11 @@ func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
 	if !db.Migrator().HasColumn(&entity.OrderGenerationBatch{}, "forecast_snapshot_json") {
 		if err := db.Migrator().AddColumn(&entity.OrderGenerationBatch{}, "ForecastSnapshot"); err != nil {
 			t.Fatalf("ensure order batch forecast snapshot column: %v", err)
+		}
+	}
+	if !db.Migrator().HasColumn(&entity.OrderMarketConfig{}, "market_investment_limit") {
+		if err := db.Migrator().AddColumn(&entity.OrderMarketConfig{}, "MarketInvestmentLimit"); err != nil {
+			t.Fatalf("ensure order market config investment limit column: %v", err)
 		}
 	}
 }

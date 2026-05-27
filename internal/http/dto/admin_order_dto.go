@@ -33,8 +33,9 @@ type AdminOrderUpdateMarketConfigRequest struct {
 }
 
 type AdminOrderUpdateMarketConfigItem struct {
-	MarketCode string `json:"marketCode" binding:"required"`
-	Enabled    bool   `json:"enabled"`
+	MarketCode            string   `json:"marketCode" binding:"required"`
+	Enabled               bool     `json:"enabled"`
+	MarketInvestmentLimit *float64 `json:"marketInvestmentLimit"`
 }
 
 type AdminOrderUpdateControlConfigItem struct {
