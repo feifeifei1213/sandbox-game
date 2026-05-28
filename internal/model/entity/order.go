@@ -198,17 +198,20 @@ func (MarketSelectionOrder) TableName() string {
 }
 
 type GroupOrderSelection struct {
-	ID                 int64      `gorm:"column:id;primaryKey"`
-	GroupID            int64      `gorm:"column:group_id"`
-	YearNo             int        `gorm:"column:year_no"`
-	MarketCode         string     `gorm:"column:market_code"`
-	OrderType          string     `gorm:"column:order_type"`
-	OrderID            int64      `gorm:"column:order_id"`
-	SelectionStatus    string     `gorm:"column:selection_status"`
-	DeliveryStatus     string     `gorm:"column:delivery_status"`
-	DeliveredStageCode *string    `gorm:"column:delivered_stage_code"`
-	DeliveredAt        *time.Time `gorm:"column:delivered_at"`
-	SelectedAt         time.Time  `gorm:"column:selected_at"`
+	ID                      int64      `gorm:"column:id;primaryKey"`
+	GroupID                 int64      `gorm:"column:group_id"`
+	YearNo                  int        `gorm:"column:year_no"`
+	MarketCode              string     `gorm:"column:market_code"`
+	OrderType               string     `gorm:"column:order_type"`
+	OrderID                 int64      `gorm:"column:order_id"`
+	SelectionStatus         string     `gorm:"column:selection_status"`
+	DeliveryStatus          string     `gorm:"column:delivery_status"`
+	DeliveredStageCode      *string    `gorm:"column:delivered_stage_code"`
+	DeliveredAt             *time.Time `gorm:"column:delivered_at"`
+	DeliveryEffective       bool       `gorm:"column:delivery_effective"`
+	InvalidatedByRollbackID *int64     `gorm:"column:invalidated_by_rollback_id"`
+	InvalidatedAt           *time.Time `gorm:"column:invalidated_at"`
+	SelectedAt              time.Time  `gorm:"column:selected_at"`
 	BaseEntity
 }
 

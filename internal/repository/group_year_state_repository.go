@@ -114,6 +114,43 @@ func (r *GroupYearStateRepository) UpdateRuntimeState(ctx context.Context, group
 		}).Error
 }
 
+func (r *GroupYearStateRepository) MarkRollbackPending(ctx context.Context, groupID int64, yearNo int, targetYearNo int, targetStageCode string, rollbackLogID int64, operatorName string) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Updates(map[string]any{
+			"rollback_pending":           true,
+			"rollback_target_year_no":    targetYearNo,
+			"rollback_target_stage_code": nullableStringValue(targetStageCode),
+			"rollback_log_id":            rollbackLogID,
+			"updater":                    operatorName,
+		}).Error
+}
+
+func (r *GroupYearStateRepository) ClearRollbackPending(ctx context.Context, groupID int64, yearNo int, operatorName string) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Updates(map[string]any{
+			"rollback_pending":           false,
+			"rollback_target_year_no":    nil,
+			"rollback_target_stage_code": nil,
+			"rollback_log_id":            nil,
+			"updater":                    operatorName,
+		}).Error
+}
+
+func (r *GroupYearStateRepository) CountRollbackPending(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("rollback_pending = ?", true).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *GroupYearStateRepository) listExistingKeys(ctx context.Context, groupIDs []int64, fromYear int, toYear int) (map[groupYearStateKey]struct{}, error) {
 	var items []groupYearStateIdentity
 	if err := r.db.WithContext(ctx).

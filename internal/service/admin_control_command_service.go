@@ -720,14 +720,16 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		}
 
 		unlockLogItem := &entity.AdminUnlockLog{
-			GroupID:      cmd.GroupID,
-			YearNo:       cmd.YearNo,
-			Reason:       reason,
-			StateBefore:  stateBeforeJSON,
-			StateAfter:   stateAfterJSON,
-			OperatorID:   cmd.OperatorID,
-			OperatorName: operatorName,
-			OperateTime:  now,
+			GroupID:          cmd.GroupID,
+			YearNo:           cmd.YearNo,
+			Reason:           reason,
+			UnlockTargetType: targetType,
+			TargetStageCode:  nullableString(targetStageCode),
+			StateBefore:      stateBeforeJSON,
+			StateAfter:       stateAfterJSON,
+			OperatorID:       cmd.OperatorID,
+			OperatorName:     operatorName,
+			OperateTime:      now,
 		}
 		if err := txAdminUnlockLogRepo.Create(ctx, unlockLogItem); err != nil {
 			return fmt.Errorf("create admin unlock log: %w", err)

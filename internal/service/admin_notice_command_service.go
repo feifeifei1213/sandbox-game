@@ -209,6 +209,7 @@ func (s *AdminNoticeCommandService) SendAdjustment(
 		AdjustmentType: adjustmentType,
 		Amount:         cmd.Amount,
 		Reason:         reason,
+		Effective:      true,
 		PublishedAt:    publishedAt,
 		OperatorID:     cmd.OperatorID,
 		OperatorName:   cmd.OperatorName,

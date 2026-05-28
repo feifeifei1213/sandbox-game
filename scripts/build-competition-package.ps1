@@ -70,6 +70,8 @@ try {
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0007_order_market_enable.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0007_order_market_enable.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0008_order_forecast_control.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0008_order_forecast_control.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0009_game_edition.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0009_game_edition.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0010_order_market_investment_limit.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0010_order_market_investment_limit.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0011_rollback_snapshot.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0011_rollback_snapshot.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\competition_launch_runbook.md') -Destination (Join-Path $releaseRoot 'docs\competition_launch_runbook.md') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\competition_deploy_checklist.md') -Destination (Join-Path $releaseRoot 'docs\competition_deploy_checklist.md') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\README.md') -Destination (Join-Path $releaseRoot 'README.md') -Force

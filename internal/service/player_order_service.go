@@ -590,14 +590,15 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 			return fmt.Errorf("mark order selected: %w", err)
 		}
 		if err := selectionRepo.Create(ctx, &entity.GroupOrderSelection{
-			GroupID:         cmd.GroupID,
-			YearNo:          cmd.YearNo,
-			MarketCode:      marketCode,
-			OrderType:       orderType,
-			OrderID:         order.ID,
-			SelectionStatus: enum.OrderSelectionStatusSelected,
-			DeliveryStatus:  enum.OrderDeliveryStatusSelected,
-			SelectedAt:      now,
+			GroupID:           cmd.GroupID,
+			YearNo:            cmd.YearNo,
+			MarketCode:        marketCode,
+			OrderType:         orderType,
+			OrderID:           order.ID,
+			SelectionStatus:   enum.OrderSelectionStatusSelected,
+			DeliveryStatus:    enum.OrderDeliveryStatusSelected,
+			DeliveryEffective: true,
+			SelectedAt:        now,
 			BaseEntity: entity.BaseEntity{
 				Creator:    operatorName,
 				CreateTime: now,

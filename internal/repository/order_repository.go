@@ -1006,6 +1006,7 @@ type GroupSelectedOrderDetail struct {
 	MarketCode         string  `gorm:"column:market_code"`
 	OrderType          string  `gorm:"column:order_type"`
 	DeliveryStatus     string  `gorm:"column:delivery_status"`
+	DeliveryEffective  bool    `gorm:"column:delivery_effective"`
 	DeliveredStageCode *string `gorm:"column:delivered_stage_code"`
 	OrderAmount        float64 `gorm:"column:order_amount"`
 }
@@ -1018,9 +1019,9 @@ func (r *GroupOrderSelectionRepository) ListSelectedOrderDetailsForUpdate(ctx co
 	if err := r.db.WithContext(ctx).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		Table("sg_group_order_selection AS s").
-		Select("s.id AS selection_id, s.order_id, s.market_code, s.order_type, s.delivery_status, s.delivered_stage_code, p.order_amount").
+		Select("s.id AS selection_id, s.order_id, s.market_code, s.order_type, s.delivery_status, s.delivery_effective, s.delivered_stage_code, p.order_amount").
 		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
-		Where("s.group_id = ? AND s.year_no = ? AND s.order_id IN ?", groupID, yearNo, orderIDs).
+		Where("s.group_id = ? AND s.year_no = ? AND s.order_id IN ? AND s.delivery_effective = ?", groupID, yearNo, orderIDs, true).
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -1036,7 +1037,7 @@ func (r *GroupOrderSelectionRepository) SumDeliveredAmountByStage(ctx context.Co
 		Table("sg_group_order_selection AS s").
 		Select("COALESCE(SUM(p.order_amount), 0) AS amount").
 		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
-		Where("s.group_id = ? AND s.year_no = ? AND s.delivery_status = ? AND s.delivered_stage_code = ?", groupID, yearNo, enum.OrderDeliveryStatusDelivered, stageCode).
+		Where("s.group_id = ? AND s.year_no = ? AND s.delivery_status = ? AND s.delivered_stage_code = ? AND s.delivery_effective = ?", groupID, yearNo, enum.OrderDeliveryStatusDelivered, stageCode, true).
 		Scan(&result).Error; err != nil {
 		return 0, err
 	}
@@ -1051,11 +1052,14 @@ func (r *GroupOrderSelectionRepository) MarkDeliveredBySelectionIDs(ctx context.
 		Model(&entity.GroupOrderSelection{}).
 		Where("id IN ? AND delivery_status = ?", selectionIDs, enum.OrderDeliveryStatusSelected).
 		Updates(map[string]any{
-			"delivery_status":      enum.OrderDeliveryStatusDelivered,
-			"delivered_stage_code": stageCode,
-			"delivered_at":         operateTime,
-			"updater":              operatorName,
-			"update_time":          operateTime,
+			"delivery_status":            enum.OrderDeliveryStatusDelivered,
+			"delivery_effective":         true,
+			"delivered_stage_code":       stageCode,
+			"delivered_at":               operateTime,
+			"invalidated_by_rollback_id": gorm.Expr("NULL"),
+			"invalidated_at":             gorm.Expr("NULL"),
+			"updater":                    operatorName,
+			"update_time":                operateTime,
 		}).Error
 }
 
@@ -1068,6 +1072,27 @@ func (r *GroupOrderSelectionRepository) MarkUnfinishedByGroupYear(ctx context.Co
 			"updater":         operatorName,
 			"update_time":     operateTime,
 		}).Error
+}
+
+func (r *GroupOrderSelectionRepository) InvalidateDeliveryAfterTarget(ctx context.Context, groupID int64, targetYearNo int, targetStageCode string, rollbackID int64, operatorName string, operateTime time.Time) (int64, error) {
+	query := r.db.WithContext(ctx).
+		Model(&entity.GroupOrderSelection{}).
+		Where("group_id = ? AND delivery_effective = ? AND delivery_status = ?", groupID, true, enum.OrderDeliveryStatusDelivered)
+	if targetStageCode == "" {
+		query = query.Where("year_no > ?", targetYearNo)
+	} else if afterStages := rollbackStagesAtOrAfter(targetStageCode); len(afterStages) > 0 {
+		query = query.Where("(year_no > ? OR (year_no = ? AND delivered_stage_code IN ?))", targetYearNo, targetYearNo, afterStages)
+	} else {
+		query = query.Where("year_no > ?", targetYearNo)
+	}
+	tx := query.Updates(map[string]any{
+		"delivery_effective":         false,
+		"invalidated_by_rollback_id": rollbackID,
+		"invalidated_at":             operateTime,
+		"updater":                    operatorName,
+		"update_time":                operateTime,
+	})
+	return tx.RowsAffected, tx.Error
 }
 
 func IsRecordNotFound(err error) bool {

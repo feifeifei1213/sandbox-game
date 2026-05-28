@@ -133,6 +133,7 @@ func openIntegrationMySQL(t *testing.T) *gorm.DB {
 	ensureIntegrationGameConfigEditionColumns(t, db)
 	ensureIntegrationNoticeTables(t, db)
 	ensureIntegrationOrderTables(t, db)
+	ensureIntegrationRollbackTables(t, db)
 	return db
 }
 
@@ -460,6 +461,65 @@ func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
 		if err := db.Migrator().AddColumn(&entity.OrderMarketConfig{}, "MarketInvestmentLimit"); err != nil {
 			t.Fatalf("ensure order market config investment limit column: %v", err)
 		}
+	}
+}
+
+func ensureIntegrationRollbackTables(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	entitiesWithColumns := map[any][]string{
+		&entity.GroupYearState{}: {
+			"RollbackPending",
+			"RollbackTargetYearNo",
+			"RollbackTargetStageCode",
+			"RollbackLogID",
+		},
+		&entity.GroupSummarySnapshot{}: {
+			"InvalidatedByRollbackID",
+			"InvalidatedAt",
+		},
+		&entity.GroupAdjustment{}: {
+			"Effective",
+			"InvalidatedByRollbackID",
+			"InvalidReason",
+			"InvalidatedAt",
+		},
+		&entity.AdminUnlockLog{}: {
+			"UnlockTargetType",
+			"TargetStageCode",
+			"SafetySnapshotID",
+		},
+		&entity.GroupOrderSelection{}: {
+			"DeliveryEffective",
+			"InvalidatedByRollbackID",
+			"InvalidatedAt",
+		},
+	}
+
+	for item, columns := range entitiesWithColumns {
+		for _, column := range columns {
+			if db.Migrator().HasColumn(item, column) {
+				continue
+			}
+			if err := db.Migrator().AddColumn(item, column); err != nil {
+				t.Fatalf("ensure rollback column %s on %T: %v", column, item, err)
+			}
+		}
+	}
+
+	if err := db.AutoMigrate(
+		&entity.StateSnapshot{},
+		&entity.StateSnapshotPayload{},
+		&entity.RollbackLog{},
+	); err != nil {
+		t.Fatalf("ensure rollback tables: %v", err)
+	}
+
+	if err := db.Exec("UPDATE sg_group_adjustment SET effective = 1 WHERE effective IS NULL").Error; err != nil {
+		t.Fatalf("backfill adjustment effective: %v", err)
+	}
+	if err := db.Exec("UPDATE sg_group_order_selection SET delivery_effective = 1 WHERE delivery_effective IS NULL").Error; err != nil {
+		t.Fatalf("backfill order delivery effective: %v", err)
 	}
 }
 

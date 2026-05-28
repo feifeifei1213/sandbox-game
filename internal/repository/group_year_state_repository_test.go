@@ -62,3 +62,17 @@ func TestBuildMissingFormalYearStatesSkipsExistingPairs(t *testing.T) {
 		t.Fatalf("expected only group 2 year 4 to remain, got group=%d year=%d", items[0].GroupID, items[0].YearNo)
 	}
 }
+
+func TestNormalizeRollbackStageCodeAcceptsStatusAndReport(t *testing.T) {
+	cases := map[string]string{
+		"q2_open":                  "Q2",
+		" q3 ":                     "Q3",
+		enum.ReportStatusSubmitted: "YEAR_END",
+	}
+
+	for input, expected := range cases {
+		if actual := normalizeRollbackStageCode(input); actual != expected {
+			t.Fatalf("expected %q -> %q, got %q", input, expected, actual)
+		}
+	}
+}

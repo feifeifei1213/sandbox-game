@@ -73,6 +73,8 @@ func (r *SummarySnapshotRepository) UpsertSnapshot(ctx context.Context, cmd Upse
 				"ranking_value":                item.RankingValue,
 				"summary_effective":            item.SummaryEffective,
 				"source_report_submit_version": item.SourceReportSubmitVersion,
+				"invalidated_by_rollback_id":   gorm.Expr("NULL"),
+				"invalidated_at":               gorm.Expr("NULL"),
 				"updater":                      item.Updater,
 				"update_time":                  item.UpdateTime,
 			}),
@@ -118,4 +120,18 @@ func (r *SummarySnapshotRepository) WithdrawEffective(ctx context.Context, group
 			"update_time":       operateTime,
 		})
 	return tx.RowsAffected > 0, tx.Error
+}
+
+func (r *SummarySnapshotRepository) WithdrawByRollbackAfterTarget(ctx context.Context, groupID int64, targetYearNo int, rollbackID int64, operatorName string, operateTime time.Time) (int64, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&entity.GroupSummarySnapshot{}).
+		Where("group_id = ? AND year_no >= ? AND summary_effective = ?", groupID, targetYearNo, true).
+		Updates(map[string]any{
+			"summary_effective":          false,
+			"invalidated_by_rollback_id": rollbackID,
+			"invalidated_at":             operateTime,
+			"updater":                    operatorName,
+			"update_time":                operateTime,
+		})
+	return tx.RowsAffected, tx.Error
 }
