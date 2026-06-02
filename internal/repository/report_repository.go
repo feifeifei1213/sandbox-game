@@ -32,6 +32,17 @@ func (r *ReportRepository) FindByGroupIDAndYear(ctx context.Context, groupID int
 	return &item, nil
 }
 
+func (r *ReportRepository) ListByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupReport, error) {
+	var items []entity.GroupReport
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *ReportRepository) FindEffectiveByGroupIDAndYear(ctx context.Context, groupID int64, yearNo int) (*entity.GroupReport, error) {
 	var item entity.GroupReport
 	err := r.db.WithContext(ctx).
@@ -186,6 +197,17 @@ func (r *ReportRepository) CreateSubmission(ctx context.Context, cmd CreateRepor
 	return r.db.WithContext(ctx).Create(&item).Error
 }
 
+func (r *ReportRepository) ListSubmissionsByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupReportSubmission, error) {
+	var items []entity.GroupReportSubmission
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC, submit_time ASC, id ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *ReportRepository) InvalidateSubmission(ctx context.Context, groupID int64, yearNo int, operatorName string, operateTime time.Time) (bool, error) {
 	tx := r.db.WithContext(ctx).
 		Model(&entity.GroupReport{}).
@@ -197,4 +219,22 @@ func (r *ReportRepository) InvalidateSubmission(ctx context.Context, groupID int
 			"update_time":          operateTime,
 		})
 	return tx.RowsAffected > 0, tx.Error
+}
+
+func (r *ReportRepository) InvalidateAfterTarget(ctx context.Context, groupID int64, targetYearNo int, targetStageCode string, operatorName string, operateTime time.Time) (int64, error) {
+	query := r.db.WithContext(ctx).
+		Model(&entity.GroupReport{}).
+		Where("group_id = ? AND (submitted_at IS NOT NULL OR balance_check_passed = ?)", groupID, true)
+	if targetStageCode == "" {
+		query = query.Where("year_no > ?", targetYearNo)
+	} else {
+		query = query.Where("year_no >= ?", targetYearNo)
+	}
+	tx := query.Updates(map[string]any{
+		"submitted_at":         nil,
+		"balance_check_passed": false,
+		"updater":              operatorName,
+		"update_time":          operateTime,
+	})
+	return tx.RowsAffected, tx.Error
 }

@@ -65,6 +65,20 @@ func (r *OrderGenerationConfigRepository) ListByYear(ctx context.Context, yearNo
 	return items, nil
 }
 
+func (r *OrderGenerationConfigRepository) ListAllFromYear(ctx context.Context, fromYearNo int) ([]entity.OrderGenerationConfig, error) {
+	var items []entity.OrderGenerationConfig
+	if err := r.db.WithContext(ctx).
+		Where("year_no >= ?", fromYearNo).
+		Order("year_no ASC").
+		Order("release_sequence_no ASC").
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *OrderGenerationConfigRepository) DeleteByYear(ctx context.Context, yearNo int) error {
 	return r.db.WithContext(ctx).Where("year_no = ?", yearNo).Delete(&entity.OrderGenerationConfig{}).Error
 }
@@ -228,6 +242,18 @@ func (r *OrderMarketConfigRepository) ListByYear(ctx context.Context, yearNo int
 	return items, nil
 }
 
+func (r *OrderMarketConfigRepository) ListAllFromYear(ctx context.Context, fromYearNo int) ([]entity.OrderMarketConfig, error) {
+	var items []entity.OrderMarketConfig
+	if err := r.db.WithContext(ctx).
+		Where("year_no >= ?", fromYearNo).
+		Order("year_no ASC").
+		Order("market_code ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *OrderMarketConfigRepository) UpsertBatch(ctx context.Context, items []entity.OrderMarketConfig) error {
 	if len(items) == 0 {
 		return nil
@@ -296,6 +322,19 @@ func (r *OrderGenerationBatchRepository) FindLatestByYearStatuses(ctx context.Co
 
 func (r *OrderGenerationBatchRepository) FindConfirmedByYear(ctx context.Context, yearNo int) (*entity.OrderGenerationBatch, error) {
 	return r.FindLatestByYearStatuses(ctx, yearNo, []string{enum.OrderGenerationBatchStatusConfirmed})
+}
+
+func (r *OrderGenerationBatchRepository) ListFromYear(ctx context.Context, fromYearNo int) ([]entity.OrderGenerationBatch, error) {
+	var items []entity.OrderGenerationBatch
+	if err := r.db.WithContext(ctx).
+		Where("year_no >= ?", fromYearNo).
+		Order("year_no ASC").
+		Order("generated_at DESC").
+		Order("id DESC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *OrderGenerationBatchRepository) VoidPreviewByYear(ctx context.Context, yearNo int, updater string, operateTime time.Time) error {
@@ -367,6 +406,21 @@ func (r *OrderPoolRepository) ListByYearWithOptionalFilters(ctx context.Context,
 	}
 	var items []entity.OrderPool
 	if err := query.
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Order("card_sequence_no ASC").
+		Order("id ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *OrderPoolRepository) ListFromYear(ctx context.Context, fromYearNo int) ([]entity.OrderPool, error) {
+	var items []entity.OrderPool
+	if err := r.db.WithContext(ctx).
+		Where("year_no >= ?", fromYearNo).
+		Order("year_no ASC").
 		Order("market_code ASC").
 		Order("order_type ASC").
 		Order("card_sequence_no ASC").
@@ -489,6 +543,18 @@ func (r *MarketBiddingStateRepository) ListByYear(ctx context.Context, yearNo in
 	var items []entity.MarketBiddingState
 	if err := r.db.WithContext(ctx).
 		Where("year_no = ?", yearNo).
+		Order("release_sequence_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *MarketBiddingStateRepository) ListFromYear(ctx context.Context, fromYearNo int) ([]entity.MarketBiddingState, error) {
+	var items []entity.MarketBiddingState
+	if err := r.db.WithContext(ctx).
+		Where("year_no >= ?", fromYearNo).
+		Order("year_no ASC").
 		Order("release_sequence_no ASC").
 		Find(&items).Error; err != nil {
 		return nil, err
@@ -789,6 +855,19 @@ func (r *GroupMarketBidRepository) ListByGroupYear(ctx context.Context, groupID 
 	return items, nil
 }
 
+func (r *GroupMarketBidRepository) ListByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupMarketBid, error) {
+	var items []entity.GroupMarketBid
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC").
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *GroupMarketBidRepository) CreateBatch(ctx context.Context, items []entity.GroupMarketBid) error {
 	if len(items) == 0 {
 		return nil
@@ -886,6 +965,20 @@ func (r *MarketSelectionOrderRepository) ListByYear(ctx context.Context, yearNo 
 	return items, nil
 }
 
+func (r *MarketSelectionOrderRepository) ListFromYear(ctx context.Context, fromYearNo int) ([]entity.MarketSelectionOrder, error) {
+	var items []entity.MarketSelectionOrder
+	if err := r.db.WithContext(ctx).
+		Where("year_no >= ?", fromYearNo).
+		Order("year_no ASC").
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Order("sequence_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *MarketSelectionOrderRepository) GetByGroupSegmentForUpdate(ctx context.Context, groupID int64, yearNo int, marketCode string, orderType string) (*entity.MarketSelectionOrder, error) {
 	var item entity.MarketSelectionOrder
 	if err := r.db.WithContext(ctx).
@@ -964,6 +1057,20 @@ func (r *GroupOrderSelectionRepository) ListByGroupYear(ctx context.Context, gro
 	var items []entity.GroupOrderSelection
 	if err := r.db.WithContext(ctx).
 		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *GroupOrderSelectionRepository) ListByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupOrderSelection, error) {
+	var items []entity.GroupOrderSelection
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC").
+		Order("market_code ASC").
+		Order("order_type ASC").
+		Order("id ASC").
 		Find(&items).Error; err != nil {
 		return nil, err
 	}

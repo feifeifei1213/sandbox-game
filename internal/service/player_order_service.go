@@ -235,6 +235,7 @@ type SelectOrderCommand struct {
 	MarketCode   string
 	OrderType    string
 	OrderID      int64
+	OperatorID   int64
 	OperatorName string
 }
 
@@ -252,6 +253,7 @@ type PassOrderSegmentCommand struct {
 	YearNo       int
 	MarketCode   string
 	OrderType    string
+	OperatorID   int64
 	OperatorName string
 }
 
@@ -611,7 +613,7 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 		if err := sequenceRepo.SetStatus(ctx, sequence.ID, enum.OrderSelectionStatusSelected, &order.ID, nil, nil, &now, operatorName); err != nil {
 			return fmt.Errorf("mark selection order selected: %w", err)
 		}
-		nextGroupID, status, err := advanceOrderSegment(ctx, stateRepo, sequenceRepo, poolRepo, *segment, operatorName, now)
+		nextGroupID, status, err := advanceOrderSegment(ctx, tx, stateRepo, sequenceRepo, poolRepo, *segment, cmd.OperatorID, operatorName, now)
 		if err != nil {
 			return err
 		}
@@ -675,7 +677,7 @@ func (s *PlayerOrderCommandService) PassSegment(ctx context.Context, cmd PassOrd
 		if err := sequenceRepo.SetStatus(ctx, sequence.ID, enum.OrderSelectionStatusPassed, nil, nil, nil, &now, operatorName); err != nil {
 			return fmt.Errorf("mark selection passed: %w", err)
 		}
-		nextGroupID, status, err := advanceOrderSegment(ctx, stateRepo, sequenceRepo, poolRepo, *segment, operatorName, now)
+		nextGroupID, status, err := advanceOrderSegment(ctx, tx, stateRepo, sequenceRepo, poolRepo, *segment, cmd.OperatorID, operatorName, now)
 		if err != nil {
 			return err
 		}
@@ -1160,6 +1162,9 @@ func (s *AdminOrderControlCommandService) ReleaseNextSegment(ctx context.Context
 			if err := stateRepo.CompleteSegment(ctx, next.ID, operatorName, now); err != nil {
 				return fmt.Errorf("complete empty segment: %w", err)
 			}
+			if err := createSegmentCompletedSnapshot(ctx, tx, *next, cmd.OperatorID, operatorName, now); err != nil {
+				return err
+			}
 			result = buildAdminOrderControlResultFromState(*next, nil, enum.OrderSegmentStatusCompleted, 1, operatorName, now)
 			return nil
 		}
@@ -1168,6 +1173,9 @@ func (s *AdminOrderControlCommandService) ReleaseNextSegment(ctx context.Context
 			if repository.IsRecordNotFound(err) {
 				if err := stateRepo.CompleteSegment(ctx, next.ID, operatorName, now); err != nil {
 					return fmt.Errorf("complete no sequence segment: %w", err)
+				}
+				if err := createSegmentCompletedSnapshot(ctx, tx, *next, cmd.OperatorID, operatorName, now); err != nil {
+					return err
 				}
 				result = buildAdminOrderControlResultFromState(*next, nil, enum.OrderSegmentStatusCompleted, 1, operatorName, now)
 				return nil
@@ -1242,7 +1250,7 @@ func (s *AdminOrderControlCommandService) AdminSkipCurrentGroup(ctx context.Cont
 		if err := sequenceRepo.SetStatus(ctx, sequence.ID, enum.OrderSelectionStatusAdminSkipped, nil, &cmd.OperatorID, &reason, &now, operatorName); err != nil {
 			return fmt.Errorf("mark admin skipped: %w", err)
 		}
-		nextGroupID, status, err := advanceOrderSegment(ctx, stateRepo, sequenceRepo, poolRepo, *segment, operatorName, now)
+		nextGroupID, status, err := advanceOrderSegment(ctx, tx, stateRepo, sequenceRepo, poolRepo, *segment, cmd.OperatorID, operatorName, now)
 		if err != nil {
 			return err
 		}
@@ -1399,12 +1407,15 @@ func buildSelectionOrderItems(states []entity.MarketBiddingState, participants [
 	return items
 }
 
-func advanceOrderSegment(ctx context.Context, stateRepo *repository.MarketBiddingStateRepository, sequenceRepo *repository.MarketSelectionOrderRepository, poolRepo *repository.OrderPoolRepository, segment entity.MarketBiddingState, operatorName string, now time.Time) (*int64, string, error) {
+func advanceOrderSegment(ctx context.Context, tx *gorm.DB, stateRepo *repository.MarketBiddingStateRepository, sequenceRepo *repository.MarketSelectionOrderRepository, poolRepo *repository.OrderPoolRepository, segment entity.MarketBiddingState, operatorID int64, operatorName string, now time.Time) (*int64, string, error) {
 	next, err := sequenceRepo.GetNextWaiting(ctx, segment.YearNo, segment.MarketCode, segment.OrderType)
 	if err != nil {
 		if repository.IsRecordNotFound(err) {
 			if err := stateRepo.CompleteSegment(ctx, segment.ID, operatorName, now); err != nil {
 				return nil, "", fmt.Errorf("complete segment: %w", err)
+			}
+			if err := createSegmentCompletedSnapshot(ctx, tx, segment, operatorID, operatorName, now); err != nil {
+				return nil, "", err
 			}
 			return nil, enum.OrderSegmentStatusCompleted, nil
 		}
@@ -1418,6 +1429,19 @@ func advanceOrderSegment(ctx context.Context, stateRepo *repository.MarketBiddin
 		return nil, "", fmt.Errorf("update current group: %w", err)
 	}
 	return &nextGroupID, enum.OrderSegmentStatusSelecting, nil
+}
+
+func createSegmentCompletedSnapshot(ctx context.Context, tx *gorm.DB, segment entity.MarketBiddingState, operatorID int64, operatorName string, now time.Time) error {
+	_, err := createGlobalSnapshot(ctx, tx, CreateGlobalSnapshotCommand{
+		YearNo:       segment.YearNo,
+		SnapshotType: enum.SnapshotTypeAuto,
+		TriggerCode:  enum.SnapshotTriggerSegmentCompleted,
+		Description:  fmt.Sprintf("标段完成后自动快照：%s/%s", segment.MarketCode, segment.OrderType),
+		OperatorID:   operatorID,
+		OperatorName: operatorName,
+		OperateTime:  now,
+	})
+	return err
 }
 
 func normalizeMarketInvestmentInputs(inputs []MarketInvestmentInput) ([]MarketInvestmentInput, error) {

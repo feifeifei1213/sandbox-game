@@ -32,6 +32,17 @@ func (r *OperatingRepository) FindDraft(ctx context.Context, groupID int64, year
 	return &item, nil
 }
 
+func (r *OperatingRepository) ListDraftsByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupOperatingDraft, error) {
+	var items []entity.GroupOperatingDraft
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *OperatingRepository) ListStageSubmissions(ctx context.Context, groupID int64, yearNo int) ([]entity.GroupStageSubmission, error) {
 	items := make([]entity.GroupStageSubmission, 0)
 	err := r.db.WithContext(ctx).
@@ -39,6 +50,17 @@ func (r *OperatingRepository) ListStageSubmissions(ctx context.Context, groupID 
 		Order("submit_time ASC, id ASC").
 		Find(&items).Error
 	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *OperatingRepository) ListStageSubmissionsByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupStageSubmission, error) {
+	var items []entity.GroupStageSubmission
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC, submit_time ASC, id ASC").
+		Find(&items).Error; err != nil {
 		return nil, err
 	}
 	return items, nil

@@ -48,6 +48,28 @@ func (r *GroupYearStateRepository) GetByGroupIDAndYear(ctx context.Context, grou
 	return &item, nil
 }
 
+func (r *GroupYearStateRepository) GetByGroupIDAndYearForUpdate(ctx context.Context, groupID int64, yearNo int) (*entity.GroupYearState, error) {
+	var item entity.GroupYearState
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GroupYearStateRepository) ListByGroupIDFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupYearState, error) {
+	var items []entity.GroupYearState
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *GroupYearStateRepository) ListByYear(ctx context.Context, yearNo int) ([]entity.GroupYearState, error) {
 	var items []entity.GroupYearState
 	if err := r.db.WithContext(ctx).
@@ -114,10 +136,76 @@ func (r *GroupYearStateRepository) UpdateRuntimeState(ctx context.Context, group
 		}).Error
 }
 
+func (r *GroupYearStateRepository) RestoreState(ctx context.Context, item entity.GroupYearState, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("group_id = ? AND year_no = ?", item.GroupID, item.YearNo).
+		Updates(map[string]any{
+			"year_type":                    item.YearType,
+			"year_status":                  item.YearStatus,
+			"stage_status":                 item.StageStatus,
+			"report_status":                item.ReportStatus,
+			"summary_effective":            item.SummaryEffective,
+			"latest_stage_submit_version":  item.LatestStageSubmitVersion,
+			"latest_report_submit_version": item.LatestReportSubmitVersion,
+			"updater":                      operatorName,
+			"update_time":                  operateTime,
+		}).Error
+}
+
+func (r *GroupYearStateRepository) ResetAfterRollbackTarget(ctx context.Context, groupID int64, targetYearNo int, currentOpenYear int, operatorName string, operateTime time.Time) error {
+	if currentOpenYear > targetYearNo {
+		if err := r.db.WithContext(ctx).
+			Model(&entity.GroupYearState{}).
+			Where("group_id = ? AND year_no > ? AND year_no <= ?", groupID, targetYearNo, currentOpenYear).
+			Updates(map[string]any{
+				"year_status":                  enum.YearStatusOperating,
+				"stage_status":                 enum.StageStatusQ1Open,
+				"report_status":                enum.ReportStatusLocked,
+				"summary_effective":            false,
+				"latest_stage_submit_version":  0,
+				"latest_report_submit_version": 0,
+				"updater":                      operatorName,
+				"update_time":                  operateTime,
+			}).Error; err != nil {
+			return err
+		}
+	}
+	return r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("group_id = ? AND year_no > ?", groupID, maxRollbackYear(targetYearNo, currentOpenYear)).
+		Updates(map[string]any{
+			"year_status":                  enum.YearStatusLocked,
+			"stage_status":                 enum.StageStatusQ1Open,
+			"report_status":                enum.ReportStatusLocked,
+			"summary_effective":            false,
+			"latest_stage_submit_version":  0,
+			"latest_report_submit_version": 0,
+			"updater":                      operatorName,
+			"update_time":                  operateTime,
+		}).Error
+}
+
 func (r *GroupYearStateRepository) MarkRollbackPending(ctx context.Context, groupID int64, yearNo int, targetYearNo int, targetStageCode string, rollbackLogID int64, operatorName string) error {
 	return r.db.WithContext(ctx).
 		Model(&entity.GroupYearState{}).
 		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Updates(map[string]any{
+			"rollback_pending":           true,
+			"rollback_target_year_no":    targetYearNo,
+			"rollback_target_stage_code": nullableStringValue(targetStageCode),
+			"rollback_log_id":            rollbackLogID,
+			"updater":                    operatorName,
+		}).Error
+}
+
+func (r *GroupYearStateRepository) MarkRollbackPendingRange(ctx context.Context, groupID int64, fromYearNo int, toYearNo int, targetYearNo int, targetStageCode string, rollbackLogID int64, operatorName string) error {
+	if toYearNo < fromYearNo {
+		toYearNo = fromYearNo
+	}
+	return r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("group_id = ? AND year_no BETWEEN ? AND ?", groupID, fromYearNo, toYearNo).
 		Updates(map[string]any{
 			"rollback_pending":           true,
 			"rollback_target_year_no":    targetYearNo,
@@ -149,6 +237,18 @@ func (r *GroupYearStateRepository) CountRollbackPending(ctx context.Context) (in
 		return 0, err
 	}
 	return count, nil
+}
+
+func (r *GroupYearStateRepository) ListRollbackPending(ctx context.Context) ([]entity.GroupYearState, error) {
+	var items []entity.GroupYearState
+	if err := r.db.WithContext(ctx).
+		Where("rollback_pending = ?", true).
+		Order("year_no ASC").
+		Order("group_id ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *GroupYearStateRepository) listExistingKeys(ctx context.Context, groupIDs []int64, fromYear int, toYear int) (map[groupYearStateKey]struct{}, error) {
@@ -200,4 +300,11 @@ func buildMissingFormalYearStates(groupIDs []int64, fromYear int, toYear int, op
 		}
 	}
 	return items
+}
+
+func maxRollbackYear(targetYearNo int, currentOpenYear int) int {
+	if currentOpenYear > targetYearNo {
+		return currentOpenYear
+	}
+	return targetYearNo
 }

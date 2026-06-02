@@ -2,6 +2,8 @@
 
 export type UnlockTargetType = 'OPERATING' | 'REPORT'
 export type UnlockStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEAR_END'
+export type SnapshotScope = 'GROUP' | 'GLOBAL'
+export type SnapshotType = 'AUTO' | 'MANUAL' | 'SAFETY'
 export type NoticeTargetScope = 'ALL' | 'GROUP'
 export type AdjustmentType = 'REWARD' | 'PENALTY'
 import type { OrderForecastStageCode, OrderMarketCode, OrderMarketForecastResult, OrderPoolStatus, OrderTypeCode } from '@/types/sandbox-game-order'
@@ -179,9 +181,19 @@ export interface AdminYearSummaryItem {
   ranking?: number | null
 }
 
+export interface AdminRollbackPendingGroup {
+  groupId: number
+  groupNo: number
+  groupName: string
+  businessStatus: string
+  rollbackTargetYearNo: number | null
+  rollbackTargetStageCode: string | null
+}
+
 export interface AdminYearSummaryResult {
   yearNo: number
   list: AdminYearSummaryItem[]
+  pendingGroups: AdminRollbackPendingGroup[]
 }
 
 export interface AdminFinalRankingItem {
@@ -275,6 +287,64 @@ export interface SendAdminAdjustmentResult {
   amount: number
   reason: string
   publishedAt: string
+}
+
+export interface SnapshotSummary {
+  id: number
+  snapshotScope: SnapshotScope | string
+  snapshotType: SnapshotType | string
+  triggerCode: string
+  groupId: number | null
+  groupName: string | null
+  yearNo: number | null
+  stageCode: string | null
+  reportStatus: string | null
+  description: string
+  payloadHash: string
+  createdByName: string
+  createdAt: string
+}
+
+export interface SnapshotListResult {
+  list: SnapshotSummary[]
+  pageNo: number
+  pageSize: number
+  total: number
+}
+
+export interface SnapshotDetailResult {
+  snapshot: SnapshotSummary
+  stateSummary: Record<string, unknown>
+  payloadPreview: Record<string, unknown>
+  payloadVersion: string
+  payloadSize: number
+}
+
+export interface CreateSnapshotRequest {
+  snapshotScope: SnapshotScope
+  groupId?: number | null
+  yearNo?: number | null
+  stageCode?: string
+  description: string
+}
+
+export interface RestoreGroupSnapshotRequest {
+  snapshotId: number
+  reason: string
+  confirmText: string
+}
+
+export interface RestoreGroupSnapshotResult {
+  rollbackLogId: number
+  safetySnapshotId: number
+  groupId: number
+  targetYearNo: number
+  targetStageCode: string
+  yearStatus: string
+  stageStatus: string
+  reportStatus: string
+  businessStatus: string
+  hasRollbackPending: boolean
 }
 
 export interface ParsedOrderCard {

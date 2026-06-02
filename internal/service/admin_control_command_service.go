@@ -535,6 +535,17 @@ func (s *AdminControlCommandService) OpenNextYear(ctx context.Context, cmd OpenN
 		if err := txAdminActionLogRepo.Create(ctx, logItem); err != nil {
 			return fmt.Errorf("create admin action log: %w", err)
 		}
+		if _, err := createGlobalSnapshot(ctx, tx, CreateGlobalSnapshotCommand{
+			YearNo:       cmd.TargetYearNo,
+			SnapshotType: enum.SnapshotTypeAuto,
+			TriggerCode:  enum.SnapshotTriggerOpenNextYear,
+			Description:  "开放下一年后自动快照",
+			OperatorID:   cmd.OperatorID,
+			OperatorName: operatorName,
+			OperateTime:  now,
+		}); err != nil {
+			return err
+		}
 
 		result = &OpenNextYearResult{
 			PreviousOpenYear:          gameConfig.CurrentOpenYear,
@@ -664,6 +675,9 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		txSummaryRepo := repository.NewSummarySnapshotRepository(tx)
 		txAdminUnlockLogRepo := repository.NewAdminUnlockLogRepository(tx)
 		txAdminActionLogRepo := repository.NewAdminActionLogRepository(tx)
+		txRollbackLogRepo := repository.NewRollbackLogRepository(tx)
+		txAdjustmentRepo := repository.NewGroupAdjustmentRepository(tx)
+		txOrderSelectionRepo := repository.NewGroupOrderSelectionRepository(tx)
 
 		gameConfig, err := txGameConfigRepo.GetCurrent(ctx)
 		if err != nil {
@@ -706,6 +720,25 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		}
 
 		now := time.Now()
+		rollbackTargetStageCode := targetStageCode
+		if targetType == unlockTargetTypeReport {
+			rollbackTargetStageCode = rollbackStageReport
+		}
+		safetySnapshot, err := createGroupSnapshot(ctx, tx, CreateGroupSnapshotCommand{
+			GroupID:       cmd.GroupID,
+			YearNo:        cmd.YearNo,
+			StageCode:     rollbackTargetStageCode,
+			SnapshotType:  enum.SnapshotTypeSafety,
+			TriggerCode:   enum.SnapshotTriggerBeforeRollback,
+			Description:   "退回重提前自动安全快照",
+			OperatorID:    cmd.OperatorID,
+			OperatorName:  operatorName,
+			OperateTime:   now,
+			UseForRestore: false,
+		})
+		if err != nil {
+			return fmt.Errorf("create unlock safety snapshot: %w", err)
+		}
 		if err := txGroupYearRepo.UpdateRuntimeState(ctx, cmd.GroupID, cmd.YearNo, nextState, operatorName); err != nil {
 			return fmt.Errorf("update group year state: %w", err)
 		}
@@ -719,12 +752,39 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 			return fmt.Errorf("withdraw summary snapshot: %w", err)
 		}
 
+		rollbackLogItem := &entity.RollbackLog{
+			RollbackType:     enum.RollbackTypeUnlockRetry,
+			TargetGroupID:    cmd.GroupID,
+			TargetYearNo:     cmd.YearNo,
+			TargetStageCode:  nullableString(rollbackTargetStageCode),
+			SafetySnapshotID: safetySnapshot.ID,
+			Reason:           reason,
+			StateBefore:      stateBeforeJSON,
+			StateAfter:       stateAfterJSON,
+			OperatorID:       cmd.OperatorID,
+			OperatorName:     operatorName,
+			OperateTime:      now,
+		}
+		if err := txRollbackLogRepo.Create(ctx, rollbackLogItem); err != nil {
+			return fmt.Errorf("create unlock rollback log: %w", err)
+		}
+		if _, err := txAdjustmentRepo.MarkInvalidAfterTarget(ctx, cmd.GroupID, cmd.YearNo, rollbackTargetStageCode, rollbackLogItem.ID, reason, operatorName, now); err != nil {
+			return fmt.Errorf("invalidate adjustments after unlock: %w", err)
+		}
+		if _, err := txOrderSelectionRepo.InvalidateDeliveryAfterTarget(ctx, cmd.GroupID, cmd.YearNo, rollbackTargetStageCode, rollbackLogItem.ID, operatorName, now); err != nil {
+			return fmt.Errorf("invalidate order delivery after unlock: %w", err)
+		}
+		if err := txGroupYearRepo.MarkRollbackPending(ctx, cmd.GroupID, cmd.YearNo, cmd.YearNo, rollbackTargetStageCode, rollbackLogItem.ID, operatorName); err != nil {
+			return fmt.Errorf("mark unlock rollback pending: %w", err)
+		}
+
 		unlockLogItem := &entity.AdminUnlockLog{
 			GroupID:          cmd.GroupID,
 			YearNo:           cmd.YearNo,
 			Reason:           reason,
 			UnlockTargetType: targetType,
 			TargetStageCode:  nullableString(targetStageCode),
+			SafetySnapshotID: &safetySnapshot.ID,
 			StateBefore:      stateBeforeJSON,
 			StateAfter:       stateAfterJSON,
 			OperatorID:       cmd.OperatorID,
@@ -746,6 +806,8 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 			"reportInvalidated": reportInvalidated,
 			"summaryWithdrawn":  summaryWithdrawn,
 			"businessRecovered": businessRecovered,
+			"rollbackLogId":     rollbackLogItem.ID,
+			"safetySnapshotId":  safetySnapshot.ID,
 		})
 		if err != nil {
 			return fmt.Errorf("marshal unlock year payload: %w", err)

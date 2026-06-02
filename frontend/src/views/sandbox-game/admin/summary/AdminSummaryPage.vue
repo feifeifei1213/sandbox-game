@@ -66,9 +66,9 @@
             <tr v-for="row in summaryRows" :key="row.groupId">
               <td class="row-title">第{{ row.groupNo }}组</td>
               <template v-for="yearNo in formalYears" :key="`${row.groupId}-${yearNo}`">
-                <td class="number-cell">{{ formatMetric(row.byYear[yearNo]?.revenue) }}</td>
-                <td class="number-cell">{{ formatMetric(row.byYear[yearNo]?.profit) }}</td>
-                <td class="number-cell">{{ formatMetric(row.byYear[yearNo]?.equity) }}</td>
+                <td class="number-cell" :class="{ pending: row.pendingByYear[yearNo] }">{{ formatMetric(row.byYear[yearNo]?.revenue, row.pendingByYear[yearNo]) }}</td>
+                <td class="number-cell" :class="{ pending: row.pendingByYear[yearNo] }">{{ formatMetric(row.byYear[yearNo]?.profit, row.pendingByYear[yearNo]) }}</td>
+                <td class="number-cell" :class="{ pending: row.pendingByYear[yearNo] }">{{ formatMetric(row.byYear[yearNo]?.equity, row.pendingByYear[yearNo]) }}</td>
               </template>
               <td class="status-cell">
                 <span class="status-tag" :class="row.businessStatus === 'BANKRUPT' ? 'danger' : 'ok'">
@@ -138,6 +138,7 @@ interface SummaryRow {
   groupNo: number
   groupName: string
   businessStatus: string
+  pendingByYear: Partial<Record<number, boolean>>
   byYear: Partial<Record<number, AdminYearSummaryItem>>
 }
 
@@ -208,17 +209,34 @@ function buildSummaryRows(results: AdminYearSummaryResult[]) {
         groupNo: item.groupNo,
         groupName: item.groupName,
         businessStatus: item.businessStatus,
+        pendingByYear: {},
         byYear: {},
       }
       existing.businessStatus = item.businessStatus
       existing.byYear[result.yearNo] = item
       rowMap.set(item.groupId, existing)
     }
+    for (const item of result.pendingGroups ?? []) {
+      const existing = rowMap.get(item.groupId) ?? {
+        groupId: item.groupId,
+        groupNo: item.groupNo,
+        groupName: item.groupName,
+        businessStatus: item.businessStatus,
+        pendingByYear: {},
+        byYear: {},
+      }
+      existing.businessStatus = item.businessStatus
+      existing.pendingByYear[result.yearNo] = true
+      rowMap.set(item.groupId, existing)
+    }
   }
   return Array.from(rowMap.values()).sort((left, right) => left.groupNo - right.groupNo)
 }
 
-function formatMetric(value?: number) {
+function formatMetric(value?: number, pending?: boolean) {
+  if (pending) {
+    return '待重提'
+  }
   if (typeof value !== 'number') {
     return '--'
   }
@@ -394,6 +412,12 @@ function formatDateTime(value?: string | null) {
 
 .number-cell {
   text-align: right;
+}
+
+.number-cell.pending {
+  color: var(--danger);
+  font-weight: 700;
+  text-align: center;
 }
 
 .center-cell,

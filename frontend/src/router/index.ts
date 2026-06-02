@@ -82,6 +82,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue'),
       },
       {
+        path: 'rollback',
+        name: 'sandbox-admin-rollback',
+        component: () => import('@/views/sandbox-game/admin/AdminRollbackPage.vue'),
+      },
+      {
         path: 'notices',
         name: 'sandbox-admin-notices',
         component: () => import('@/views/sandbox-game/admin/notice/AdminNoticePage.vue'),

@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
@@ -20,6 +22,17 @@ func NewGroupRepository(db *gorm.DB) *GroupRepository {
 func (r *GroupRepository) GetByID(ctx context.Context, groupID int64) (*entity.Group, error) {
 	var item entity.Group
 	if err := r.db.WithContext(ctx).Where("id = ?", groupID).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GroupRepository) GetByIDForUpdate(ctx context.Context, groupID int64) (*entity.Group, error) {
+	var item entity.Group
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", groupID).
+		First(&item).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
@@ -75,4 +88,17 @@ func (r *GroupRepository) RecoverFromBankrupt(ctx context.Context, groupID int64
 			"updater":          operatorName,
 		})
 	return tx.RowsAffected > 0, tx.Error
+}
+
+func (r *GroupRepository) RestoreBusinessState(ctx context.Context, groupID int64, businessStatus string, bankruptYearNo *int, bankruptReason *string, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.Group{}).
+		Where("id = ?", groupID).
+		Updates(map[string]any{
+			"business_status":  businessStatus,
+			"bankrupt_year_no": bankruptYearNo,
+			"bankrupt_reason":  bankruptReason,
+			"updater":          operatorName,
+			"update_time":      operateTime,
+		}).Error
 }

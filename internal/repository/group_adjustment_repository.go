@@ -34,6 +34,19 @@ func (r *GroupAdjustmentRepository) ListByGroupIDAndYear(ctx context.Context, gr
 	return items, nil
 }
 
+func (r *GroupAdjustmentRepository) ListAllByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupAdjustment, error) {
+	var items []entity.GroupAdjustment
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC").
+		Order("published_at DESC").
+		Order("id DESC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *GroupAdjustmentRepository) MarkInvalidAfterTarget(ctx context.Context, groupID int64, targetYearNo int, targetStageCode string, rollbackID int64, reason string, operatorName string, operateTime time.Time) (int64, error) {
 	query := r.db.WithContext(ctx).
 		Model(&entity.GroupAdjustment{}).

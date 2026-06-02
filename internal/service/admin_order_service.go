@@ -1302,6 +1302,17 @@ func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd Con
 		}); err != nil {
 			return fmt.Errorf("create admin action log: %w", err)
 		}
+		if _, err := createGlobalSnapshot(ctx, tx, CreateGlobalSnapshotCommand{
+			YearNo:       cmd.YearNo,
+			SnapshotType: enum.SnapshotTypeAuto,
+			TriggerCode:  enum.SnapshotTriggerOrderPoolConfirmed,
+			Description:  "订单池确认后自动快照",
+			OperatorID:   cmd.OperatorID,
+			OperatorName: operatorName,
+			OperateTime:  now,
+		}); err != nil {
+			return err
+		}
 		result = &ConfirmOrderPoolResult{
 			YearNo:         cmd.YearNo,
 			BatchID:        batch.ID,

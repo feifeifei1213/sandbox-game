@@ -110,6 +110,10 @@ export interface PlayerOperatingView {
   hasInvalidDraft: boolean
   invalidScopes: string[]
   hasRetainedReportDraft: boolean
+  rollbackPending: boolean
+  rollbackTargetYearNo?: number | null
+  rollbackTargetStageCode?: string | null
+  rollbackNotice: string
   operatingPayload: OperatingPayload
   editableScopes: string[]
   readonlyScopes: string[]
@@ -255,6 +259,10 @@ export interface PlayerReportView {
   canEdit: boolean
   canSubmit: boolean
   hasInvalidDraft: boolean
+  rollbackPending: boolean
+  rollbackTargetYearNo?: number | null
+  rollbackTargetStageCode?: string | null
+  rollbackNotice: string
   reportComputedPayload: ReportComputedPayload
   reportManualPayload: ReportManualPayload
   manualFieldOptions: PlayerReportManualFieldOptions

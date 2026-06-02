@@ -27,8 +27,18 @@ type YearSummaryItem struct {
 }
 
 type GetAdminYearSummaryResult struct {
-	YearNo int               `json:"yearNo"`
-	List   []YearSummaryItem `json:"list"`
+	YearNo        int                    `json:"yearNo"`
+	List          []YearSummaryItem      `json:"list"`
+	PendingGroups []RollbackPendingGroup `json:"pendingGroups"`
+}
+
+type RollbackPendingGroup struct {
+	GroupID                 int64   `json:"groupId"`
+	GroupNo                 int     `json:"groupNo"`
+	GroupName               string  `json:"groupName"`
+	BusinessStatus          string  `json:"businessStatus"`
+	RollbackTargetYearNo    *int    `json:"rollbackTargetYearNo"`
+	RollbackTargetStageCode *string `json:"rollbackTargetStageCode"`
 }
 
 type FinalRankingItem struct {
@@ -81,6 +91,14 @@ func (s *AdminSummaryQueryService) GetYearSummary(ctx context.Context, yearNo in
 	if err != nil {
 		return nil, fmt.Errorf("load summary snapshots: %w", err)
 	}
+	groups, err := s.groupRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load groups: %w", err)
+	}
+	states, err := s.groupYearRepo.ListByYear(ctx, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("load year states: %w", err)
+	}
 
 	rankingMap := map[int64]int{}
 	if yearNo == gameConfig.FinalYear {
@@ -92,8 +110,9 @@ func (s *AdminSummaryQueryService) GetYearSummary(ctx context.Context, yearNo in
 	}
 
 	return &GetAdminYearSummaryResult{
-		YearNo: yearNo,
-		List:   buildYearSummaryItems(summaryItems, rankingMap),
+		YearNo:        yearNo,
+		List:          buildYearSummaryItems(summaryItems, rankingMap),
+		PendingGroups: buildRollbackPendingGroups(groups, states),
 	}, nil
 }
 
@@ -151,6 +170,32 @@ func buildRankingMap(items []repository.SummarySnapshotWithGroup) map[int64]int 
 	result := make(map[int64]int, len(items))
 	for index, item := range items {
 		result[item.GroupID] = index + 1
+	}
+	return result
+}
+
+func buildRollbackPendingGroups(groups []entity.Group, states []entity.GroupYearState) []RollbackPendingGroup {
+	groupMap := make(map[int64]entity.Group, len(groups))
+	for _, group := range groups {
+		groupMap[group.ID] = group
+	}
+	result := make([]RollbackPendingGroup, 0)
+	for _, item := range states {
+		if !item.RollbackPending {
+			continue
+		}
+		group, ok := groupMap[item.GroupID]
+		if !ok {
+			continue
+		}
+		result = append(result, RollbackPendingGroup{
+			GroupID:                 group.ID,
+			GroupNo:                 group.GroupNo,
+			GroupName:               group.GroupName,
+			BusinessStatus:          group.BusinessStatus,
+			RollbackTargetYearNo:    item.RollbackTargetYearNo,
+			RollbackTargetStageCode: item.RollbackTargetStageCode,
+		})
 	}
 	return result
 }

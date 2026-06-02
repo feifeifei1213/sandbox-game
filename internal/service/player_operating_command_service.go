@@ -357,6 +357,20 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 				return err
 			}
 		}
+		if _, err := createGroupSnapshot(ctx, tx, CreateGroupSnapshotCommand{
+			GroupID:       cmd.GroupID,
+			YearNo:        cmd.YearNo,
+			StageCode:     cmd.StageCode,
+			SnapshotType:  enum.SnapshotTypeAuto,
+			TriggerCode:   enum.SnapshotTriggerStageSubmitted,
+			Description:   "经营阶段提交后自动快照",
+			OperatorID:    cmd.SubmitterID,
+			OperatorName:  cmd.OperatorName,
+			OperateTime:   submitTime,
+			UseForRestore: true,
+		}); err != nil {
+			return err
+		}
 
 		return nil
 	}, sqlTxOptionsReadCommitted); err != nil {

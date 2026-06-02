@@ -19,6 +19,7 @@ const (
 	openNextYearBlockedReasonFinalYearReached    = "已达到最终年份，无法继续开放"
 	openNextYearBlockedReasonBaselineUnsubmitted = "初始基线尚未提交"
 	openNextYearBlockedReasonUnfinishedReports   = "当前仍有未完成财报的小组"
+	openNextYearBlockedReasonRollbackPending     = "仍有小组处于回退补提中，不能开放下一年"
 )
 
 type AdminActionSummary struct {
@@ -277,6 +278,12 @@ func evaluateOpenNextYearStatus(gameConfig *entity.GameConfig, groups []entity.G
 		stateItem, ok := stateMap[group.ID]
 		if !ok || stateItem.YearStatus != enum.YearStatusCompleted {
 			result.BlockedReason = openNextYearBlockedReasonUnfinishedReports
+			return result
+		}
+	}
+	for _, item := range states {
+		if item.RollbackPending {
+			result.BlockedReason = openNextYearBlockedReasonRollbackPending
 			return result
 		}
 	}

@@ -12,29 +12,33 @@ import (
 )
 
 type PlayerOperatingView struct {
-	GroupID                int64                                 `json:"groupId"`
-	YearNo                 int                                   `json:"yearNo"`
-	YearStatus             string                                `json:"yearStatus"`
-	StageStatus            string                                `json:"stageStatus"`
-	ReportStatus           string                                `json:"reportStatus"`
-	BusinessStatus         string                                `json:"businessStatus"`
-	CurrentStageCode       string                                `json:"currentStageCode"`
-	CanView                bool                                  `json:"canView"`
-	CanEdit                bool                                  `json:"canEdit"`
-	CanSubmit              bool                                  `json:"canSubmit"`
-	HasInvalidDraft        bool                                  `json:"hasInvalidDraft"`
-	InvalidScopes          []string                              `json:"invalidScopes"`
-	HasRetainedReportDraft bool                                  `json:"hasRetainedReportDraft"`
-	OperatingPayload       payload.OperatingPayload              `json:"operatingPayload"`
-	EditableScopes         []string                              `json:"editableScopes"`
-	ReadonlyScopes         []string                              `json:"readonlyScopes"`
-	StageSubmitHistory     []PlayerOperatingStageSubmitHistory   `json:"stageSubmitHistory"`
-	LastDraftSavedAt       *time.Time                            `json:"lastDraftSavedAt"`
-	QuarterCashChecks      map[string]float64                    `json:"quarterCashChecks"`
-	DerivedValues          map[string]float64                    `json:"derivedValues"`
-	PeriodEndCash          float64                               `json:"periodEndCash"`
-	CarryForward           *carryforwardrules.CarryForwardResult `json:"carryForward,omitempty"`
-	NoticeBoard            *PlayerNoticeBoard                    `json:"noticeBoard"`
+	GroupID                 int64                                 `json:"groupId"`
+	YearNo                  int                                   `json:"yearNo"`
+	YearStatus              string                                `json:"yearStatus"`
+	StageStatus             string                                `json:"stageStatus"`
+	ReportStatus            string                                `json:"reportStatus"`
+	BusinessStatus          string                                `json:"businessStatus"`
+	CurrentStageCode        string                                `json:"currentStageCode"`
+	CanView                 bool                                  `json:"canView"`
+	CanEdit                 bool                                  `json:"canEdit"`
+	CanSubmit               bool                                  `json:"canSubmit"`
+	HasInvalidDraft         bool                                  `json:"hasInvalidDraft"`
+	InvalidScopes           []string                              `json:"invalidScopes"`
+	HasRetainedReportDraft  bool                                  `json:"hasRetainedReportDraft"`
+	RollbackPending         bool                                  `json:"rollbackPending"`
+	RollbackTargetYearNo    *int                                  `json:"rollbackTargetYearNo,omitempty"`
+	RollbackTargetStageCode *string                               `json:"rollbackTargetStageCode,omitempty"`
+	RollbackNotice          string                                `json:"rollbackNotice"`
+	OperatingPayload        payload.OperatingPayload              `json:"operatingPayload"`
+	EditableScopes          []string                              `json:"editableScopes"`
+	ReadonlyScopes          []string                              `json:"readonlyScopes"`
+	StageSubmitHistory      []PlayerOperatingStageSubmitHistory   `json:"stageSubmitHistory"`
+	LastDraftSavedAt        *time.Time                            `json:"lastDraftSavedAt"`
+	QuarterCashChecks       map[string]float64                    `json:"quarterCashChecks"`
+	DerivedValues           map[string]float64                    `json:"derivedValues"`
+	PeriodEndCash           float64                               `json:"periodEndCash"`
+	CarryForward            *carryforwardrules.CarryForwardResult `json:"carryForward,omitempty"`
+	NoticeBoard             *PlayerNoticeBoard                    `json:"noticeBoard"`
 }
 
 type PlayerOperatingStageSubmitHistory struct {
@@ -77,28 +81,32 @@ func (a *PlayerOperatingAssembler) Build(
 	draftState := buildOperatingDraftState(ctx.State, stageSubmissions)
 
 	return &PlayerOperatingView{
-		GroupID:                ctx.Group.ID,
-		YearNo:                 ctx.YearState.YearNo,
-		YearStatus:             ctx.State.YearStatus,
-		StageStatus:            ctx.State.StageStatus,
-		ReportStatus:           ctx.State.ReportStatus,
-		BusinessStatus:         ctx.State.BusinessStatus,
-		CurrentStageCode:       permission.CurrentStageCode,
-		CanView:                permission.CanView,
-		CanEdit:                permission.CanEdit,
-		CanSubmit:              permission.CanSubmit,
-		HasInvalidDraft:        draftState.HasInvalidDraft,
-		InvalidScopes:          draftState.InvalidScopes,
-		HasRetainedReportDraft: draftState.HasRetainedReportDraft,
-		OperatingPayload:       result.OperatingPayload,
-		EditableScopes:         permission.EditableScopes,
-		ReadonlyScopes:         permission.ReadonlyScopes,
-		StageSubmitHistory:     history,
-		LastDraftSavedAt:       lastDraftSavedAt,
-		QuarterCashChecks:      result.QuarterCashChecks,
-		DerivedValues:          result.DerivedValues,
-		PeriodEndCash:          result.PeriodEndCash,
-		CarryForward:           carryForward,
-		NoticeBoard:            noticeBoard,
+		GroupID:                 ctx.Group.ID,
+		YearNo:                  ctx.YearState.YearNo,
+		YearStatus:              ctx.State.YearStatus,
+		StageStatus:             ctx.State.StageStatus,
+		ReportStatus:            ctx.State.ReportStatus,
+		BusinessStatus:          ctx.State.BusinessStatus,
+		CurrentStageCode:        permission.CurrentStageCode,
+		CanView:                 permission.CanView,
+		CanEdit:                 permission.CanEdit,
+		CanSubmit:               permission.CanSubmit,
+		HasInvalidDraft:         draftState.HasInvalidDraft,
+		InvalidScopes:           draftState.InvalidScopes,
+		HasRetainedReportDraft:  draftState.HasRetainedReportDraft,
+		RollbackPending:         ctx.YearState.RollbackPending,
+		RollbackTargetYearNo:    ctx.YearState.RollbackTargetYearNo,
+		RollbackTargetStageCode: ctx.YearState.RollbackTargetStageCode,
+		RollbackNotice:          buildRollbackNotice(ctx.YearState),
+		OperatingPayload:        result.OperatingPayload,
+		EditableScopes:          permission.EditableScopes,
+		ReadonlyScopes:          permission.ReadonlyScopes,
+		StageSubmitHistory:      history,
+		LastDraftSavedAt:        lastDraftSavedAt,
+		QuarterCashChecks:       result.QuarterCashChecks,
+		DerivedValues:           result.DerivedValues,
+		PeriodEndCash:           result.PeriodEndCash,
+		CarryForward:            carryForward,
+		NoticeBoard:             noticeBoard,
 	}
 }

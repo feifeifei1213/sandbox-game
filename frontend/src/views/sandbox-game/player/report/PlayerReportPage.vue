@@ -53,6 +53,10 @@
             </div>
           </section>
 
+          <section v-if="activeView?.rollbackPending && activeView.rollbackNotice" class="message-bar info">
+            {{ activeView.rollbackNotice }}
+          </section>
+
           <section v-if="!previewMode && (loading || yearViewLoading)" class="loading-card">正在加载财报页数据...</section>
 
           <ReportSheet
@@ -285,6 +289,10 @@ const previewView = computed<PlayerReportView>(() => ({
   canEdit: true,
   canSubmit: true,
   hasInvalidDraft: false,
+  rollbackPending: false,
+  rollbackTargetYearNo: null,
+  rollbackTargetStageCode: null,
+  rollbackNotice: '',
   reportComputedPayload: previewBaseComputedPayload.value,
   reportManualPayload: cloneReportManualPayload(previewDraftManualPayload.value),
   manualFieldOptions: {

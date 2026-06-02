@@ -53,6 +53,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 	marketStateRepo := repository.NewMarketBiddingStateRepository(db)
 	marketSequenceRepo := repository.NewMarketSelectionOrderRepository(db)
 	groupOrderSelectionRepo := repository.NewGroupOrderSelectionRepository(db)
+	stateSnapshotRepo := repository.NewStateSnapshotRepository(db)
 
 	authService := service.NewAuthService(accountRepo, groupRepo, cfg.Auth)
 	authHandler := handler.NewAuthHandler(authService)
@@ -171,6 +172,15 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminControlQueryService,
 		adminControlCommandService,
 	)
+	adminRollbackQueryService := service.NewAdminRollbackQueryService(
+		stateSnapshotRepo,
+		groupRepo,
+	)
+	adminRollbackCommandService := service.NewAdminRollbackCommandService(db)
+	adminRollbackHandler := handler.NewAdminRollbackHandler(
+		adminRollbackQueryService,
+		adminRollbackCommandService,
+	)
 	adminNoticeQueryService := service.NewAdminNoticeQueryService(
 		noticeRepo,
 		adjustmentRepo,
@@ -266,6 +276,12 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminControl.GET("/get-initial-baseline", adminControlHandler.GetInitialBaseline)
 		adminControl.POST("/submit-initial-baseline", adminControlHandler.SubmitInitialBaseline)
 		adminControl.POST("/unlock-year", adminControlHandler.UnlockYear)
+
+		adminRollback := protected.Group("/admin-rollback")
+		adminRollback.GET("/list-snapshots", adminRollbackHandler.ListSnapshots)
+		adminRollback.GET("/get-snapshot-detail", adminRollbackHandler.GetSnapshotDetail)
+		adminRollback.POST("/create-snapshot", adminRollbackHandler.CreateSnapshot)
+		adminRollback.POST("/restore-group-snapshot", adminRollbackHandler.RestoreGroupSnapshot)
 
 		adminNotice := protected.Group("/admin-notice")
 		adminNotice.GET("/get-records", adminNoticeHandler.GetRecords)

@@ -96,6 +96,17 @@ func (r *SummarySnapshotRepository) ListEffectiveByYear(ctx context.Context, yea
 	return items, nil
 }
 
+func (r *SummarySnapshotRepository) ListByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupSummarySnapshot, error) {
+	var items []entity.GroupSummarySnapshot
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no >= ?", groupID, fromYearNo).
+		Order("year_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *SummarySnapshotRepository) ListEffectiveRankingByYear(ctx context.Context, yearNo int) ([]SummarySnapshotWithGroup, error) {
 	var items []SummarySnapshotWithGroup
 	if err := r.db.WithContext(ctx).

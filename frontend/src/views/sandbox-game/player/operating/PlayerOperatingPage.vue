@@ -49,6 +49,10 @@
             </div>
           </section>
 
+          <section v-if="activeView?.rollbackPending && activeView.rollbackNotice" class="message-bar info">
+            {{ activeView.rollbackNotice }}
+          </section>
+
           <section v-if="!previewMode && (loading || yearViewLoading)" class="loading-card">正在加载经营页数据...</section>
 
           <OperatingSheet
@@ -375,6 +379,10 @@ function buildPreviewView(yearNo: number, lastDraftSavedAt: string | null): Play
     hasInvalidDraft: false,
     invalidScopes: [],
     hasRetainedReportDraft: false,
+    rollbackPending: false,
+    rollbackTargetYearNo: null,
+    rollbackTargetStageCode: null,
+    rollbackNotice: '',
     operatingPayload: cloneOperatingPayload(previewDraftPayload.value),
     editableScopes: ['YEAR_START', 'Q1', 'Q2', 'Q3', 'Q4', 'YEAR_END'],
     readonlyScopes: [],
