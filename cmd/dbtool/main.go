@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	actionInitSingle        = "init-single"
-	actionResetSingle       = "reset-single"
-	actionInitCompetition   = "init-competition"
-	actionResetCompetition  = "reset-competition"
-	actionSeedOrderScenario = "seed-order-scenario"
+	actionInitSingle           = "init-single"
+	actionResetSingle          = "reset-single"
+	actionInitCompetition      = "init-competition"
+	actionResetCompetition     = "reset-competition"
+	actionSeedOrderScenario    = "seed-order-scenario"
+	actionSeedRollbackScenario = "seed-rollback-scenario"
 )
 
 func main() {
@@ -31,7 +32,7 @@ func main() {
 	var confirmReset bool
 
 	flag.StringVar(&configPath, "config", "configs/local-single.yaml", "配置文件路径")
-	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single/init-competition/reset-competition/seed-order-scenario")
+	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single/init-competition/reset-competition/seed-order-scenario/seed-rollback-scenario")
 	flag.BoolVar(&confirmReset, "confirm-reset", false, "确认允许重置当前配置指向的数据库，仅测试造数动作需要")
 	flag.Parse()
 
@@ -85,9 +86,9 @@ func run(configPath string, action string, confirmReset bool) error {
 		if err := recreateDatabase(adminDB, targetDBName); err != nil {
 			return err
 		}
-	case actionSeedOrderScenario:
+	case actionSeedOrderScenario, actionSeedRollbackScenario:
 		if !confirmReset {
-			return fmt.Errorf("seed-order-scenario 会重置当前配置指向的数据库 %q；确认在测试库执行时请追加 --confirm-reset", targetDBName)
+			return fmt.Errorf("%s 会重置当前配置指向的数据库 %q；确认在测试库执行时请追加 --confirm-reset", action, targetDBName)
 		}
 		if err := recreateDatabase(adminDB, targetDBName); err != nil {
 			return err
@@ -122,7 +123,7 @@ func run(configPath string, action string, confirmReset bool) error {
 		}
 	}
 
-	if action == actionSeedOrderScenario {
+	if action == actionSeedOrderScenario || action == actionSeedRollbackScenario {
 		gormDB, err := gorm.Open(mysql.Open(cfg.MySQL.DSN), &gorm.Config{})
 		if err != nil {
 			return fmt.Errorf("open target mysql with gorm: %w", err)
@@ -132,8 +133,15 @@ func run(configPath string, action string, confirmReset bool) error {
 			return fmt.Errorf("extract gorm sql db: %w", err)
 		}
 		defer gormSQLDB.Close()
-		if err := seedOrderScenario(context.Background(), gormDB); err != nil {
-			return err
+		switch action {
+		case actionSeedOrderScenario:
+			if err := seedOrderScenario(context.Background(), gormDB); err != nil {
+				return err
+			}
+		case actionSeedRollbackScenario:
+			if err := seedRollbackScenario(context.Background(), gormDB); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -157,7 +165,7 @@ func resolveMigrationFiles(projectRoot string, action string) ([]string, error) 
 	switch action {
 	case actionInitSingle, actionResetSingle:
 		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0002_seed_single_group.sql")), nil
-	case actionInitCompetition, actionResetCompetition, actionSeedOrderScenario:
+	case actionInitCompetition, actionResetCompetition, actionSeedOrderScenario, actionSeedRollbackScenario:
 		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0004_seed_competition_admin.sql")), nil
 	default:
 		return nil, fmt.Errorf("unsupported migration action: %s", action)

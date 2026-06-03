@@ -1,0 +1,271 @@
+# 测试与展示命令速查
+
+> 适用场景：本地测试、给同事演示、切换到指定测试停点。  
+> 注意：本文中的数据库重置 / 造数命令会清空 `configs/local.yaml` 指向的数据库，只能用于测试库。
+
+## 1. 启动前后端
+
+建议先准备好数据库状态，再启动前后端。如果已经启动服务，也可以执行造数命令后刷新页面并重新登录。
+
+### 1.1 启动后端
+
+新开一个 PowerShell 窗口：
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run .\cmd\server\main.go -config .\configs\local.yaml
+```
+
+后端健康检查：
+
+```text
+http://127.0.0.1:8080/healthz
+```
+
+### 1.2 启动前端
+
+再新开一个 PowerShell 窗口：
+
+```powershell
+cd 'E:\project\sand box game\frontend'
+npm run dev
+```
+
+本机访问地址：
+
+```text
+http://127.0.0.1:5173/sandbox-game/login
+```
+
+如果给同事在局域网访问，使用 Vite 输出的 `Network` 地址中与你们同一网段的地址，例如：
+
+```text
+http://192.168.8.105:5173/sandbox-game/login
+```
+
+不要同时混用多个 `Network` 地址测试登录状态。
+
+## 2. 状态一：回到赛前选择版本
+
+用途：
+
+- 测试管理员首次进入系统。
+- 测试赛前配置页。
+- 测试选择经营版本。
+- 测试配置小组数量并初始化比赛。
+
+执行命令：
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action reset-competition
+```
+
+执行后状态：
+
+- 只保留管理员账号。
+- 只初始化游戏配置。
+- 不创建玩家组。
+- 不创建玩家账号。
+- 不创建年份状态。
+- 不提交初始基线。
+- 不生成订单数据。
+
+登录账号：
+
+```text
+admin / 123456
+```
+
+管理员登录后应进入：
+
+```text
+/sandbox-game/admin/setup
+```
+
+也就是“赛前配置 / 选择经营版本 / 配置小组数量”的页面。
+
+## 3. 状态二：跳到订单开标测试停点
+
+用途：
+
+- 跳过真实 `0年 / 1年` 经营填报。
+- 保留 `1年` 订单历史，用来测试 `2年` 市场龙头。
+- 从管理员端手工测试订单数量配置、市场开启、释放顺序、生成订单池、确认订单池。
+
+执行命令：
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-order-scenario -confirm-reset
+```
+
+执行后状态：
+
+- 初始化 `3` 个小组。
+- 写入合法但非真实的 `0年 / 1年` 经营和财报数据。
+- 写入 `1年` 各市场已选订单历史。
+- 当前开放年份为 `2年`。
+- `2年` 订单数量、市场开启、释放顺序、订单池均未配置。
+
+`2年` 市场龙头测试数据：
+
+| 市场 | 第一组 | 第二组 | 第三组 | 2年龙头 |
+|---|---:|---:|---:|---|
+| 本地市场 | 120 | 80 | 60 | 第一组 |
+| 区域市场 | 70 | 130 | 90 | 第二组 |
+| 全国市场 | 65 | 75 | 150 | 第三组 |
+| 全球市场 | 140 | 100 | 110 | 第一组 |
+
+登录账号：
+
+```text
+admin / 123456
+group01 / 123456
+group02 / 123456
+group03 / 123456
+```
+
+推荐测试顺序：
+
+1. 管理员配置多年订单数量控制台。
+2. 管理员配置 `2年` 市场开启状态。
+3. 管理员配置 `2年` 标段释放顺序。
+4. 管理员生成 `2年` 订单池。
+5. 管理员确认 `2年` 订单池。
+6. 三个小组分别提交 `2年` 市场投入。
+7. 管理员生成选单顺序。
+8. 管理员释放标段。
+9. 当前轮到的小组选择或放弃订单。
+10. 验证已选订单对后续小组置灰锁定。
+
+## 4. 状态三：跳到回退与修正测试停点
+
+用途：
+
+- 测试管理员端 `回退与修正` 页面。
+- 测试自动快照列表、手动快照、退回重提、单组快照恢复。
+- 测试回退后的 `待重提`、年度控制阻断、玩家页回退提示。
+- 测试订单交付失效但已选订单归属不释放。
+
+执行命令：
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-rollback-scenario -confirm-reset
+```
+
+执行后状态：
+
+- 初始化 `3` 个小组，账号仍为 `group01 / group02 / group03`。
+- 写入非零、可通过系统校验的 `0年 / 1年` 经营和财报数据。
+- 通过订单服务生成并确认 `2年` 订单池，生成全局自动快照。
+- 通过开标服务完成至少一个标段，生成标段完成全局自动快照。
+- 通过玩家经营 / 财报服务完成关键提交动作，生成单组自动快照。
+- 通过年度控制服务依次开放到 `1年 / 2年`，生成开放下一年全局自动快照。
+- 本地市场会完成 `代办过检`、`两舱贵宾` 两个标段；第一组有 `1` 条已选并已交付订单。
+- 最终停在 `2年已完成、尚未开放3年`，至少一个小组已有可用于恢复的单组历史快照，且有订单交付记录可测试回退失效。
+- 命令跑通后的控制台摘要应显示 `snapshots=23 selections=1 delivered=1`。
+
+验收重点：
+
+1. 管理员进入 `回退与修正 -> 恢复快照`，应能看到 `GROUP + AUTO` 和 `GLOBAL + AUTO` 快照。
+2. 筛选单组快照并查看详情，确认载荷中包含小组、年份、阶段、经营 / 财报 / 汇总 / 订单选择等摘要。
+3. 在 `退回重提` 中选择小组、年份和目标阶段，提交后汇总页对应年份显示 `待重提`。
+4. 存在 `待重提` 小组时，年度控制页应阻断开放下一年。
+5. 玩家重新进入经营页或财报页，应看到回退提示，原数据保留为可修改草稿。
+6. 恢复单组快照时必须填写原因并输入 `确认恢复`，恢复前系统会自动生成安全快照。
+7. 回退后已选订单仍归属原小组，但目标节点之后的订单交付状态失效。
+
+说明：
+
+- 这个停点不是全 0 占位数据。
+- 关键快照不是手工伪造，而是由经营提交、财报提交、订单池确认、标段完成、开放下一年等真实业务动作触发。
+- 该命令会清空 `configs/local.yaml` 指向的数据库，只能用于测试库。
+
+## 5. 多账号同时测试建议
+
+同一个浏览器的多个标签页会共用登录态，不能同时登录多个账号。
+
+推荐做法：
+
+```text
+Chrome：admin
+Edge：group01
+Firefox：group02
+Chrome 无痕窗口：group03
+```
+
+如果两台电脑一起测，也可以拆开：
+
+```text
+你的电脑：admin + group01
+同事电脑：group02 + group03
+```
+
+关键是每个账号使用独立浏览器环境。
+
+## 6. 三个停点的区别
+
+| 命令 | 停点 | 适合测试 |
+|---|---|---|
+| `reset-competition` | 赛前未初始化，只能管理员登录 | 选择经营版本、小组数量初始化 |
+| `seed-order-scenario -confirm-reset` | 已到 `2年`，但订单配置未开始 | 订单数量、市场开启、订单池生成、开标抢单 |
+| `seed-rollback-scenario -confirm-reset` | 已有非零经营 / 财报 / 订单 / 快照历史 | 回退重提、快照恢复、待重提阻断、订单交付失效 |
+
+## 7. 最简命令汇总
+
+### 7.1 启动后端
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run .\cmd\server\main.go -config .\configs\local.yaml
+```
+
+### 7.2 启动前端
+
+```powershell
+cd 'E:\project\sand box game\frontend'
+npm run dev
+```
+
+### 7.3 回到最开始：选择经营版本
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action reset-competition
+```
+
+### 7.4 跳到订单开标测试
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-order-scenario -confirm-reset
+```
+
+### 7.5 跳到回退与修正测试
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-rollback-scenario -confirm-reset
+```
+
+### 7.6 登录地址和账号
+
+```text
+本机地址：http://127.0.0.1:5173/sandbox-game/login
+局域网地址：http://你的电脑IP:5173/sandbox-game/login
+
+admin / 123456
+group01 / 123456
+group02 / 123456
+group03 / 123456
+```
