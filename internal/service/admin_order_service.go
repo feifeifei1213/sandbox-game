@@ -98,6 +98,12 @@ type OrderForecastControlItem struct {
 	OrderCount        int    `json:"orderCount"`
 }
 
+type OrderForecastYearLock struct {
+	YearNo int    `json:"yearNo"`
+	Locked bool   `json:"locked"`
+	Reason string `json:"reason,omitempty"`
+}
+
 type OrderForecastNarrativeItem struct {
 	ForecastStageCode string `json:"forecastStageCode"`
 	ForecastStageName string `json:"forecastStageName"`
@@ -144,6 +150,7 @@ type OrderForecastControlResult struct {
 	Items      []OrderForecastControlItem   `json:"items"`
 	Narratives []OrderForecastNarrativeItem `json:"narratives"`
 	Forecast   OrderMarketForecastResult    `json:"forecast"`
+	YearLocks  []OrderForecastYearLock      `json:"yearLocks"`
 }
 
 type OrderControlConfigItem struct {
@@ -249,11 +256,13 @@ type UpdateOrderForecastNarrativeItem struct {
 }
 
 type UpdateOrderForecastControlResult struct {
-	Items      []OrderForecastControlItem   `json:"items"`
-	Narratives []OrderForecastNarrativeItem `json:"narratives"`
-	Forecast   OrderMarketForecastResult    `json:"forecast"`
-	UpdatedAt  string                       `json:"updatedAt"`
-	UpdatedBy  string                       `json:"updatedBy"`
+	Items            []OrderForecastControlItem   `json:"items"`
+	Narratives       []OrderForecastNarrativeItem `json:"narratives"`
+	Forecast         OrderMarketForecastResult    `json:"forecast"`
+	YearLocks        []OrderForecastYearLock      `json:"yearLocks"`
+	AutoPreviewYears []int                        `json:"autoPreviewYears"`
+	UpdatedAt        string                       `json:"updatedAt"`
+	UpdatedBy        string                       `json:"updatedBy"`
 }
 
 type UpdateOrderControlConfigCommand struct {
@@ -398,11 +407,16 @@ func (s *AdminOrderQueryService) GetForecastControl(ctx context.Context) (*Order
 	if len(items) == 0 {
 		items = defaultForecastControlEntities("system", time.Now())
 	}
+	yearLocks, err := s.buildForecastYearLocks(ctx)
+	if err != nil {
+		return nil, err
+	}
 	forecast := buildMarketForecastResult(items, forecastRows)
 	return &OrderForecastControlResult{
 		Items:      buildOrderForecastControlItems(items),
 		Narratives: buildOrderForecastNarratives(forecastRows),
 		Forecast:   forecast,
+		YearLocks:  yearLocks,
 	}, nil
 }
 
@@ -569,6 +583,27 @@ func (s *AdminOrderQueryService) validateYear(ctx context.Context, yearNo int) e
 	return nil
 }
 
+func (s *AdminOrderQueryService) buildForecastYearLocks(ctx context.Context) ([]OrderForecastYearLock, error) {
+	return buildForecastYearLocksWithRepo(ctx, s.batchRepo)
+}
+
+func buildForecastYearLocksWithRepo(ctx context.Context, batchRepo *repository.OrderGenerationBatchRepository) ([]OrderForecastYearLock, error) {
+	result := make([]OrderForecastYearLock, 0, forecastControlMaxYear)
+	for yearNo := forecastControlMinYear; yearNo <= forecastControlMaxYear; yearNo++ {
+		lock := OrderForecastYearLock{YearNo: yearNo}
+		confirmed, err := batchRepo.FindConfirmedByYear(ctx, yearNo)
+		if err != nil && !repository.IsRecordNotFound(err) {
+			return nil, fmt.Errorf("load confirmed order batch: %w", err)
+		}
+		if confirmed != nil {
+			lock.Locked = true
+			lock.Reason = "订单池已确认"
+		}
+		result = append(result, lock)
+	}
+	return result, nil
+}
+
 type AdminOrderCommandService struct {
 	db *gorm.DB
 }
@@ -667,9 +702,34 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 	now := time.Now()
 	var result *UpdateOrderForecastControlResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		gameConfigRepo := repository.NewGameConfigRepository(tx)
+		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
 		forecastRepo := repository.NewOrderForecastControlRepository(tx)
 		marketForecastRepo := repository.NewOrderMarketForecastRepository(tx)
 		actionRepo := repository.NewAdminActionLogRepository(tx)
+
+		gameConfig, err := gameConfigRepo.GetCurrent(ctx)
+		if err != nil {
+			return fmt.Errorf("load game config: %w", err)
+		}
+		existingControls, err := forecastRepo.ListAll(ctx)
+		if err != nil {
+			return fmt.Errorf("list existing forecast control: %w", err)
+		}
+		changedYears := changedForecastControlYears(mergeForecastControlDefaults(existingControls), cmd.Items)
+		autoPreviewYears := make([]int, 0)
+		for yearNo := range changedYears {
+			if yearNo > gameConfig.FinalYear {
+				continue
+			}
+			if _, err := batchRepo.FindConfirmedByYear(ctx, yearNo); err == nil {
+				return ErrAdminOrderPoolLocked
+			} else if !repository.IsRecordNotFound(err) {
+				return fmt.Errorf("load confirmed order batch: %w", err)
+			}
+			autoPreviewYears = append(autoPreviewYears, yearNo)
+		}
+		sort.Ints(autoPreviewYears)
 
 		existingForecasts, err := marketForecastRepo.ListAll(ctx)
 		if err != nil {
@@ -717,10 +777,21 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 		if err != nil {
 			return fmt.Errorf("reload market forecast: %w", err)
 		}
+		for _, yearNo := range autoPreviewYears {
+			if _, err := generateOrderPreviewInTx(ctx, tx, GenerateOrderPoolCommand{
+				YearNo:       yearNo,
+				Overwrite:    true,
+				OperatorID:   cmd.OperatorID,
+				OperatorName: operatorName,
+			}, operatorName); err != nil {
+				return err
+			}
+		}
 
 		actionPayload, err := marshalJSON(map[string]any{
-			"items":      cmd.Items,
-			"narratives": cmd.Narratives,
+			"items":            cmd.Items,
+			"narratives":       cmd.Narratives,
+			"autoPreviewYears": autoPreviewYears,
 		})
 		if err != nil {
 			return err
@@ -737,12 +808,18 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 			return fmt.Errorf("create admin action log: %w", err)
 		}
 
+		yearLocks, err := buildForecastYearLocksWithRepo(ctx, batchRepo)
+		if err != nil {
+			return err
+		}
 		result = &UpdateOrderForecastControlResult{
-			Items:      buildOrderForecastControlItems(controlRows),
-			Narratives: buildOrderForecastNarratives(forecastRows),
-			Forecast:   buildMarketForecastResult(controlRows, forecastRows),
-			UpdatedAt:  now.Format(time.RFC3339),
-			UpdatedBy:  operatorName,
+			Items:            buildOrderForecastControlItems(controlRows),
+			Narratives:       buildOrderForecastNarratives(forecastRows),
+			Forecast:         buildMarketForecastResult(controlRows, forecastRows),
+			YearLocks:        yearLocks,
+			AutoPreviewYears: autoPreviewYears,
+			UpdatedAt:        now.Format(time.RFC3339),
+			UpdatedBy:        operatorName,
 		}
 		return nil
 	}); err != nil {
@@ -842,6 +919,18 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		}
 		forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
 		sourceCounts := defaultOrderSourceCounts(cmd.YearNo)
+		if _, err := generateOrderPreviewInTx(ctx, tx, GenerateOrderPoolCommand{
+			YearNo:       cmd.YearNo,
+			Overwrite:    true,
+			OperatorID:   cmd.OperatorID,
+			OperatorName: operatorName,
+		}, operatorName); err != nil {
+			return err
+		}
+		configs, err = configRepo.ListByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return fmt.Errorf("reload order configs after preview: %w", err)
+		}
 		poolCounts, err := countGeneratedByYearWithRepo(ctx, poolRepo, cmd.YearNo)
 		if err != nil {
 			return err
@@ -973,6 +1062,14 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		if err := configRepo.CreateBatch(ctx, items); err != nil {
 			return fmt.Errorf("create order configs: %w", err)
 		}
+		if _, err := generateOrderPreviewInTx(ctx, tx, GenerateOrderPoolCommand{
+			YearNo:       cmd.YearNo,
+			Overwrite:    true,
+			OperatorID:   cmd.OperatorID,
+			OperatorName: operatorName,
+		}, operatorName); err != nil {
+			return err
+		}
 
 		configs, err := configRepo.ListByYear(ctx, cmd.YearNo)
 		if err != nil {
@@ -1031,193 +1128,210 @@ func (s *AdminOrderCommandService) GenerateOrderPool(ctx context.Context, cmd Ge
 	}
 	var result *GenerateOrderPoolResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		gameConfigRepo := repository.NewGameConfigRepository(tx)
-		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
-		configRepo := repository.NewOrderGenerationConfigRepository(tx)
-		forecastRepo := repository.NewOrderForecastControlRepository(tx)
-		marketForecastRepo := repository.NewOrderMarketForecastRepository(tx)
-		marketRepo := repository.NewOrderMarketConfigRepository(tx)
-		poolRepo := repository.NewOrderPoolRepository(tx)
-		stateRepo := repository.NewMarketBiddingStateRepository(tx)
-		actionRepo := repository.NewAdminActionLogRepository(tx)
-
-		gameConfig, err := gameConfigRepo.GetCurrent(ctx)
-		if err != nil {
-			return fmt.Errorf("load game config: %w", err)
-		}
-		if cmd.YearNo < 1 || cmd.YearNo > gameConfig.FinalYear {
-			return ErrAdminOrderYearInvalid
-		}
-		started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("check order segment started: %w", err)
-		}
-		if started {
-			return ErrAdminOrderPoolLocked
-		}
-		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
-			return ErrAdminOrderPoolLocked
-		} else if !repository.IsRecordNotFound(err) {
-			return fmt.Errorf("load confirmed order batch: %w", err)
-		}
-		existingCount, err := poolRepo.CountByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("count existing order pool: %w", err)
-		}
-		if existingCount > 0 && !cmd.Overwrite {
-			return ErrAdminOrderPoolLocked
-		}
-
-		configs, err := configRepo.ListByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("list order configs: %w", err)
-		}
-		marketConfigs, err := marketRepo.ListByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("list order market configs: %w", err)
-		}
-		marketMap := buildMarketEnabledMap(marketConfigs)
-		forecastControls, err := forecastRepo.ListByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("list forecast control: %w", err)
-		}
-		forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
-		if len(configs) == 0 {
-			configs = buildOrderGenerationConfigsFromForecast(cmd.YearNo, forecastCounts, marketMap, operatorName, time.Now())
-			if err := configRepo.CreateBatch(ctx, configs); err != nil {
-				return fmt.Errorf("create default order release configs: %w", err)
-			}
-		} else {
-			configs = applyForecastCountsToConfigs(configs, forecastCounts)
-			configs = applyMarketEnabledToConfigs(configs, marketMap)
-			if err := configRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
-				return fmt.Errorf("delete old order configs before forecast snapshot: %w", err)
-			}
-			if err := configRepo.CreateBatch(ctx, configs); err != nil {
-				return fmt.Errorf("recreate order configs with forecast snapshot: %w", err)
-			}
-		}
-
-		now := time.Now()
-		if err := batchRepo.VoidPreviewByYear(ctx, cmd.YearNo, operatorName, now); err != nil {
-			return fmt.Errorf("void old preview batch: %w", err)
-		}
-		if err := poolRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
-			return fmt.Errorf("delete old order pool: %w", err)
-		}
-		if err := stateRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
-			return fmt.Errorf("delete old order segment state: %w", err)
-		}
-		seed := fmt.Sprintf("%d", now.UnixNano())
-		controlSnapshot, err := marshalJSON(map[string]any{
-			"marketConfigs":   buildOrderMarketConfigItems(cmd.YearNo, marketConfigs),
-			"configs":         configs,
-			"forecastControl": buildOrderForecastControlItems(mergeForecastControlDefaults(forecastControls)),
-		})
+		generated, err := generateOrderPreviewInTx(ctx, tx, cmd, operatorName)
 		if err != nil {
 			return err
 		}
-		forecastRows, err := marketForecastRepo.ListAll(ctx)
-		if err != nil {
-			return fmt.Errorf("list market forecast: %w", err)
-		}
-		forecastSnapshot, err := marshalJSON(buildMarketForecastResult(mergeForecastControlDefaults(forecastControls), forecastRows))
-		if err != nil {
-			return err
-		}
-		params := defaultOrderGenerationParameters()
-		parameterSnapshot, err := marshalJSON(params)
-		if err != nil {
-			return err
-		}
-		batch := &entity.OrderGenerationBatch{
-			YearNo:              cmd.YearNo,
-			BatchStatus:         enum.OrderGenerationBatchStatusPreview,
-			FormulaVersion:      orderGenerationFormulaVersion,
-			RandomSeed:          seed,
-			ControlSnapshot:     controlSnapshot,
-			ForecastSnapshot:    forecastSnapshot,
-			ParameterSnapshot:   parameterSnapshot,
-			OrderDetail:         []byte("[]"),
-			GeneratedOrderCount: 0,
-			GeneratedByID:       cmd.OperatorID,
-			GeneratedByName:     operatorName,
-			GeneratedAt:         now,
-			BaseEntity: entity.BaseEntity{
-				Creator:    operatorName,
-				CreateTime: now,
-				Updater:    operatorName,
-				UpdateTime: now,
-			},
-		}
-		if err := batchRepo.Create(ctx, batch); err != nil {
-			return fmt.Errorf("create order generation batch: %w", err)
-		}
-		poolItems, details, params, err := buildGeneratedOrderPoolItems(configs, batch.ID, seed, operatorName, now)
-		if err != nil {
-			return err
-		}
-		detailJSON, err := marshalJSON(details)
-		if err != nil {
-			return err
-		}
-		parameterSnapshot, err = marshalJSON(params)
-		if err != nil {
-			return err
-		}
-		batch.ParameterSnapshot = parameterSnapshot
-		if err := batchRepo.UpdateGenerationPayload(ctx, batch.ID, detailJSON, len(poolItems), operatorName, now); err != nil {
-			return fmt.Errorf("update order generation batch payload: %w", err)
-		}
-		if err := poolRepo.CreateBatch(ctx, poolItems); err != nil {
-			return fmt.Errorf("create order pool: %w", err)
-		}
-		states := buildSegmentStatesFromConfigs(configs, marketMap, operatorName, now)
-		if err := stateRepo.UpsertBatch(ctx, states); err != nil {
-			return fmt.Errorf("create segment states: %w", err)
-		}
-
-		targetYearNo := cmd.YearNo
-		actionPayload, err := marshalJSON(map[string]any{
-			"yearNo":         cmd.YearNo,
-			"batchId":        batch.ID,
-			"generatedCount": len(poolItems),
-			"segmentCount":   len(states),
-			"overwrite":      cmd.Overwrite,
-		})
-		if err != nil {
-			return err
-		}
-		if err := actionRepo.Create(ctx, &entity.AdminActionLog{
-			ActionCode:    adminActionCodeGenerateOrderPreview,
-			TargetYearNo:  &targetYearNo,
-			ActionPayload: actionPayload,
-			StateBefore:   []byte("{}"),
-			StateAfter:    []byte("{}"),
-			OperatorID:    cmd.OperatorID,
-			OperatorName:  operatorName,
-			OperateTime:   now,
-		}); err != nil {
-			return fmt.Errorf("create admin action log: %w", err)
-		}
-
-		result = &GenerateOrderPoolResult{
-			YearNo:         cmd.YearNo,
-			BatchID:        batch.ID,
-			BatchStatus:    batch.BatchStatus,
-			RandomSeed:     seed,
-			FormulaVersion: orderGenerationFormulaVersion,
-			GeneratedCount: len(poolItems),
-			SegmentCount:   len(states),
-			Warnings:       nil,
-			GeneratedAt:    now.Format(time.RFC3339),
-			GeneratedBy:    operatorName,
-		}
+		result = generated
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("generate order pool transaction: %w", err)
 	}
 	return result, nil
+}
+
+func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrderPoolCommand, operatorName string) (*GenerateOrderPoolResult, error) {
+	gameConfigRepo := repository.NewGameConfigRepository(tx)
+	batchRepo := repository.NewOrderGenerationBatchRepository(tx)
+	configRepo := repository.NewOrderGenerationConfigRepository(tx)
+	forecastRepo := repository.NewOrderForecastControlRepository(tx)
+	marketForecastRepo := repository.NewOrderMarketForecastRepository(tx)
+	marketRepo := repository.NewOrderMarketConfigRepository(tx)
+	poolRepo := repository.NewOrderPoolRepository(tx)
+	stateRepo := repository.NewMarketBiddingStateRepository(tx)
+	actionRepo := repository.NewAdminActionLogRepository(tx)
+
+	gameConfig, err := gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	if cmd.YearNo < 1 || cmd.YearNo > gameConfig.FinalYear {
+		return nil, ErrAdminOrderYearInvalid
+	}
+	started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("check order segment started: %w", err)
+	}
+	if started {
+		return nil, ErrAdminOrderPoolLocked
+	}
+	if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
+		return nil, ErrAdminOrderPoolLocked
+	} else if !repository.IsRecordNotFound(err) {
+		return nil, fmt.Errorf("load confirmed order batch: %w", err)
+	}
+	existingCount, err := poolRepo.CountByYear(ctx, cmd.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("count existing order pool: %w", err)
+	}
+	if existingCount > 0 && !cmd.Overwrite {
+		return nil, ErrAdminOrderPoolLocked
+	}
+
+	configs, err := configRepo.ListByYear(ctx, cmd.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("list order configs: %w", err)
+	}
+	marketConfigs, err := marketRepo.ListByYear(ctx, cmd.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("list order market configs: %w", err)
+	}
+	if len(marketConfigs) == 0 {
+		if err := ensureDefaultMarketConfigs(ctx, marketRepo, cmd.YearNo, operatorName, time.Now()); err != nil {
+			return nil, fmt.Errorf("ensure default market configs: %w", err)
+		}
+		marketConfigs, err = marketRepo.ListByYear(ctx, cmd.YearNo)
+		if err != nil {
+			return nil, fmt.Errorf("reload order market configs: %w", err)
+		}
+	}
+	marketMap := buildMarketEnabledMap(marketConfigs)
+	forecastControls, err := forecastRepo.ListByYear(ctx, cmd.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("list forecast control: %w", err)
+	}
+	forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
+	if len(configs) == 0 {
+		configs = buildOrderGenerationConfigsFromForecast(cmd.YearNo, forecastCounts, marketMap, operatorName, time.Now())
+		if err := configRepo.CreateBatch(ctx, configs); err != nil {
+			return nil, fmt.Errorf("create default order release configs: %w", err)
+		}
+	} else {
+		configs = applyForecastCountsToConfigs(configs, forecastCounts)
+		configs = applyMarketEnabledToConfigs(configs, marketMap)
+		if err := configRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
+			return nil, fmt.Errorf("delete old order configs before forecast snapshot: %w", err)
+		}
+		if err := configRepo.CreateBatch(ctx, configs); err != nil {
+			return nil, fmt.Errorf("recreate order configs with forecast snapshot: %w", err)
+		}
+	}
+
+	now := time.Now()
+	if err := batchRepo.VoidPreviewByYear(ctx, cmd.YearNo, operatorName, now); err != nil {
+		return nil, fmt.Errorf("void old preview batch: %w", err)
+	}
+	if err := poolRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
+		return nil, fmt.Errorf("delete old order pool: %w", err)
+	}
+	if err := stateRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
+		return nil, fmt.Errorf("delete old order segment state: %w", err)
+	}
+	seed := fmt.Sprintf("%d", now.UnixNano())
+	controlSnapshot, err := marshalJSON(map[string]any{
+		"marketConfigs":   buildOrderMarketConfigItems(cmd.YearNo, marketConfigs),
+		"configs":         configs,
+		"forecastControl": buildOrderForecastControlItems(mergeForecastControlDefaults(forecastControls)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	forecastRows, err := marketForecastRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list market forecast: %w", err)
+	}
+	forecastSnapshot, err := marshalJSON(buildMarketForecastResult(mergeForecastControlDefaults(forecastControls), forecastRows))
+	if err != nil {
+		return nil, err
+	}
+	params := defaultOrderGenerationParameters()
+	parameterSnapshot, err := marshalJSON(params)
+	if err != nil {
+		return nil, err
+	}
+	batch := &entity.OrderGenerationBatch{
+		YearNo:              cmd.YearNo,
+		BatchStatus:         enum.OrderGenerationBatchStatusPreview,
+		FormulaVersion:      orderGenerationFormulaVersion,
+		RandomSeed:          seed,
+		ControlSnapshot:     controlSnapshot,
+		ForecastSnapshot:    forecastSnapshot,
+		ParameterSnapshot:   parameterSnapshot,
+		OrderDetail:         []byte("[]"),
+		GeneratedOrderCount: 0,
+		GeneratedByID:       cmd.OperatorID,
+		GeneratedByName:     operatorName,
+		GeneratedAt:         now,
+		BaseEntity: entity.BaseEntity{
+			Creator:    operatorName,
+			CreateTime: now,
+			Updater:    operatorName,
+			UpdateTime: now,
+		},
+	}
+	if err := batchRepo.Create(ctx, batch); err != nil {
+		return nil, fmt.Errorf("create order generation batch: %w", err)
+	}
+	poolItems, details, params, err := buildGeneratedOrderPoolItems(configs, batch.ID, seed, operatorName, now)
+	if err != nil {
+		return nil, err
+	}
+	detailJSON, err := marshalJSON(details)
+	if err != nil {
+		return nil, err
+	}
+	parameterSnapshot, err = marshalJSON(params)
+	if err != nil {
+		return nil, err
+	}
+	batch.ParameterSnapshot = parameterSnapshot
+	if err := batchRepo.UpdateGenerationPayload(ctx, batch.ID, detailJSON, len(poolItems), operatorName, now); err != nil {
+		return nil, fmt.Errorf("update order generation batch payload: %w", err)
+	}
+	if err := poolRepo.CreateBatch(ctx, poolItems); err != nil {
+		return nil, fmt.Errorf("create order pool: %w", err)
+	}
+	states := buildSegmentStatesFromConfigs(configs, marketMap, operatorName, now)
+	if err := stateRepo.UpsertBatch(ctx, states); err != nil {
+		return nil, fmt.Errorf("create segment states: %w", err)
+	}
+
+	targetYearNo := cmd.YearNo
+	actionPayload, err := marshalJSON(map[string]any{
+		"yearNo":         cmd.YearNo,
+		"batchId":        batch.ID,
+		"generatedCount": len(poolItems),
+		"segmentCount":   len(states),
+		"overwrite":      cmd.Overwrite,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := actionRepo.Create(ctx, &entity.AdminActionLog{
+		ActionCode:    adminActionCodeGenerateOrderPreview,
+		TargetYearNo:  &targetYearNo,
+		ActionPayload: actionPayload,
+		StateBefore:   []byte("{}"),
+		StateAfter:    []byte("{}"),
+		OperatorID:    cmd.OperatorID,
+		OperatorName:  operatorName,
+		OperateTime:   now,
+	}); err != nil {
+		return nil, fmt.Errorf("create admin action log: %w", err)
+	}
+
+	return &GenerateOrderPoolResult{
+		YearNo:         cmd.YearNo,
+		BatchID:        batch.ID,
+		BatchStatus:    batch.BatchStatus,
+		RandomSeed:     seed,
+		FormulaVersion: orderGenerationFormulaVersion,
+		GeneratedCount: len(poolItems),
+		SegmentCount:   len(states),
+		Warnings:       nil,
+		GeneratedAt:    now.Format(time.RFC3339),
+		GeneratedBy:    operatorName,
+	}, nil
 }
 
 func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd ConfirmOrderPoolCommand) (*ConfirmOrderPoolResult, error) {
@@ -1904,6 +2018,21 @@ func buildOrderForecastNarratives(rows []entity.OrderMarketForecast) []OrderFore
 				MarketName:        market.name,
 				Content:           narrativeMap[key],
 			})
+		}
+	}
+	return result
+}
+
+func changedForecastControlYears(existing []entity.OrderForecastControl, updates []UpdateOrderForecastControlItem) map[int]bool {
+	existingMap := forecastControlCountMapAll(existing)
+	result := make(map[int]bool)
+	for _, item := range updates {
+		yearNo := item.YearNo
+		marketCode := normalizeMarketCode(item.MarketCode)
+		orderType := normalizeOrderType(item.OrderType)
+		key := segmentKey(yearNo, marketCode, orderType)
+		if existingMap[key] != item.OrderCount {
+			result[yearNo] = true
 		}
 	}
 	return result

@@ -43,7 +43,7 @@
     <nav class="flow-tabs" aria-label="订单管理流程">
       <button type="button" class="flow-tab" :class="{ active: activeOrderTab === 'forecast' }" @click="activeOrderTab = 'forecast'">
         <strong>1. 数量控制</strong>
-        <span>{{ config?.canUpdateConfig ? '可编辑' : '已锁定' }}</span>
+        <span>{{ lockedForecastYearCount > 0 ? `${lockedForecastYearCount} 个年份已锁定` : '可编辑' }}</span>
       </button>
       <button type="button" class="flow-tab" :class="{ active: activeOrderTab === 'market' }" @click="activeOrderTab = 'market'">
         <strong>2. 市场设置</strong>
@@ -68,10 +68,10 @@
       <div class="panel-head">
         <div>
           <strong>多年订单数量控制台</strong>
-          <span>订单数量固定维护 1~8 年，年度订单池只读取当年已开启市场的数量。</span>
+          <span>保存后同步刷新未确认年份的市场预测和预览订单池；已确认年份整列锁定。</span>
         </div>
-        <button type="button" class="btn primary" :disabled="savingForecastControl || generatingPool || !config?.canUpdateConfig" @click="handleSaveForecastControl">
-          {{ savingForecastControl ? '保存中...' : '保存控制台' }}
+        <button type="button" class="btn primary" :disabled="savingForecastControl || generatingPool" @click="handleSaveForecastControl">
+          {{ savingForecastControl ? '保存中...' : '保存数量并刷新预览' }}
         </button>
       </div>
       <div v-for="stage in forecastStages" :key="stage.forecastStageCode" class="forecast-stage-block">
@@ -85,7 +85,10 @@
               <tr>
                 <th>市场</th>
                 <th>订单类型</th>
-                <th v-for="yearNo in stage.years" :key="yearNo">{{ yearNo }}年数量</th>
+                <th v-for="yearNo in stage.years" :key="yearNo" :class="{ 'locked-year-cell': isForecastYearLocked(yearNo) }">
+                  {{ yearNo }}年数量
+                  <span v-if="isForecastYearLocked(yearNo)" class="locked-year-label">{{ forecastYearLockReason(yearNo) }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -93,7 +96,7 @@
                 <tr v-for="(orderType, orderIndex) in orderTypeOptions" :key="`${market.code}-${orderType.code}`">
                   <td v-if="orderIndex === 0" :rowspan="orderTypeOptions.length">{{ market.name }}</td>
                   <td>{{ orderType.name }}</td>
-                  <td v-for="yearNo in stage.years" :key="yearNo">
+                  <td v-for="yearNo in stage.years" :key="yearNo" :class="{ 'locked-year-cell': isForecastYearLocked(yearNo) }">
                     <input
                       :value="getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0"
                       type="number"
@@ -102,14 +105,14 @@
                       step="1"
                       class="compact-input"
                       :class="{ invalid: hasFractionInput(getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0) }"
-                      :disabled="savingForecastControl || generatingPool || !config?.canUpdateConfig"
+                      :disabled="savingForecastControl || generatingPool || isForecastYearLocked(yearNo)"
                       @input="handleForecastCountInput(yearNo, market.code, orderType.code, $event)"
                     >
                   </td>
                 </tr>
                 <tr class="forecast-total-row">
                   <td colspan="2">{{ market.name }}预测金额</td>
-                  <td v-for="yearNo in stage.years" :key="yearNo" class="number-cell">{{ formatIntegerAmount(getForecastYear(stage.forecastStageCode, market.code, yearNo)?.totalForecastAmount ?? 0) }}</td>
+                  <td v-for="yearNo in stage.years" :key="yearNo" class="number-cell" :class="{ 'locked-year-cell': isForecastYearLocked(yearNo) }">{{ formatIntegerAmount(getForecastYear(stage.forecastStageCode, market.code, yearNo)?.totalForecastAmount ?? 0) }}</td>
                 </tr>
               </template>
             </tbody>
@@ -151,7 +154,7 @@
             <textarea
               :value="getForecastNarrative(stage.forecastStageCode, market.code)?.content ?? ''"
               rows="2"
-              :disabled="savingForecastControl || generatingPool || !config?.canUpdateConfig"
+              :disabled="savingForecastControl || generatingPool"
               @input="handleForecastNarrativeInput(stage.forecastStageCode, market.code, $event)"
             />
           </label>
@@ -257,13 +260,11 @@
     <section class="panel-card generation-panel">
       <div class="panel-head">
         <div>
-          <strong>生成预览</strong>
-          <span>保存市场与标段配置后生成预览；确认后订单池和市场开启状态锁定。</span>
+          <strong>订单池状态</strong>
+          <span>{{ poolStatusTip }}</span>
         </div>
-      </div>
-      <div class="generation-actions">
-        <button type="button" class="btn" :disabled="generatingPool || !config?.canGeneratePreview" @click="handleGeneratePool">
-          {{ generatingPool ? '生成中...' : '生成/覆盖预览订单池' }}
+        <button type="button" class="btn primary" :disabled="confirmingPool || !config?.canConfirmPool" @click="handleConfirmPool">
+          {{ confirmingPool ? '确认中...' : '确认订单池' }}
         </button>
       </div>
       <div class="batch-grid">
@@ -289,23 +290,6 @@
       <strong>数量风险提示</strong>
       <span v-for="warning in config.warnings" :key="`${warning.level}-${warning.message}`">{{ warning.message }}</span>
     </section>
-
-    <section class="panel-card generation-panel">
-      <div class="panel-head">
-        <div>
-          <strong>确认订单池</strong>
-          <span>确认后订单池固化，玩家可提交 16 项市场投入。</span>
-        </div>
-      </div>
-      <div class="generation-actions">
-        <button type="button" class="btn primary" :disabled="confirmingPool || !config?.canConfirmPool" @click="handleConfirmPool">
-          {{ confirmingPool ? '确认中...' : '确认订单池' }}
-        </button>
-        <button type="button" class="btn primary" :disabled="generatingSequence" @click="handleGenerateSelectionSequence">
-          {{ generatingSequence ? '生成中...' : '生成选单顺序' }}
-        </button>
-      </div>
-    </section>
     </template>
 
     <template v-if="activeOrderTab === 'bidding'">
@@ -317,6 +301,16 @@
         </div>
         <button type="button" class="btn" :disabled="loadingSelectionStatus" @click="handleLoadSelectionStatus">
           {{ loadingSelectionStatus ? '加载中...' : '刷新状态' }}
+        </button>
+      </div>
+
+      <div class="sequence-action-bar">
+        <div>
+          <strong>选单顺序</strong>
+          <span>{{ marketInvestmentSubmitSummary }}</span>
+        </div>
+        <button type="button" class="btn primary" :disabled="generatingSequence" @click="handleGenerateSelectionSequence">
+          {{ generatingSequence ? '生成中...' : '生成选单顺序' }}
         </button>
       </div>
 
@@ -439,11 +433,16 @@
       <div class="panel-head">
         <div>
           <strong>订单池查看</strong>
-          <span>默认查看全部订单，可按市场和订单类型筛选。</span>
+          <span>默认查看全部订单，可按年份、市场和订单类型筛选。</span>
         </div>
-        <button type="button" class="btn" :disabled="loadingPool" @click="handleLoadPool">
-          {{ loadingPool ? '加载中...' : '查看订单池' }}
-        </button>
+        <div class="hero-actions">
+          <select v-model.number="store.selectedYearNo" class="year-select" :disabled="loading || loadingPool" @change="handleYearChange">
+            <option v-for="item in yearOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
+          <button type="button" class="btn" :disabled="loadingPool" @click="handleLoadPool">
+            {{ loadingPool ? '加载中...' : '刷新' }}
+          </button>
+        </div>
       </div>
 
       <div class="pool-filter">
@@ -540,6 +539,7 @@ const {
   sortedItems,
   forecastControl,
   forecastStages,
+  forecastYearLocks,
   editableForecastItems,
   editableForecastNarratives,
   editableMarketConfigs,
@@ -562,6 +562,7 @@ const orderTypeOptions = computed(() =>
 )
 const selectedSequenceSegmentKey = ref('')
 const activeOrderTab = ref<'forecast' | 'market' | 'sequence' | 'pool' | 'bidding'>('market')
+const lockedForecastYearCount = computed(() => forecastYearLocks.value.filter((item) => item.locked).length)
 
 const yearOptions = computed(() => {
   const finalYear = Math.max(shellConfig.value?.finalYear ?? config.value?.finalYear ?? 1, 1)
@@ -598,6 +599,28 @@ const marketLeaderAmountText = computed(() => {
     return ''
   }
   return `上年该市场订单额 ${formatIntegerAmount(leader.previousMarketOrderAmount)}`
+})
+const poolStatusTip = computed(() => {
+  if (config.value?.confirmedBatch) {
+    return '正式订单池已确认，玩家可基于市场预测提交市场投入。'
+  }
+  if (config.value?.latestPreviewBatch) {
+    return '当前为预览订单，尚未保存成正式订单；确认后才会开放玩家市场投入。'
+  }
+  return '请先在数量控制台保存订单数量，系统会自动生成预览订单池。'
+})
+const marketInvestmentSubmitSummary = computed(() => {
+  const bids = marketSelectionStatus.value?.bids ?? []
+  if (bids.length === 0) {
+    return '暂无小组提交市场投入。'
+  }
+  const activeBids = bids.filter((item) => item.businessStatus !== 'BANKRUPT')
+  const submitted = activeBids.filter((item) => item.submitted).length
+  const missing = activeBids.filter((item) => !item.submitted).map((item) => item.groupName)
+  if (missing.length === 0) {
+    return `${submitted}/${activeBids.length} 组已提交，可生成选单顺序。`
+  }
+  return `${submitted}/${activeBids.length} 组已提交，未提交：${missing.join('、')}`
 })
 
 watch(
@@ -716,6 +739,18 @@ function getForecastYear(stageCode: string, marketCode: string, yearNo: number) 
     .find((stage) => stage.forecastStageCode === stageCode)
     ?.markets.find((market) => market.marketCode === marketCode)
     ?.years.find((year) => year.yearNo === yearNo) ?? null
+}
+
+function forecastYearLock(yearNo: number) {
+  return forecastYearLocks.value.find((item) => item.yearNo === yearNo) ?? null
+}
+
+function isForecastYearLocked(yearNo: number) {
+  return forecastYearLock(yearNo)?.locked ?? false
+}
+
+function forecastYearLockReason(yearNo: number) {
+  return forecastYearLock(yearNo)?.reason ?? '已锁定'
 }
 
 function handleForecastCountInput(yearNo: number, marketCode: string, orderType: string, event: Event) {
@@ -1190,6 +1225,24 @@ function formatGroupName(groupId?: number | null) {
   text-align: center;
 }
 
+.forecast-control-table .locked-year-cell {
+  background: #eef2f6;
+  color: #64748b;
+}
+
+.locked-year-label {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.locked-year-cell .compact-input {
+  background: #e5e7eb;
+  color: #64748b;
+}
+
 .compact-input {
   width: 96px;
   border: 1px solid var(--line);
@@ -1481,6 +1534,28 @@ function formatGroupName(groupId?: number | null) {
   gap: 12px;
 }
 
+.sequence-action-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+  padding: 12px 14px;
+}
+
+.sequence-action-bar strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.sequence-action-bar span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .control-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -1620,6 +1695,7 @@ function formatGroupName(groupId?: number | null) {
   .stats-grid,
   .flow-tabs,
   .batch-grid,
+  .sequence-action-bar,
   .pool-filter,
   .forecast-chart-grid,
   .forecast-narratives,

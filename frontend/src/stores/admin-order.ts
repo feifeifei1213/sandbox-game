@@ -97,6 +97,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const hasLockedConfig = computed(() => editableItems.value.some((item) => item.configStatus === 'LOCKED'))
   const sortedItems = computed(() => [...editableItems.value].sort((a, b) => a.releaseSequenceNo - b.releaseSequenceNo))
   const forecastStages = computed(() => forecastControl.value?.forecast.stages ?? config.value?.forecast.stages ?? [])
+  const forecastYearLocks = computed(() => forecastControl.value?.yearLocks ?? [])
   const enabledMarketCount = computed(() => editableMarketConfigs.value.filter((item) => item.enabled).length)
   const currentSegment = computed(() => marketSelectionStatus.value?.currentSegment ?? null)
 
@@ -126,6 +127,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     try {
       const result = await getAdminOrderControlConfig(selectedYearNo.value)
       applyConfig(result)
+      await loadForecastControl({ silent: true })
       await loadSelectionStatus({ silent: true })
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '获取订单配置失败')
@@ -190,9 +192,10 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         items: result.items,
         warnings: result.warnings,
       })
+      await loadPool({ silent: true })
       pageMessage.value = {
         type: 'success',
-        text: `订单配置已保存，操作人 ${result.updatedBy}。`,
+        text: `订单配置已保存，并已刷新 ${selectedYearNo.value} 年预览订单池。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '保存订单配置失败')
@@ -229,9 +232,12 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       })
       applyForecastControl(result)
       await loadConfig({ silent: true })
+      await loadPool({ silent: true })
       pageMessage.value = {
         type: 'success',
-        text: `多年订单数量控制台已保存，操作人 ${result.updatedBy}。`,
+        text: result.autoPreviewYears?.length
+          ? `多年订单数量控制台已保存，并已刷新 ${result.autoPreviewYears.map((yearNo) => `${yearNo}年`).join('、')} 预览订单池。`
+          : `多年订单数量控制台已保存，操作人 ${result.updatedBy}。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '保存多年订单数量控制台失败')
@@ -277,9 +283,10 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         items: result.items,
         warnings: result.warnings,
       })
+      await loadPool({ silent: true })
       pageMessage.value = {
         type: 'success',
-        text: `市场开启配置已保存，操作人 ${result.updatedBy}。`,
+        text: `市场开启配置已保存，并已刷新 ${selectedYearNo.value} 年预览订单池。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '保存市场开启配置失败')
@@ -328,7 +335,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         yearNo: selectedYearNo.value,
         batchId,
       })
-      await Promise.all([loadConfig({ silent: true }), loadPool({ silent: true }), loadSelectionStatus({ silent: true })])
+      await Promise.all([loadConfig({ silent: true }), loadPool({ silent: true }), loadSelectionStatus({ silent: true }), loadForecastControl({ silent: true })])
       pageMessage.value = {
         type: 'success',
         text: `${selectedYearNo.value} 年订单池已确认，固化 ${result.generatedCount} 个订单。`,
@@ -547,6 +554,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     editableMarketConfigs,
     sortedItems,
     forecastStages,
+    forecastYearLocks,
     totalOrderCount,
     totalGeneratedCount,
     hasLockedConfig,

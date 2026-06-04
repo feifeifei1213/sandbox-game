@@ -650,6 +650,9 @@ func resolveAdminOrderErrorMessage(err error) string {
 	case errors.Is(err, service.ErrAdminOrderPoolNotConfirmed):
 		return "请先确认本年度订单池"
 	case errors.Is(err, service.ErrAdminOrderInvestmentIncomplete):
+		if err.Error() != service.ErrAdminOrderInvestmentIncomplete.Error() {
+			return err.Error()
+		}
 		return "仍有未破产小组没有提交完整 16 项市场投入"
 	case errors.Is(err, service.ErrAdminOrderSequenceAlreadyGenerated):
 		return "该年份已生成选单顺序，不能重复生成"

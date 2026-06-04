@@ -490,10 +490,17 @@ export interface OrderForecastNarrativeItem {
   content: string
 }
 
+export interface OrderForecastYearLock {
+  yearNo: number
+  locked: boolean
+  reason?: string
+}
+
 export interface OrderForecastControlResult {
   items: OrderForecastControlItem[]
   narratives: OrderForecastNarrativeItem[]
   forecast: OrderMarketForecastResult
+  yearLocks: OrderForecastYearLock[]
 }
 
 export interface UploadOrderExcelResult {
@@ -600,6 +607,7 @@ export interface UpdateOrderForecastControlRequest {
 }
 
 export interface UpdateOrderForecastControlResult extends OrderForecastControlResult {
+  autoPreviewYears: number[]
   updatedAt: string
   updatedBy: string
 }

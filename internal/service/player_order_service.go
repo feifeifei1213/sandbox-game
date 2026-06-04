@@ -59,6 +59,21 @@ var (
 	ErrOrderPrerequisiteIncomplete      = errors.New("order prerequisite incomplete")
 )
 
+type MissingMarketInvestmentError struct {
+	GroupNames []string
+}
+
+func (e *MissingMarketInvestmentError) Error() string {
+	if len(e.GroupNames) == 0 {
+		return ErrAdminOrderInvestmentIncomplete.Error()
+	}
+	return fmt.Sprintf("仍有小组未提交完整 16 项市场投入：%s", strings.Join(e.GroupNames, "、"))
+}
+
+func (e *MissingMarketInvestmentError) Unwrap() error {
+	return ErrAdminOrderInvestmentIncomplete
+}
+
 type PlayerOrderQueryService struct {
 	gameConfigRepo *repository.GameConfigRepository
 	groupRepo      *repository.GroupRepository
@@ -1559,13 +1574,17 @@ func ensureAllActiveGroupsSubmittedInvestments(ctx context.Context, groupRepo *r
 	if err != nil {
 		return fmt.Errorf("count submitted investments: %w", err)
 	}
+	missingGroups := make([]string, 0)
 	for _, group := range groups {
 		if group.BusinessStatus == enum.BusinessStatusBankrupt {
 			continue
 		}
 		if counts[group.ID] < requiredOrderInvestmentSegmentCount {
-			return ErrAdminOrderInvestmentIncomplete
+			missingGroups = append(missingGroups, group.GroupName)
 		}
+	}
+	if len(missingGroups) > 0 {
+		return &MissingMarketInvestmentError{GroupNames: missingGroups}
 	}
 	return nil
 }
