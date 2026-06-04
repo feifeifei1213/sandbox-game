@@ -131,16 +131,16 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
 
   async function submitUnlockRetry() {
     if (!unlockForm.value.groupId) {
+      pageMessage.value = { type: 'error', text: '请选择目标小组' }
       throw new Error('请选择目标小组')
     }
-    if (!unlockForm.value.reason.trim()) {
-      throw new Error('退回原因不能为空')
-    }
     if (unlockForm.value.unlockTargetType === 'OPERATING' && !unlockForm.value.targetStageCode) {
+      pageMessage.value = { type: 'error', text: '请选择经营阶段' }
       throw new Error('请选择经营阶段')
     }
 
     operating.value = true
+    pageMessage.value = null
     try {
       const result = await unlockAdminYear({
         groupId: unlockForm.value.groupId,
@@ -151,7 +151,7 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
       })
       pageMessage.value = {
         type: 'success',
-        text: `退回重提已提交，第 ${selectedGroup.value?.groupNo ?? '--'} 组 ${unlockForm.value.yearNo} 年进入待重提状态。`,
+        text: buildUnlockSuccessMessage(result, selectedGroup.value),
       }
       unlockForm.value.reason = ''
       await loadSnapshots({ silent: true })
@@ -261,4 +261,23 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
     return { type: 'error', text: error.message }
   }
   return { type: 'error', text: fallback }
+}
+
+function buildUnlockSuccessMessage(result: { yearNo: number; unlockTargetType: string; targetStageCode?: string | null; editableStageCode?: string | null }, group: AdminGroupOption | null) {
+  const groupLabel = group ? `第${group.groupNo}组` : '目标小组'
+  if (result.unlockTargetType === 'REPORT') {
+    return `已退回${groupLabel} ${result.yearNo} 年财报页，可重新提交财报。`
+  }
+  return `已退回${groupLabel} ${result.yearNo} 年经营页到 ${formatUnlockStage(result.editableStageCode ?? result.targetStageCode)}，可重新提交该阶段。`
+}
+
+function formatUnlockStage(value?: string | null) {
+  const map: Record<string, string> = {
+    Q1: 'Q1',
+    Q2: 'Q2',
+    Q3: 'Q3',
+    Q4: 'Q4',
+    YEAR_END: '年末',
+  }
+  return value ? map[value] ?? value : '--'
 }

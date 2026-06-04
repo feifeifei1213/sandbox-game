@@ -133,7 +133,7 @@ func TestValidateInitializeGameEditionRequiresKnownEdition(t *testing.T) {
 	}
 }
 
-func TestEnsureUnlockYearAllowedRejectsBlankReason(t *testing.T) {
+func TestEnsureUnlockYearAllowedAllowsBlankReason(t *testing.T) {
 	current := state.RuntimeState{
 		YearNo:           2,
 		YearType:         enum.YearTypeFormal,
@@ -144,9 +144,12 @@ func TestEnsureUnlockYearAllowedRejectsBlankReason(t *testing.T) {
 		SummaryEffective: true,
 	}
 
-	_, err := ensureUnlockYearAllowed(current, "   ", unlockTargetTypeOperating, state.StageCodeYearEnd, false)
-	if !errors.Is(err, ErrAdminControlUnlockReasonRequired) {
-		t.Fatalf("expected ErrAdminControlUnlockReasonRequired, got %v", err)
+	next, err := ensureUnlockYearAllowed(current, "   ", unlockTargetTypeOperating, state.StageCodeYearEnd, false)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if next.YearStatus != enum.YearStatusOperating || next.StageStatus != enum.StageStatusYearEndOpen {
+		t.Fatalf("expected unlock to year end, got yearStatus=%s stageStatus=%s", next.YearStatus, next.StageStatus)
 	}
 }
 

@@ -25,6 +25,7 @@ const (
 	adminActionCodeUnlockYear            = "UNLOCK_YEAR"
 	unlockTargetTypeOperating            = "OPERATING"
 	unlockTargetTypeReport               = "REPORT"
+	defaultUnlockRetryReason             = "管理员退回重提"
 	initializeGameMaxGroupCount          = 10
 	initializeGameDefaultPassword        = "123456"
 )
@@ -684,6 +685,9 @@ func (s *AdminControlCommandService) SubmitInitialBaseline(ctx context.Context, 
 func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockYearCommand) (*UnlockYearResult, error) {
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	reason := strings.TrimSpace(cmd.Reason)
+	if reason == "" {
+		reason = defaultUnlockRetryReason
+	}
 	targetType := normalizeUnlockTargetType(cmd.UnlockTargetType)
 	targetStageCode := normalizeUnlockTargetStageCode(cmd.TargetStageCode)
 
@@ -994,9 +998,6 @@ func validateInitialBaselineSubmission(alreadySubmitted bool, baselinePayload *p
 }
 
 func ensureUnlockYearAllowed(current state.RuntimeState, reason string, unlockTargetType string, targetStageCode string, nextYearAlreadyOpened bool) (state.RuntimeState, error) {
-	if strings.TrimSpace(reason) == "" {
-		return current, ErrAdminControlUnlockReasonRequired
-	}
 	if nextYearAlreadyOpened {
 		return current, &UnlockNotAllowedError{Reason: unlockYearBlockedReasonNextYearOpened}
 	}

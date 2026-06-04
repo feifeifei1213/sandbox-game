@@ -47,6 +47,17 @@ func TestBuildGroupYearTabsNormalGroup(t *testing.T) {
 	}
 }
 
+func TestBuildGroupYearTabsRollbackPendingOverridesCompleted(t *testing.T) {
+	stateMap := map[int]entity.GroupYearState{
+		2: {YearNo: 2, YearStatus: enum.YearStatusCompleted, RollbackPending: true},
+	}
+
+	tabs := buildGroupYearTabs(2, 4, enum.BusinessStatusNormal, nil, stateMap)
+	if tabs[2].TabStatus != yearTabStatusRollbackPending || !tabs[2].CanEnter {
+		t.Fatalf("expected year 2 rollback pending and enterable, got status=%s canEnter=%t", tabs[2].TabStatus, tabs[2].CanEnter)
+	}
+}
+
 func TestBuildGroupYearTabsBankruptGroup(t *testing.T) {
 	bankruptYearNo := 2
 	stateMap := map[int]entity.GroupYearState{

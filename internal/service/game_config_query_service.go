@@ -17,6 +17,7 @@ const (
 	yearTabStatusLocked           = "LOCKED"
 	yearTabStatusCompleted        = "COMPLETED"
 	yearTabStatusBankruptReadOnly = "BANKRUPT_READONLY"
+	yearTabStatusRollbackPending  = "ROLLBACK_PENDING"
 )
 
 type CurrentGameConfigResult struct {
@@ -187,6 +188,10 @@ func resolveGroupYearTabStatus(yearNo int, currentOpenYear int, businessStatus s
 		if yearNo > *bankruptYearNo {
 			return yearTabStatusLocked
 		}
+	}
+
+	if item, ok := stateMap[yearNo]; ok && item.RollbackPending {
+		return yearTabStatusRollbackPending
 	}
 
 	if item, ok := stateMap[yearNo]; ok && item.YearStatus == enum.YearStatusCompleted {

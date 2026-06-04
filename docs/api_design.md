@@ -1678,8 +1678,7 @@ Go DTO 建议：
   "groupId": 1,
   "yearNo": 2,
   "unlockTargetType": "OPERATING",
-  "targetStageCode": "Q2",
-  "reason": "现场核对后发现 Q2 数据需修正"
+  "targetStageCode": "Q2"
 }
 ```
 
@@ -1691,7 +1690,7 @@ Go DTO 建议：
 | `yearNo` | `int` | 是 | 目标年份 |
 | `unlockTargetType` | `string` | 是 | `OPERATING` / `REPORT` |
 | `targetStageCode` | `string` | 条件必填 | 当 `unlockTargetType = OPERATING` 时必填，允许值：`Q1 / Q2 / Q3 / Q4 / YEAR_END` |
-| `reason` | `string` | 是 | 管理员填写的异常解锁原因 |
+| `reason` | `string` | 否 | 退回说明；为空时服务端自动记录为 `管理员退回重提` |
 
 规则：
 
@@ -1740,7 +1739,6 @@ Go DTO 建议：
 2. 服务端校验
 - 校验目标组、目标年份存在。
 - 校验下一年尚未开放。
-- 校验 `reason` 非空。
 - 校验 `unlockTargetType` 合法。
 - 当目标为 `OPERATING` 时，校验 `targetStageCode` 合法且该阶段已正式提交。
 - 当目标为 `REPORT` 时，校验财报结果已正式提交。
@@ -2276,7 +2274,6 @@ type AdminActionSummaryResp struct {
 | `ErrAdminControlUnlockTargetNotSubmitted` | `409` | 目标阶段或财报尚未正式提交 | `目标尚未正式提交，不能解锁` |
 | `ErrAdminControlOperatingAlreadyEditable` | `409` | 经营页当前无需解锁 | `经营页当前无需解锁` |
 | `ErrAdminControlReportAlreadyEditable` | `409` | 财报页当前无需解锁 | `财报页当前无需解锁` |
-| `ErrAdminControlUnlockReasonRequired` | `422` | 未填写解锁原因 | `请填写异常解锁原因` |
 | `ErrRollbackSnapshotNotFound` | `404` | 快照不存在 | `未找到状态快照` |
 | `ErrRollbackSnapshotScopeUnsupported` | `422` | 首版尝试恢复全局快照 | `首版暂不支持恢复全局快照` |
 | `ErrRollbackTargetInvalid` | `422` | 快照目标无法作为回退节点 | `快照目标状态不支持恢复` |

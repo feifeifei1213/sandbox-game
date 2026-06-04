@@ -54,10 +54,6 @@
             <option value="YEAR_END">年末</option>
           </select>
         </label>
-        <label class="field wide">
-          <span>退回原因</span>
-          <textarea v-model="store.unlockForm.reason" rows="3" placeholder="填写现场原因，便于复盘"></textarea>
-        </label>
       </div>
       <div class="action-row">
         <button type="button" class="primary-btn" :disabled="operating" @click="handleUnlockRetry">提交退回重提</button>

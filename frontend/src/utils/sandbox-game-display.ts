@@ -5,6 +5,7 @@ const yearTabStatusLabels: Record<string, string> = {
   LOCKED: '未开放',
   COMPLETED: '已完成',
   BANKRUPT_READONLY: '破产只读',
+  ROLLBACK_PENDING: '待重提',
 }
 
 const yearStatusLabels: Record<string, string> = {

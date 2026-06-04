@@ -10,6 +10,7 @@
         locked: !item.canEnter,
         completed: item.tabStatus === 'COMPLETED',
         bankrupt: item.tabStatus === 'BANKRUPT_READONLY',
+        rollback: item.tabStatus === 'ROLLBACK_PENDING',
       }"
       :disabled="!item.canEnter"
       @click="$emit('select', item.yearNo)"
@@ -72,6 +73,18 @@ defineEmits<{
 .year-tab.bankrupt {
   border-color: #e29a9a;
   color: var(--danger);
+}
+
+.year-tab.rollback {
+  background: #fff8e6;
+  border-color: #e0b24c;
+  color: #8a5a17;
+}
+
+.year-tab.rollback.active {
+  background: #b7791f;
+  border-color: #b7791f;
+  color: #ffffff;
 }
 
 .label {
