@@ -40,6 +40,30 @@
       </article>
     </section>
 
+    <nav class="flow-tabs" aria-label="订单管理流程">
+      <button type="button" class="flow-tab" :class="{ active: activeOrderTab === 'forecast' }" @click="activeOrderTab = 'forecast'">
+        <strong>1. 数量控制</strong>
+        <span>{{ config?.canUpdateConfig ? '可编辑' : '已锁定' }}</span>
+      </button>
+      <button type="button" class="flow-tab" :class="{ active: activeOrderTab === 'market' }" @click="activeOrderTab = 'market'">
+        <strong>2. 市场设置</strong>
+        <span>{{ enabledMarketCount }} 个市场开启</span>
+      </button>
+      <button type="button" class="flow-tab" :class="{ active: activeOrderTab === 'sequence' }" @click="activeOrderTab = 'sequence'">
+        <strong>3. 标段顺序</strong>
+        <span>{{ totalOrderCount }} 单配置</span>
+      </button>
+      <button type="button" class="flow-tab" :class="{ active: activeOrderTab === 'pool' }" @click="activeOrderTab = 'pool'">
+        <strong>4. 订单池</strong>
+        <span>{{ formatGenerationStatus(config?.generationStatus) }}</span>
+      </button>
+      <button type="button" class="flow-tab" :class="{ active: activeOrderTab === 'bidding' }" @click="activeOrderTab = 'bidding'">
+        <strong>5. 竞标控制</strong>
+        <span>{{ formatSegmentStatus(marketSelectionStatus?.marketBidStatus) }}</span>
+      </button>
+    </nav>
+
+    <template v-if="activeOrderTab === 'forecast'">
     <section class="panel-card forecast-control-panel">
       <div class="panel-head">
         <div>
@@ -134,7 +158,9 @@
         </div>
       </div>
     </section>
+    </template>
 
+    <template v-if="activeOrderTab === 'market'">
     <section class="panel-card">
       <div class="panel-head">
         <div>
@@ -169,7 +195,9 @@
         </div>
       </div>
     </section>
+    </template>
 
+    <template v-if="activeOrderTab === 'sequence'">
     <section class="panel-card">
       <div class="panel-head">
         <div>
@@ -223,7 +251,9 @@
         </table>
       </div>
     </section>
+    </template>
 
+    <template v-if="activeOrderTab === 'pool'">
     <section class="panel-card generation-panel">
       <div class="panel-head">
         <div>
@@ -276,7 +306,9 @@
         </button>
       </div>
     </section>
+    </template>
 
+    <template v-if="activeOrderTab === 'bidding'">
     <section class="panel-card control-panel">
       <div class="panel-head">
         <div>
@@ -400,7 +432,9 @@
         </table>
       </div>
     </section>
+    </template>
 
+    <template v-if="activeOrderTab === 'pool'">
     <section class="panel-card">
       <div class="panel-head">
         <div>
@@ -465,6 +499,7 @@
         </table>
       </div>
     </section>
+    </template>
   </section>
 </template>
 
@@ -526,6 +561,7 @@ const orderTypeOptions = computed(() =>
   })),
 )
 const selectedSequenceSegmentKey = ref('')
+const activeOrderTab = ref<'forecast' | 'market' | 'sequence' | 'pool' | 'bidding'>('market')
 
 const yearOptions = computed(() => {
   const finalYear = Math.max(shellConfig.value?.finalYear ?? config.value?.finalYear ?? 1, 1)
@@ -969,6 +1005,52 @@ function formatGroupName(groupId?: number | null) {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
+}
+
+.flow-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+
+.flow-tab {
+  display: grid;
+  gap: 5px;
+  min-height: 72px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 11px 12px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.flow-tab strong {
+  font-size: 14px;
+}
+
+.flow-tab span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-tab.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.flow-tab.active strong {
+  color: var(--accent);
 }
 
 .stat-card,
@@ -1522,7 +1604,8 @@ function formatGroupName(groupId?: number | null) {
 }
 
 @media (max-width: 1240px) {
-  .stats-grid {
+  .stats-grid,
+  .flow-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1535,6 +1618,7 @@ function formatGroupName(groupId?: number | null) {
   }
 
   .stats-grid,
+  .flow-tabs,
   .batch-grid,
   .pool-filter,
   .forecast-chart-grid,
