@@ -185,24 +185,40 @@ func builtInReportDictionaryDefinitions(editionCode string) []DictionaryDefiniti
 }
 
 func builtInBaselineDictionaryDefinitions(editionCode string) []DictionaryDefinition {
+	commonDefinitions := []DictionaryDefinition{
+		baselineDef("salesRevenue", "销售收入", 900),
+		baselineDef("directCost", "直接成本", 910),
+		baselineDef("comprehensiveCost", "综合费用", 920),
+		baselineDef("depreciation", "折旧", 930),
+		baselineDef("financeIncomeExpense", "财务收入/支出", 940),
+		baselineDef("extraIncomeExpense", "额外收入/支出", 950),
+		baselineDef("incomeTax", "所得税", 960),
+		baselineDef("depreciableAsset", "待折资产", 1000),
+		baselineDef("cash", "现金", 1010),
+		baselineDef("receivable", "应收款", 1020),
+		baselineDef("shortTermLoan", "短期负债", 1060),
+		baselineDef("longTermLoan", "长期负债", 1070),
+		baselineDef("shareCapital", "股东资本", 1080),
+		baselineDef("retainedEarnings", "利润留存", 1090),
+	}
 	if editionCode == GameEditionProductionV1 {
-		return []DictionaryDefinition{
-			baselineDef("workInConstruction", "在建生产线", 900),
-			baselineDef("factoryAsset", "厂房", 910),
-			baselineDef("lineResidual", "生产线残值", 920),
-			baselineDef("workInProgress", "在制品", 930),
-			baselineDef("finishedGoods", "成品", 940),
-			baselineDef("rawMaterials", "材料", 950),
-		}
+		return append(commonDefinitions,
+			baselineDef("workInConstruction", "在建生产线", 970),
+			baselineDef("factoryAsset", "厂房", 980),
+			baselineDef("lineResidual", "生产线残值", 990),
+			baselineDef("workInProgress", "在制品", 1030),
+			baselineDef("finishedGoods", "成品", 1040),
+			baselineDef("rawMaterials", "材料", 1050),
+		)
 	}
-	return []DictionaryDefinition{
-		baselineDef("workInConstruction", "在建贵宾厅", 900),
-		baselineDef("factoryAsset", "贵宾区", 910),
-		baselineDef("lineResidual", "贵宾厅残值", 920),
-		baselineDef("workInProgress", "在途服务", 930),
-		baselineDef("finishedGoods", "服务验收", 940),
-		baselineDef("rawMaterials", "前期花费", 950),
-	}
+	return append(commonDefinitions,
+		baselineDef("workInConstruction", "在建贵宾厅", 970),
+		baselineDef("factoryAsset", "贵宾区", 980),
+		baselineDef("lineResidual", "贵宾厅残值", 990),
+		baselineDef("workInProgress", "在途服务", 1030),
+		baselineDef("finishedGoods", "服务验收", 1040),
+		baselineDef("rawMaterials", "前期花费", 1050),
+	)
 }
 
 func dictDef(code string, category string, defaultName string, order int, businessCode string) DictionaryDefinition {

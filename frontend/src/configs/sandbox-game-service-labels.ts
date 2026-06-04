@@ -151,21 +151,49 @@ const productionReportRequiredFieldLabels = {
 } as const
 
 const vipServiceBaselineLabels = {
+  salesRevenue: '销售收入',
+  directCost: '直接成本',
+  comprehensiveCost: '综合费用',
+  depreciation: '折旧',
+  financeIncomeExpense: '财务收入/支出',
+  extraIncomeExpense: '额外收入/支出',
+  incomeTax: '所得税',
   workInConstruction: '在建贵宾厅',
   factoryAsset: '贵宾区',
   lineResidual: '贵宾厅残值',
+  depreciableAsset: '待折资产',
+  cash: '现金',
+  receivable: '应收款',
   workInProgress: '在途服务',
   finishedGoods: '服务验收',
   rawMaterials: '前期花费',
+  shortTermLoan: '短期负债',
+  longTermLoan: '长期负债',
+  shareCapital: '股东资本',
+  retainedEarnings: '利润留存',
 } as const
 
 const productionBaselineLabels = {
+  salesRevenue: '销售收入',
+  directCost: '直接成本',
+  comprehensiveCost: '综合费用',
+  depreciation: '折旧',
+  financeIncomeExpense: '财务收入/支出',
+  extraIncomeExpense: '额外收入/支出',
+  incomeTax: '所得税',
   workInConstruction: '在建生产线',
   factoryAsset: '厂房',
   lineResidual: '生产线残值',
+  depreciableAsset: '待折资产',
+  cash: '现金',
+  receivable: '应收款',
   workInProgress: '在制品',
   finishedGoods: '成品',
   rawMaterials: '材料',
+  shortTermLoan: '短期负债',
+  longTermLoan: '长期负债',
+  shareCapital: '股东资本',
+  retainedEarnings: '利润留存',
 } as const
 
 export type SandboxGameOperatingLabels = typeof vipServiceOperatingLabels | typeof productionOperatingLabels
@@ -284,12 +312,26 @@ export function applyDictionaryToReportRequiredFieldLabels<T extends SandboxGame
 export function applyDictionaryToBaselineLabels<T extends SandboxGameBaselineLabels>(labels: T, displayName: DictionaryDisplayResolver): T {
   return {
     ...labels,
+    salesRevenue: displayName('baseline.salesRevenue', labels.salesRevenue),
+    directCost: displayName('baseline.directCost', labels.directCost),
+    comprehensiveCost: displayName('baseline.comprehensiveCost', labels.comprehensiveCost),
+    depreciation: displayName('baseline.depreciation', labels.depreciation),
+    financeIncomeExpense: displayName('baseline.financeIncomeExpense', labels.financeIncomeExpense),
+    extraIncomeExpense: displayName('baseline.extraIncomeExpense', labels.extraIncomeExpense),
+    incomeTax: displayName('baseline.incomeTax', labels.incomeTax),
     workInConstruction: displayName('baseline.workInConstruction', labels.workInConstruction),
     factoryAsset: displayName('baseline.factoryAsset', labels.factoryAsset),
     lineResidual: displayName('baseline.lineResidual', labels.lineResidual),
+    depreciableAsset: displayName('baseline.depreciableAsset', labels.depreciableAsset),
+    cash: displayName('baseline.cash', labels.cash),
+    receivable: displayName('baseline.receivable', labels.receivable),
     workInProgress: displayName('baseline.workInProgress', labels.workInProgress),
     finishedGoods: displayName('baseline.finishedGoods', labels.finishedGoods),
     rawMaterials: displayName('baseline.rawMaterials', labels.rawMaterials),
+    shortTermLoan: displayName('baseline.shortTermLoan', labels.shortTermLoan),
+    longTermLoan: displayName('baseline.longTermLoan', labels.longTermLoan),
+    shareCapital: displayName('baseline.shareCapital', labels.shareCapital),
+    retainedEarnings: displayName('baseline.retainedEarnings', labels.retainedEarnings),
   } as T
 }
 

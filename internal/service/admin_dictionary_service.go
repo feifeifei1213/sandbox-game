@@ -183,7 +183,7 @@ func (s *AdminDictionaryService) GetCurrent(ctx context.Context, editionCode str
 			return nil, fmt.Errorf("load current dictionary: %w", loadErr)
 		}
 		if len(currentItems) > 0 {
-			items = buildDictionaryItemResultsFromCurrent(currentItems)
+			items = mergeDictionaryItemsWithDefinitions(edition.EditionCode, buildDictionaryItemResultsFromCurrent(currentItems))
 		}
 	}
 	if len(items) == 0 {
@@ -250,7 +250,7 @@ func (s *AdminDictionaryService) GetSchemeDetail(ctx context.Context, schemeID i
 	if err != nil {
 		return nil, fmt.Errorf("load dictionary scheme items: %w", err)
 	}
-	return buildDictionarySchemeDetailResult(*scheme, buildDictionaryItemResultsFromSchemeItems(items)), nil
+	return buildDictionarySchemeDetailResult(*scheme, mergeDictionaryItemsWithDefinitions(scheme.EditionCode, buildDictionaryItemResultsFromSchemeItems(items))), nil
 }
 
 func (s *AdminDictionaryService) SaveScheme(ctx context.Context, cmd SaveDictionarySchemeCommand) (*DictionarySchemeDetailResult, error) {
@@ -337,7 +337,7 @@ func (s *AdminDictionaryService) SaveScheme(ctx context.Context, cmd SaveDiction
 		if err := createDictionaryChangeLog(ctx, repo, edition.EditionCode, dictionaryChangeTypeSaveScheme, &scheme.ID, "", nil, items, 0, cmd.OperatorID, operatorName, now); err != nil {
 			return err
 		}
-		result = buildDictionarySchemeDetailResult(scheme, buildDictionaryItemResultsFromSchemeItems(schemeItems))
+		result = buildDictionarySchemeDetailResult(scheme, mergeDictionaryItemsWithDefinitions(edition.EditionCode, buildDictionaryItemResultsFromSchemeItems(schemeItems)))
 		return nil
 	}); err != nil {
 		return nil, err
@@ -415,7 +415,7 @@ func (s *AdminDictionaryService) ApplySchemeToCurrent(ctx context.Context, cmd A
 		if err != nil {
 			return fmt.Errorf("load dictionary scheme items: %w", err)
 		}
-		items := buildDictionaryItemResultsFromSchemeItems(schemeItems)
+		items := mergeDictionaryItemsWithDefinitions(edition.EditionCode, buildDictionaryItemResultsFromSchemeItems(schemeItems))
 		currentBefore, err := loadCurrentDictionaryOrDefault(ctx, repo, edition.EditionCode)
 		if err != nil {
 			return err
@@ -687,9 +687,39 @@ func loadCurrentDictionaryOrDefault(ctx context.Context, repo *repository.Dictio
 		return nil, fmt.Errorf("load current dictionary: %w", err)
 	}
 	if len(currentItems) > 0 {
-		return buildDictionaryItemResultsFromCurrent(currentItems), nil
+		return mergeDictionaryItemsWithDefinitions(editionCode, buildDictionaryItemResultsFromCurrent(currentItems)), nil
 	}
 	return buildDictionaryItemResultsFromDefinitions(BuiltInDictionaryDefinitions(editionCode), nil), nil
+}
+
+func mergeDictionaryItemsWithDefinitions(editionCode string, items []DictionaryItemResult) []DictionaryItemResult {
+	definitions := BuiltInDictionaryDefinitions(editionCode)
+	itemMap := make(map[string]DictionaryItemResult, len(items))
+	for _, item := range items {
+		itemMap[item.ItemCode] = item
+	}
+	result := make([]DictionaryItemResult, 0, len(definitions))
+	for _, definition := range definitions {
+		if item, ok := itemMap[definition.ItemCode]; ok {
+			item.ItemCategory = definition.ItemCategory
+			item.DefaultName = definition.DefaultName
+			item.DisplayOrder = definition.DisplayOrder
+			item.Editable = definition.Editable
+			item.RelatedPayload = definition.RelatedPayload
+			result = append(result, item)
+			continue
+		}
+		result = append(result, DictionaryItemResult{
+			ItemCode:       definition.ItemCode,
+			ItemCategory:   definition.ItemCategory,
+			DefaultName:    definition.DefaultName,
+			DisplayName:    definition.DefaultName,
+			DisplayOrder:   definition.DisplayOrder,
+			Editable:       definition.Editable,
+			RelatedPayload: definition.RelatedPayload,
+		})
+	}
+	return result
 }
 
 func buildDictionarySchemeDetailResult(scheme entity.DictionaryScheme, items []DictionaryItemResult) *DictionarySchemeDetailResult {

@@ -91,6 +91,9 @@ func TestAdminDictionaryLifecycleInitializesSnapshotAndRevision(t *testing.T) {
 	if displayNameOf(current.Items, "market.LOCAL") != "本地市场方案更新" {
 		t.Fatalf("expected scheme display name to be copied into current dictionary, got %q", displayNameOf(current.Items, "market.LOCAL"))
 	}
+	if countDictionaryCategoryItems(current.Items, DictionaryCategoryBaseline) != 20 {
+		t.Fatalf("expected baseline dictionary to include all 20 initial baseline fields, got %d", countDictionaryCategoryItems(current.Items, DictionaryCategoryBaseline))
+	}
 
 	updated, err := dictionaryService.UpdateCurrent(ctx, UpdateCurrentDictionaryCommand{
 		Items:        []DictionaryItemInput{{ItemCode: "market.LOCAL", DisplayName: "本地市场修改后"}},
@@ -257,4 +260,14 @@ func hasScheme(items []DictionarySchemeSummary, schemeID int64) bool {
 		}
 	}
 	return false
+}
+
+func countDictionaryCategoryItems(items []DictionaryItemResult, category string) int {
+	count := 0
+	for _, item := range items {
+		if item.ItemCategory == category {
+			count++
+		}
+	}
+	return count
 }
