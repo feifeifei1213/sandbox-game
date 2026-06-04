@@ -113,14 +113,15 @@
               </option>
             </select>
             <button type="button" class="btn" :disabled="dictionaryLoading || initializing" @click="restoreDraftDefault">恢复默认</button>
-            <button type="button" class="btn" :disabled="dictionaryLoading || initializing || selectedSchemeId <= 0" @click="updateSelectedScheme">更新方案</button>
+            <button type="button" class="btn" :disabled="dictionaryLoading || initializing || selectedSchemeId <= 0 || dictionaryDraftInvalidCount > 0" @click="updateSelectedScheme">更新方案</button>
             <button type="button" class="btn danger" :disabled="dictionaryLoading || initializing || selectedSchemeId <= 0" @click="deleteSelectedScheme">删除方案</button>
-            <button type="button" class="btn" :disabled="dictionaryLoading || initializing" @click="saveDraftAsScheme">另存为方案</button>
+            <button type="button" class="btn" :disabled="dictionaryLoading || initializing || dictionaryDraftInvalidCount > 0" @click="saveDraftAsScheme">另存为方案</button>
           </div>
         </div>
 
         <DictionaryEditor
           :items="dictionaryDraftItems"
+          :base-items="dictionaryCurrent?.items ?? []"
           :readonly="initializing"
           @update="updateDictionaryDraftItem"
         />
@@ -131,7 +132,7 @@
           <strong>确认初始化</strong>
           <span>将生成小组、账号、年份状态，并保存当前显示名称快照。初始基线可在初始化后从本页入口进入提交。</span>
         </div>
-        <button type="button" class="btn primary" :disabled="initializing" @click="handleInitialize">
+        <button type="button" class="btn primary" :disabled="initializing || dictionaryDraftInvalidCount > 0" @click="handleInitialize">
           {{ initializing ? '初始化中...' : '确认初始化比赛' }}
         </button>
       </section>
@@ -171,18 +172,19 @@
                 {{ item.schemeName }}
               </option>
             </select>
-            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0" @click="applySchemeToCurrent">应用方案</button>
+            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0 || dictionaryDraftInvalidCount > 0" @click="applySchemeToCurrent">应用方案</button>
             <button type="button" class="btn" :disabled="!currentDictionaryUnlocked" @click="restoreCurrentDefault">恢复默认</button>
-            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0" @click="updateSelectedScheme">更新方案</button>
+            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0 || dictionaryDraftInvalidCount > 0" @click="updateSelectedScheme">更新方案</button>
             <button type="button" class="btn danger" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0" @click="deleteSelectedScheme">删除方案</button>
-            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked" @click="saveDraftAsScheme">另存为方案</button>
-            <button type="button" class="btn primary" :disabled="!currentDictionaryUnlocked || savingDictionary" @click="saveCurrentDictionary">
-              {{ savingDictionary ? '保存中...' : '保存显示名称' }}
+            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked || dictionaryDraftInvalidCount > 0" @click="saveDraftAsScheme">另存为方案</button>
+            <button type="button" class="btn primary" :disabled="!currentDictionaryUnlocked || savingDictionary || dictionaryDraftInvalidCount > 0 || dictionaryPendingChangeCount === 0" @click="saveCurrentDictionary">
+              {{ currentDictionarySaveButtonText }}
             </button>
           </div>
         </div>
         <DictionaryEditor
           :items="dictionaryDraftItems"
+          :base-items="dictionaryCurrent?.items ?? []"
           :readonly="!currentDictionaryUnlocked || savingDictionary"
           @update="updateDictionaryDraftItem"
         />
@@ -207,10 +209,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 
+import DictionaryEditor from '@/components/sandbox-game/admin/DictionaryEditor.vue'
 import {
   applyAdminDictionarySchemeToCurrent,
   deleteAdminDictionaryScheme,
@@ -225,58 +228,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useDictionaryStore } from '@/stores/dictionary'
 import type { AdminDictionaryItem } from '@/types/sandbox-game-admin'
 import { hasFractionInput } from '@/utils/manual-integer'
-
-const DictionaryEditor = defineComponent({
-  name: 'DictionaryEditor',
-  props: {
-    items: {
-      type: Array as () => AdminDictionaryItem[],
-      required: true,
-    },
-    readonly: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  emits: ['update'],
-  setup(props, { emit }) {
-    const groupedItems = computed(() => {
-      const labels: Record<string, string> = {
-        MARKET: '市场',
-        ORDER_TYPE: '订单类型',
-        OPERATING: '经营页',
-        REPORT: '财报页',
-        BASELINE: '初始基线',
-      }
-      const groups = new Map<string, AdminDictionaryItem[]>()
-      for (const item of props.items) {
-        const key = item.itemCategory || 'OTHER'
-        groups.set(key, [...(groups.get(key) ?? []), item])
-      }
-      return Array.from(groups.entries()).map(([category, items]) => ({
-        category,
-        label: labels[category] ?? category,
-        items: items.sort((a, b) => a.displayOrder - b.displayOrder),
-      }))
-    })
-
-    return () => h('div', { class: 'dictionary-groups' }, groupedItems.value.map((group) =>
-      h('section', { class: 'dictionary-group', key: group.category }, [
-        h('h4', group.label),
-        h('div', { class: 'dictionary-grid' }, group.items.map((item) =>
-          h('label', { class: 'dictionary-field', key: item.itemCode }, [
-            h('span', item.defaultName),
-            h('input', {
-              value: item.displayName,
-              readonly: props.readonly || !item.editable,
-              onInput: (event: Event) => emit('update', item.itemCode, (event.target as HTMLInputElement).value),
-            }),
-          ]),
-        )),
-      ]),
-    ))
-  },
-})
 
 const router = useRouter()
 const shellStore = useAdminShellStore()
@@ -325,6 +276,21 @@ const currentEditionTemplateText = computed(() => {
     setupStatus.value?.reportTemplateVersion,
     setupStatus.value?.orderTemplateVersion,
   ].filter(Boolean).join(' / ') || '--'
+})
+
+const dictionaryDraftInvalidCount = computed(() => dictionaryDraftItems.value.filter((item) => !item.displayName.trim()).length)
+const dictionaryPendingChangeCount = computed(() => countChangedDisplayNames(dictionaryCurrent.value?.items ?? [], dictionaryDraftItems.value))
+const currentDictionarySaveButtonText = computed(() => {
+  if (savingDictionary.value) {
+    return '保存中...'
+  }
+  if (dictionaryDraftInvalidCount.value > 0) {
+    return `还有 ${dictionaryDraftInvalidCount.value} 项为空`
+  }
+  if (dictionaryPendingChangeCount.value === 0) {
+    return '暂无修改'
+  }
+  return `保存 ${dictionaryPendingChangeCount.value} 项修改`
 })
 
 onMounted(async () => {
@@ -457,6 +423,10 @@ function restoreDraftDefault() {
 }
 
 async function saveDraftAsScheme() {
+  if (dictionaryDraftInvalidCount.value > 0) {
+    pageMessage.value = { type: 'error', text: '显示名称不能为空，请先处理红色标记字段。' }
+    return
+  }
   const schemeName = window.prompt('请输入字典方案名称', `${selectedEdition.value?.editionName ?? '本场比赛'}显示名称`)
   if (!schemeName?.trim()) {
     return
@@ -479,6 +449,10 @@ async function saveDraftAsScheme() {
 async function updateSelectedScheme() {
   const scheme = customSchemes.value.find((item) => item.id === selectedSchemeId.value)
   if (!scheme) {
+    return
+  }
+  if (dictionaryDraftInvalidCount.value > 0) {
+    pageMessage.value = { type: 'error', text: '显示名称不能为空，请先处理红色标记字段。' }
     return
   }
   if (!window.confirm(`确认用当前编辑内容覆盖字典方案「${scheme.schemeName}」吗？`)) {
@@ -536,6 +510,18 @@ function unlockCurrentDictionary() {
 }
 
 async function saveCurrentDictionary() {
+  if (dictionaryDraftInvalidCount.value > 0) {
+    pageMessage.value = { type: 'error', text: '显示名称不能为空，请先处理红色标记字段。' }
+    return
+  }
+  if (dictionaryPendingChangeCount.value === 0) {
+    pageMessage.value = { type: 'success', text: '当前没有需要保存的显示名称修改。' }
+    return
+  }
+  const preview = buildChangedDisplayNamePreview(dictionaryCurrent.value?.items ?? [], dictionaryDraftItems.value)
+  if (!window.confirm(`确认保存当前比赛显示名称修改吗？${preview}`)) {
+    return
+  }
   savingDictionary.value = true
   pageMessage.value = null
   try {
@@ -556,6 +542,10 @@ async function saveCurrentDictionary() {
 
 async function applySchemeToCurrent() {
   if (selectedSchemeId.value <= 0) {
+    return
+  }
+  if (dictionaryDraftInvalidCount.value > 0) {
+    pageMessage.value = { type: 'error', text: '显示名称不能为空，请先处理红色标记字段。' }
     return
   }
   const scheme = customSchemes.value.find((item) => item.id === selectedSchemeId.value)
@@ -656,10 +646,34 @@ function buildChangedDisplayNamePreview(beforeItems: AdminDictionaryItem[], afte
       item,
       beforeName: beforeMap.get(item.itemCode)?.displayName ?? item.defaultName,
     }))
-    .filter(({ item, beforeName }) => beforeName !== item.displayName)
-  const detailLines = changedItems.slice(0, 8).map(({ item, beforeName }) => `\n- ${item.defaultName}: ${beforeName} -> ${item.displayName}`)
-  const moreText = changedItems.length > 8 ? `\n- 其余 ${changedItems.length - 8} 项略` : ''
-  return `预计会覆盖 ${changedItems.length} 个显示名称。${detailLines.join('')}${moreText}`
+    .filter(({ item, beforeName }) => beforeName.trim() !== item.displayName.trim())
+  const categoryLabels: Record<string, string> = {
+    MARKET: '市场',
+    ORDER_TYPE: '订单类型',
+    OPERATING: '经营页',
+    REPORT: '财报页',
+    BASELINE: '初始基线',
+  }
+  const grouped = new Map<string, typeof changedItems>()
+  for (const changedItem of changedItems) {
+    const key = changedItem.item.itemCategory || 'OTHER'
+    grouped.set(key, [...(grouped.get(key) ?? []), changedItem])
+  }
+  const detailLines = Array.from(grouped.entries()).flatMap(([category, items]) => {
+    const header = `\n【${categoryLabels[category] ?? category}】`
+    const lines = items.slice(0, 6).map(({ item, beforeName }) => `\n- ${item.defaultName}: ${beforeName} -> ${item.displayName.trim()}`)
+    const moreText = items.length > 6 ? `\n- 其余 ${items.length - 6} 项略` : ''
+    return [header, ...lines, moreText]
+  })
+  return `预计会覆盖 ${changedItems.length} 个显示名称。${detailLines.join('')}`
+}
+
+function countChangedDisplayNames(beforeItems: AdminDictionaryItem[], afterItems: AdminDictionaryItem[]) {
+  const beforeMap = new Map(beforeItems.map((item) => [item.itemCode, item]))
+  return afterItems.filter((item) => {
+    const beforeName = beforeMap.get(item.itemCode)?.displayName ?? item.defaultName
+    return beforeName.trim() !== item.displayName.trim()
+  }).length
 }
 
 function toDictionaryInputs(items: AdminDictionaryItem[]) {
@@ -917,50 +931,6 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
   gap: 16px;
 }
 
-.dictionary-groups {
-  display: grid;
-  gap: 16px;
-}
-
-.dictionary-group {
-  display: grid;
-  gap: 10px;
-}
-
-.dictionary-group h4 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.dictionary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.dictionary-field {
-  display: grid;
-  gap: 6px;
-}
-
-.dictionary-field span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.dictionary-field input {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: #fbfcfe;
-}
-
-.dictionary-field input[readonly] {
-  background: var(--readonly-bg);
-}
-
 .log-list {
   display: grid;
   gap: 10px;
@@ -988,8 +958,7 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
   .cards-grid,
   .setup-grid,
   .form-grid,
-  .meta-grid,
-  .dictionary-grid {
+  .meta-grid {
     grid-template-columns: 1fr;
   }
 
