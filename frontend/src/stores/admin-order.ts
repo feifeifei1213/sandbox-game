@@ -73,6 +73,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const loadingPool = ref(false)
   const savingMarketConfig = ref(false)
   const loadingSelectionStatus = ref(false)
+  const silentLoadingSelectionStatus = ref(false)
   const controllingMarket = ref(false)
   const releasingSegment = ref(false)
   const skippingGroup = ref(false)
@@ -384,7 +385,14 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   }
 
   async function loadSelectionStatus(options?: { silent?: boolean }) {
-    loadingSelectionStatus.value = true
+    if (options?.silent) {
+      if (silentLoadingSelectionStatus.value || loadingSelectionStatus.value) {
+        return
+      }
+      silentLoadingSelectionStatus.value = true
+    } else {
+      loadingSelectionStatus.value = true
+    }
     if (!options?.silent) {
       pageMessage.value = null
     }
@@ -399,7 +407,11 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         throw error
       }
     } finally {
-      loadingSelectionStatus.value = false
+      if (options?.silent) {
+        silentLoadingSelectionStatus.value = false
+      } else {
+        loadingSelectionStatus.value = false
+      }
     }
   }
 

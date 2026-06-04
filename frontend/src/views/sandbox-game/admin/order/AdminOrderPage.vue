@@ -562,6 +562,7 @@ const orderTypeOptions = computed(() =>
 )
 const selectedSequenceSegmentKey = ref('')
 const activeOrderTab = ref<'forecast' | 'market' | 'sequence' | 'pool' | 'bidding'>('market')
+let selectionStatusTimer: number | null = null
 const lockedForecastYearCount = computed(() => forecastYearLocks.value.filter((item) => item.locked).length)
 
 const yearOptions = computed(() => {
@@ -638,6 +639,18 @@ watch(
   },
 )
 
+watch(
+  () => activeOrderTab.value,
+  (tab) => {
+    if (tab === 'bidding') {
+      void refreshSelectionStatusSilently()
+      startSelectionStatusPolling()
+      return
+    }
+    stopSelectionStatusPolling()
+  },
+)
+
 onMounted(async () => {
   try {
     if (!shellStore.config) {
@@ -651,12 +664,16 @@ onMounted(async () => {
     dictionaryStore.startSilentSync()
     await store.loadPool({ silent: true })
     await store.loadSelectionStatus({ silent: true })
+    if (activeOrderTab.value === 'bidding') {
+      startSelectionStatusPolling()
+    }
   } catch {
     // 页面消息由 store 统一处理。
   }
 })
 
 onUnmounted(() => {
+  stopSelectionStatusPolling()
   dictionaryStore.stopSilentSync()
 })
 
@@ -665,6 +682,9 @@ async function handleYearChange() {
     await store.loadConfig()
     await store.loadPool({ silent: true })
     await store.loadSelectionStatus({ silent: true })
+    if (activeOrderTab.value === 'bidding') {
+      restartSelectionStatusPolling()
+    }
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -815,6 +835,7 @@ async function handleControlMarketChange() {
   try {
     selectedSequenceSegmentKey.value = ''
     await store.loadSelectionStatus()
+    restartSelectionStatusPolling()
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -837,6 +858,43 @@ async function handleSkipCurrentGroup() {
   } catch {
     // 页面消息由 store 统一处理。
   }
+}
+
+async function refreshSelectionStatusSilently() {
+  try {
+    await store.loadSelectionStatus({ silent: true })
+  } catch {
+    // 静默轮询不打断管理员当前操作。
+  }
+}
+
+function startSelectionStatusPolling() {
+  if (selectionStatusTimer !== null) {
+    return
+  }
+  selectionStatusTimer = window.setInterval(() => {
+    if (activeOrderTab.value !== 'bidding') {
+      stopSelectionStatusPolling()
+      return
+    }
+    void refreshSelectionStatusSilently()
+  }, 3000)
+}
+
+function stopSelectionStatusPolling() {
+  if (selectionStatusTimer === null) {
+    return
+  }
+  window.clearInterval(selectionStatusTimer)
+  selectionStatusTimer = null
+}
+
+function restartSelectionStatusPolling() {
+  if (activeOrderTab.value !== 'bidding') {
+    return
+  }
+  stopSelectionStatusPolling()
+  startSelectionStatusPolling()
 }
 
 function segmentKey(segment: Pick<AdminOrderSegmentStatus, 'marketCode' | 'orderType'>) {
