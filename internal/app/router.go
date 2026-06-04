@@ -172,6 +172,8 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminControlQueryService,
 		adminControlCommandService,
 	)
+	adminDictionaryService := service.NewAdminDictionaryService(db)
+	adminDictionaryHandler := handler.NewAdminDictionaryHandler(adminDictionaryService)
 	adminRollbackQueryService := service.NewAdminRollbackQueryService(
 		stateSnapshotRepo,
 		groupRepo,
@@ -276,6 +278,18 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminControl.GET("/get-initial-baseline", adminControlHandler.GetInitialBaseline)
 		adminControl.POST("/submit-initial-baseline", adminControlHandler.SubmitInitialBaseline)
 		adminControl.POST("/unlock-year", adminControlHandler.UnlockYear)
+
+		adminDictionary := protected.Group("/admin-dictionary")
+		adminDictionary.GET("/get-current", adminDictionaryHandler.GetCurrent)
+		adminDictionary.GET("/list-schemes", adminDictionaryHandler.ListSchemes)
+		adminDictionary.GET("/get-scheme-detail", adminDictionaryHandler.GetSchemeDetail)
+		adminDictionary.POST("/save-scheme", adminDictionaryHandler.SaveScheme)
+		adminDictionary.DELETE("/delete-scheme", adminDictionaryHandler.DeleteScheme)
+		adminDictionary.PUT("/update-current", adminDictionaryHandler.UpdateCurrent)
+		adminDictionary.POST("/apply-scheme-to-current", adminDictionaryHandler.ApplySchemeToCurrent)
+		adminDictionary.POST("/restore-current-default", adminDictionaryHandler.RestoreCurrentDefault)
+		adminDictionary.GET("/page-change-logs", adminDictionaryHandler.PageChangeLogs)
+		adminDictionary.GET("/get-revision", adminDictionaryHandler.GetRevision)
 
 		adminRollback := protected.Group("/admin-rollback")
 		adminRollback.GET("/list-snapshots", adminRollbackHandler.ListSnapshots)

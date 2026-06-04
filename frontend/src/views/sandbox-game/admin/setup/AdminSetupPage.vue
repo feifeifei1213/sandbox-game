@@ -3,18 +3,11 @@
     <header class="hero">
       <div>
         <h2>赛前配置</h2>
-        <p>先确认本场比赛的小组数量，再由系统一次性生成小组、账号和年份状态。</p>
+        <p>集中配置小组数量、最终年份、沙盘版本和业务显示名称；初始化后版本锁定，显示名称可按管理员授权修改。</p>
       </div>
       <div class="hero-actions">
-        <button type="button" class="btn" :disabled="shellLoading || initializing" @click="handleRefresh">刷新状态</button>
-        <button
-          v-if="setupStatus?.initialized"
-          type="button"
-          class="btn primary"
-          @click="goToSummary"
-        >
-          进入汇总页
-        </button>
+        <button type="button" class="btn" :disabled="shellLoading || dictionaryLoading || initializing" @click="handleRefresh">刷新状态</button>
+        <button v-if="setupStatus?.initialized" type="button" class="btn primary" @click="goToSummary">进入汇总页</button>
       </div>
     </header>
 
@@ -36,141 +29,279 @@
         <strong>{{ setupStatus?.finalYear ?? '--' }}</strong>
       </article>
       <article class="card">
-        <span class="card-label">当前开放年份</span>
-        <strong>{{ setupStatus?.currentOpenYear ?? '--' }}</strong>
+        <span class="card-label">沙盘版本</span>
+        <strong>{{ setupStatus?.editionName ?? selectedEdition?.editionName ?? '--' }}</strong>
       </article>
       <article class="card">
-        <span class="card-label">沙盘版本</span>
-        <strong>{{ setupStatus?.editionName ?? '--' }}</strong>
+        <span class="card-label">字典版本</span>
+        <strong>{{ dictionaryCurrent?.dictionaryRevision ?? setupStatus?.dictionaryRevision ?? 0 }}</strong>
       </article>
     </div>
 
-    <div class="split-layout">
-      <section class="panel-card">
-        <div class="panel-head">
-          <div>
-            <strong>初始化比赛环境</strong>
-            <span>首版只支持赛前初始化配置小组数量，比赛开始后不支持动态增减。</span>
-          </div>
-        </div>
+    <section v-if="!setupStatus?.initialized" class="panel-card setup-flow">
+      <div class="steps-row">
+        <span v-for="item in preSetupSteps" :key="item" class="step-pill">{{ item }}</span>
+      </div>
 
-        <div class="form-grid">
+      <div class="setup-grid">
+        <section class="setup-section">
+          <div class="panel-head">
+            <strong>比赛基础信息</strong>
+            <span>小组和账号由初始化生成；初始基线入口集中放在这里，初始化后进入录入。</span>
+          </div>
+          <div class="form-grid">
+            <label class="field">
+              <span>小组数量</span>
+              <input
+                v-model.number="groupCountDraft"
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                inputmode="numeric"
+                :class="{ invalid: hasFractionInput(groupCountDraft) }"
+                :disabled="initializing"
+              >
+            </label>
+            <label class="field">
+              <span>默认玩家账号</span>
+              <input :value="accountPreviewText" readonly>
+            </label>
+            <label class="field">
+              <span>最终年份</span>
+              <input :value="setupStatus?.finalYear ?? '--'" readonly>
+            </label>
+            <label class="field">
+              <span>共享基线</span>
+              <input :value="setupStatus?.initialBaselineSubmitted ? '已提交' : '未提交'" readonly>
+            </label>
+          </div>
+          <button type="button" class="btn link-btn" :disabled="!setupStatus?.initialized" @click="goToBaseline">进入初始基线页</button>
+        </section>
+
+        <section class="setup-section">
+          <div class="panel-head">
+            <strong>版本包</strong>
+            <span>版本包决定字段结构、公式版本和流程规则，初始化完成后不可切换。</span>
+          </div>
           <label class="field">
             <span>沙盘版本</span>
-            <select
-              v-model="editionCodeDraft"
-              :disabled="setupStatus?.initialized || initializing || availableEditions.length === 0"
-            >
+            <select v-model="editionCodeDraft" :disabled="initializing || availableEditions.length === 0">
               <option v-for="item in availableEditions" :key="item.editionCode" :value="item.editionCode">
                 {{ item.editionName }}
               </option>
             </select>
           </label>
-          <label class="field">
-            <span>小组数量</span>
-            <input
-              v-model.number="groupCountDraft"
-              type="number"
-              min="1"
-              max="10"
-              step="1"
-              inputmode="numeric"
-              :class="{ invalid: hasFractionInput(groupCountDraft) }"
-              :disabled="setupStatus?.initialized || initializing"
-            >
-          </label>
-          <label class="field">
-            <span>默认玩家账号</span>
-            <input :value="accountPreviewText" readonly>
-          </label>
-        </div>
-
-        <div class="note-list">
-          <span>管理员账号继续保留为 `admin`。</span>
-          <span>玩家账号将按 `group01 ~ groupNN` 自动生成，默认密码沿用 `123456`。</span>
-          <span>沙盘版本只允许赛前选择，初始化完成后锁定。</span>
-          <span>初始化完成后默认打开 `0年`，正式年份预置但保持锁定。</span>
-        </div>
-
-        <div class="action-row">
-          <button
-            type="button"
-            class="btn primary"
-            :disabled="setupStatus?.initialized || initializing"
-            @click="handleInitialize"
-          >
-            {{ initializing ? '初始化中...' : '确认初始化比赛' }}
-          </button>
-        </div>
-      </section>
-
-      <section class="panel-card">
-        <div class="panel-head">
-          <div>
-            <strong>当前说明</strong>
-            <span>初始化完成后，汇总页、组数据页、通知与奖惩范围都会按实际小组数量动态适配。</span>
-          </div>
-        </div>
-
-        <div class="timeline">
-          <div class="timeline-item">
-            <strong>默认入口</strong>
-            <span>{{ setupStatus?.defaultRoute ?? '/sandbox-game/admin/setup' }}</span>
-          </div>
-          <div class="timeline-item">
-            <strong>共享基线</strong>
-            <span>{{ setupStatus?.initialBaselineSubmitted ? '已提交' : '未提交' }}</span>
-          </div>
-          <div class="timeline-item">
-            <strong>当前版本</strong>
+          <div class="meta-panel">
             <span>{{ currentEditionDescription }}</span>
-          </div>
-          <div class="timeline-item">
-            <strong>字段模板</strong>
             <span>{{ currentEditionTemplateText }}</span>
           </div>
-          <div class="timeline-item">
-            <strong>初始化后</strong>
-            <span>系统会生成小组主数据、玩家账号与全部年份主状态数据。</span>
+        </section>
+      </div>
+
+      <section class="setup-section">
+        <div class="panel-head">
+          <div>
+            <strong>业务显示字典</strong>
+            <span>只修改页面显示名，不改变字段编码、公式、流程或数据库含义。</span>
           </div>
-          <div class="timeline-item">
-            <strong>风险边界</strong>
-            <span>若当前环境已初始化，再次提交会被服务端拒绝，不会覆盖现有比赛数据。</span>
+          <div class="toolbar-actions">
+            <select v-model.number="selectedSchemeId" :disabled="dictionaryLoading || initializing">
+              <option :value="0">版本默认名称</option>
+              <option v-for="item in customSchemes" :key="item.id" :value="item.id">
+                {{ item.schemeName }}
+              </option>
+            </select>
+            <button type="button" class="btn" :disabled="dictionaryLoading || initializing" @click="restoreDraftDefault">恢复默认</button>
+            <button type="button" class="btn" :disabled="dictionaryLoading || initializing || selectedSchemeId <= 0" @click="updateSelectedScheme">更新方案</button>
+            <button type="button" class="btn danger" :disabled="dictionaryLoading || initializing || selectedSchemeId <= 0" @click="deleteSelectedScheme">删除方案</button>
+            <button type="button" class="btn" :disabled="dictionaryLoading || initializing" @click="saveDraftAsScheme">另存为方案</button>
           </div>
         </div>
+
+        <DictionaryEditor
+          :items="dictionaryDraftItems"
+          :readonly="initializing"
+          @update="updateDictionaryDraftItem"
+        />
       </section>
-    </div>
+
+      <section class="confirm-panel">
+        <div>
+          <strong>确认初始化</strong>
+          <span>将生成小组、账号、年份状态，并保存当前显示名称快照。初始基线可在初始化后从本页入口进入提交。</span>
+        </div>
+        <button type="button" class="btn primary" :disabled="initializing" @click="handleInitialize">
+          {{ initializing ? '初始化中...' : '确认初始化比赛' }}
+        </button>
+      </section>
+    </section>
+
+    <section v-else class="panel-card initialized-view">
+      <div class="panel-head">
+        <div>
+          <strong>当前比赛配置</strong>
+          <span>版本、公式和流程已锁定；最终年份仍在年度控制页维护。</span>
+        </div>
+        <div class="toolbar-actions">
+          <button type="button" class="btn" @click="goToBaseline">初始基线</button>
+          <button type="button" class="btn" @click="unlockCurrentDictionary">
+            {{ currentDictionaryUnlocked ? '收起修改' : '解锁修改显示名称' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="meta-grid">
+        <div><span>版本包</span><strong>{{ setupStatus?.editionName }}</strong></div>
+        <div><span>公式版本</span><strong>{{ setupStatus?.formulaVersion }}</strong></div>
+        <div><span>流程规则</span><strong>{{ setupStatus?.processRuleVersion }}</strong></div>
+        <div><span>字段模板</span><strong>{{ currentEditionTemplateText }}</strong></div>
+      </div>
+
+      <section class="setup-section">
+        <div class="panel-head">
+          <div>
+            <strong>当前比赛显示名称</strong>
+            <span>修改后玩家端和管理员端静默同步，不刷新业务数据。</span>
+          </div>
+          <div class="toolbar-actions">
+            <select v-model.number="selectedSchemeId" :disabled="!currentDictionaryUnlocked || dictionaryLoading">
+              <option :value="0">版本默认名称</option>
+              <option v-for="item in customSchemes" :key="item.id" :value="item.id">
+                {{ item.schemeName }}
+              </option>
+            </select>
+            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0" @click="applySchemeToCurrent">应用方案</button>
+            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked" @click="restoreCurrentDefault">恢复默认</button>
+            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0" @click="updateSelectedScheme">更新方案</button>
+            <button type="button" class="btn danger" :disabled="!currentDictionaryUnlocked || selectedSchemeId <= 0" @click="deleteSelectedScheme">删除方案</button>
+            <button type="button" class="btn" :disabled="!currentDictionaryUnlocked" @click="saveDraftAsScheme">另存为方案</button>
+            <button type="button" class="btn primary" :disabled="!currentDictionaryUnlocked || savingDictionary" @click="saveCurrentDictionary">
+              {{ savingDictionary ? '保存中...' : '保存显示名称' }}
+            </button>
+          </div>
+        </div>
+        <DictionaryEditor
+          :items="dictionaryDraftItems"
+          :readonly="!currentDictionaryUnlocked || savingDictionary"
+          @update="updateDictionaryDraftItem"
+        />
+      </section>
+
+      <section class="setup-section">
+        <div class="panel-head">
+          <strong>字段名称修改记录</strong>
+          <span>只展示本场比赛和方案维护相关记录。</span>
+        </div>
+        <div class="log-list">
+          <div v-for="item in changeLogItems" :key="item.id" class="log-item">
+            <strong>{{ formatChangeType(item.changeType) }} · revision {{ item.revision }}</strong>
+            <span>{{ item.changedSummary }} · {{ item.operatorName }} · {{ formatDateTime(item.operateTime) }}</span>
+            <small v-if="item.reason">{{ item.reason }}</small>
+          </div>
+          <div v-if="changeLogItems.length === 0" class="empty-state">暂无修改记录。</div>
+        </div>
+      </section>
+    </section>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineComponent, h, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 
-import { initializeAdminGame } from '@/api/sandbox-game/admin-control'
+import {
+  applyAdminDictionarySchemeToCurrent,
+  deleteAdminDictionaryScheme,
+  getAdminDictionarySchemeDetail,
+  restoreAdminDictionaryCurrentDefault,
+  saveAdminDictionaryScheme,
+  updateAdminDictionaryCurrent,
+} from '@/api/sandbox-game/admin-dictionary'
+import { initializeAdminGameWithDictionary } from '@/api/sandbox-game/admin-control'
 import { useAdminShellStore, type PageMessage } from '@/stores/admin-shell'
 import { useAuthStore } from '@/stores/auth'
+import { useDictionaryStore } from '@/stores/dictionary'
+import type { AdminDictionaryItem } from '@/types/sandbox-game-admin'
 import { hasFractionInput } from '@/utils/manual-integer'
+
+const DictionaryEditor = defineComponent({
+  name: 'DictionaryEditor',
+  props: {
+    items: {
+      type: Array as () => AdminDictionaryItem[],
+      required: true,
+    },
+    readonly: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  emits: ['update'],
+  setup(props, { emit }) {
+    const groupedItems = computed(() => {
+      const labels: Record<string, string> = {
+        MARKET: '市场',
+        ORDER_TYPE: '订单类型',
+        OPERATING: '经营页',
+        REPORT: '财报页',
+        BASELINE: '初始基线',
+      }
+      const groups = new Map<string, AdminDictionaryItem[]>()
+      for (const item of props.items) {
+        const key = item.itemCategory || 'OTHER'
+        groups.set(key, [...(groups.get(key) ?? []), item])
+      }
+      return Array.from(groups.entries()).map(([category, items]) => ({
+        category,
+        label: labels[category] ?? category,
+        items: items.sort((a, b) => a.displayOrder - b.displayOrder),
+      }))
+    })
+
+    return () => h('div', { class: 'dictionary-groups' }, groupedItems.value.map((group) =>
+      h('section', { class: 'dictionary-group', key: group.category }, [
+        h('h4', group.label),
+        h('div', { class: 'dictionary-grid' }, group.items.map((item) =>
+          h('label', { class: 'dictionary-field', key: item.itemCode }, [
+            h('span', item.defaultName),
+            h('input', {
+              value: item.displayName,
+              readonly: props.readonly || !item.editable,
+              onInput: (event: Event) => emit('update', item.itemCode, (event.target as HTMLInputElement).value),
+            }),
+          ]),
+        )),
+      ]),
+    ))
+  },
+})
 
 const router = useRouter()
 const shellStore = useAdminShellStore()
 const authStore = useAuthStore()
+const dictionaryStore = useDictionaryStore()
 const { config, setupStatus, loading: shellLoading } = storeToRefs(shellStore)
+const { current: dictionaryCurrent, schemes, changeLogs, loading: dictionaryLoading } = storeToRefs(dictionaryStore)
 
 const groupCountDraft = ref(10)
 const editionCodeDraft = ref('VIP_SERVICE_V1')
+const selectedSchemeId = ref(0)
+const dictionaryDraftItems = ref<AdminDictionaryItem[]>([])
 const initializing = ref(false)
+const savingDictionary = ref(false)
+const currentDictionaryUnlocked = ref(false)
 const pageMessage = ref<PageMessage | null>(null)
 
+const preSetupSteps = ['基础信息', '版本包', '显示名称', '初始基线', '确认初始化']
 const availableEditions = computed(() => setupStatus.value?.availableEditions ?? [])
+const customSchemes = computed(() => (schemes.value?.list ?? []).filter((item) => item.id > 0))
+const changeLogItems = computed(() => changeLogs.value?.list ?? [])
 
 const accountPreviewText = computed(() => {
   const count = normalizeGroupCount(groupCountDraft.value)
-  if (count <= 1) {
-    return 'group01'
-  }
-  return `group01 ~ group${String(count).padStart(2, '0')}`
+  return count <= 1 ? 'group01' : `group01 ~ group${String(count).padStart(2, '0')}`
 })
 
 const selectedEdition = computed(() =>
@@ -181,55 +312,101 @@ const selectedEdition = computed(() =>
 
 const currentEditionDescription = computed(() => {
   const edition = selectedEdition.value
-  if (edition) {
-    return `${edition.editionName} · ${edition.description}`
-  }
-  return setupStatus.value?.editionName ?? '--'
+  return edition ? `${edition.editionName} · ${edition.description}` : setupStatus.value?.editionName ?? '--'
 })
 
 const currentEditionTemplateText = computed(() => {
   const edition = selectedEdition.value
-  if (!edition) {
-    return setupStatus.value?.templateVersion ?? '--'
+  if (edition) {
+    return `${edition.operatingTemplateVersion} / ${edition.reportTemplateVersion} / ${edition.orderTemplateVersion}`
   }
-  return `${edition.operatingTemplateVersion} / ${edition.reportTemplateVersion} / ${edition.orderTemplateVersion}`
+  return [
+    setupStatus.value?.operatingTemplateVersion,
+    setupStatus.value?.reportTemplateVersion,
+    setupStatus.value?.orderTemplateVersion,
+  ].filter(Boolean).join(' / ') || '--'
 })
 
 onMounted(async () => {
-  try {
-    if (!setupStatus.value || !config.value) {
-      await shellStore.bootstrap()
-    }
-    syncGroupCountDraft()
-    syncEditionCodeDraft()
-  } catch {
-    // 错误消息由 shell store 统一展示。
-  }
+  await bootstrapPage()
 })
 
 watch(
   () => setupStatus.value?.groupCount,
-  () => {
-    syncGroupCountDraft()
-  },
+  () => syncGroupCountDraft(),
 )
 
 watch(
   () => [setupStatus.value?.editionCode, setupStatus.value?.availableEditions?.length],
-  () => {
-    syncEditionCodeDraft()
+  () => syncEditionCodeDraft(),
+)
+
+watch(
+  () => editionCodeDraft.value,
+  async (nextEdition) => {
+    if (setupStatus.value?.initialized) {
+      return
+    }
+    await loadDictionaryForEdition(nextEdition)
   },
 )
 
-async function handleRefresh() {
+watch(
+  () => selectedSchemeId.value,
+  async (nextSchemeId) => {
+    if (!schemes.value || nextSchemeId === undefined) {
+      return
+    }
+    if (nextSchemeId === 0) {
+      restoreDraftDefault()
+      return
+    }
+    await loadSelectedSchemeDetail(nextSchemeId)
+  },
+)
+
+async function loadSelectedSchemeDetail(schemeId: number) {
   pageMessage.value = null
   try {
-    await shellStore.refreshAll({ silent: true })
+    const detail = await getAdminDictionarySchemeDetail(schemeId)
+    if (detail.editionCode !== editionCodeDraft.value) {
+      pageMessage.value = { type: 'error', text: '该字典方案不属于当前沙盘版本。' }
+      selectedSchemeId.value = 0
+      restoreDraftDefault()
+      return
+    }
+    dictionaryDraftItems.value = mergeDictionaryItems(dictionaryCurrent.value?.items ?? dictionaryDraftItems.value, detail.items)
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '读取字典方案详情失败')
+  }
+}
+
+async function bootstrapPage() {
+  try {
+    await shellStore.bootstrap()
     syncGroupCountDraft()
     syncEditionCodeDraft()
-  } catch {
-    pageMessage.value = { type: 'error', text: '刷新赛前配置状态失败。' }
+    await Promise.all([
+      loadDictionaryForEdition(setupStatus.value?.initialized ? setupStatus.value.editionCode : editionCodeDraft.value),
+      dictionaryStore.loadChangeLogs(1, 20),
+    ])
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '读取赛前配置失败')
   }
+}
+
+async function loadDictionaryForEdition(editionCode?: string | null) {
+  const [current] = await Promise.all([
+    dictionaryStore.loadCurrent(editionCode, { silent: true }),
+    dictionaryStore.loadSchemes(editionCode),
+  ])
+  selectedSchemeId.value = 0
+  dictionaryDraftItems.value = cloneDictionaryItems(current.items)
+}
+
+async function handleRefresh() {
+  pageMessage.value = null
+  await bootstrapPage()
 }
 
 async function handleInitialize() {
@@ -237,12 +414,22 @@ async function handleInitialize() {
     pageMessage.value = { type: 'error', text: '小组数量必须填写整数。' }
     return
   }
+  if (dictionaryDraftItems.value.some((item) => !item.displayName.trim())) {
+    pageMessage.value = { type: 'error', text: '显示名称不能为空。' }
+    return
+  }
   initializing.value = true
   pageMessage.value = null
   try {
-    const result = await initializeAdminGame(normalizeGroupCount(groupCountDraft.value), editionCodeDraft.value)
+    const result = await initializeAdminGameWithDictionary(
+      normalizeGroupCount(groupCountDraft.value),
+      editionCodeDraft.value,
+      toDictionaryInputs(dictionaryDraftItems.value),
+      selectedSchemeId.value > 0 ? selectedSchemeId.value : null,
+    )
     await shellStore.refreshAll({ silent: true })
     await authStore.refreshCurrentUser()
+    await loadDictionaryForEdition(result.editionCode)
     pageMessage.value = {
       type: 'success',
       text: `比赛初始化完成，已生成 ${result.createdGroupCount} 个小组、${result.createdAccountCount} 个玩家账号和 ${result.createdYearStateCount} 条年份状态。`,
@@ -255,8 +442,179 @@ async function handleInitialize() {
   }
 }
 
+function updateDictionaryDraftItem(itemCode: string, displayName: string) {
+  const matched = dictionaryDraftItems.value.find((item) => item.itemCode === itemCode)
+  if (matched) {
+    matched.displayName = displayName
+  }
+}
+
+function restoreDraftDefault() {
+  dictionaryDraftItems.value = dictionaryDraftItems.value.map((item) => ({
+    ...item,
+    displayName: item.defaultName,
+  }))
+}
+
+async function saveDraftAsScheme() {
+  const schemeName = window.prompt('请输入字典方案名称', `${selectedEdition.value?.editionName ?? '本场比赛'}显示名称`)
+  if (!schemeName?.trim()) {
+    return
+  }
+  try {
+    await saveAdminDictionaryScheme({
+      editionCode: editionCodeDraft.value,
+      schemeName: schemeName.trim(),
+      description: '管理员在赛前配置页保存的显示名称方案',
+      items: toDictionaryInputs(dictionaryDraftItems.value),
+    })
+    await dictionaryStore.loadSchemes(editionCodeDraft.value)
+    await dictionaryStore.loadChangeLogs(1, 20)
+    pageMessage.value = { type: 'success', text: '字典方案已保存。' }
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '保存字典方案失败')
+  }
+}
+
+async function updateSelectedScheme() {
+  const scheme = customSchemes.value.find((item) => item.id === selectedSchemeId.value)
+  if (!scheme) {
+    return
+  }
+  if (!window.confirm(`确认用当前编辑内容覆盖字典方案「${scheme.schemeName}」吗？`)) {
+    return
+  }
+  savingDictionary.value = true
+  pageMessage.value = null
+  try {
+    await saveAdminDictionaryScheme({
+      schemeId: scheme.id,
+      editionCode: scheme.editionCode,
+      schemeName: scheme.schemeName,
+      description: scheme.description,
+      items: toDictionaryInputs(dictionaryDraftItems.value),
+    })
+    await dictionaryStore.loadSchemes(editionCodeDraft.value)
+    await dictionaryStore.loadChangeLogs(1, 20)
+    pageMessage.value = { type: 'success', text: '字典方案已更新。' }
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '更新字典方案失败')
+  } finally {
+    savingDictionary.value = false
+  }
+}
+
+async function deleteSelectedScheme() {
+  const scheme = customSchemes.value.find((item) => item.id === selectedSchemeId.value)
+  if (!scheme) {
+    return
+  }
+  if (!window.confirm(`确认删除字典方案「${scheme.schemeName}」吗？删除方案不会影响当前比赛显示名称。`)) {
+    return
+  }
+  savingDictionary.value = true
+  pageMessage.value = null
+  try {
+    await deleteAdminDictionaryScheme(scheme.id)
+    selectedSchemeId.value = 0
+    await dictionaryStore.loadSchemes(editionCodeDraft.value)
+    await dictionaryStore.loadChangeLogs(1, 20)
+    restoreDraftDefault()
+    pageMessage.value = { type: 'success', text: '字典方案已删除，当前编辑内容已恢复为版本默认名称。' }
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '删除字典方案失败')
+  } finally {
+    savingDictionary.value = false
+  }
+}
+
+function unlockCurrentDictionary() {
+  currentDictionaryUnlocked.value = !currentDictionaryUnlocked.value
+  if (currentDictionaryUnlocked.value) {
+    dictionaryDraftItems.value = cloneDictionaryItems(dictionaryCurrent.value?.items ?? [])
+  }
+}
+
+async function saveCurrentDictionary() {
+  savingDictionary.value = true
+  pageMessage.value = null
+  try {
+    const result = await updateAdminDictionaryCurrent({
+      items: toDictionaryInputs(dictionaryDraftItems.value),
+      reason: '管理员在赛前配置页修改当前比赛显示名称',
+    })
+    dictionaryStore.applyCurrent(result)
+    await dictionaryStore.loadChangeLogs(1, 20)
+    currentDictionaryUnlocked.value = false
+    pageMessage.value = { type: 'success', text: '当前比赛显示名称已更新。' }
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '保存当前比赛显示名称失败')
+  } finally {
+    savingDictionary.value = false
+  }
+}
+
+async function applySchemeToCurrent() {
+  if (selectedSchemeId.value <= 0) {
+    return
+  }
+  const scheme = customSchemes.value.find((item) => item.id === selectedSchemeId.value)
+  let schemeItems = dictionaryDraftItems.value
+  try {
+    const detail = await getAdminDictionarySchemeDetail(selectedSchemeId.value)
+    schemeItems = mergeDictionaryItems(dictionaryCurrent.value?.items ?? dictionaryDraftItems.value, detail.items)
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '读取字典方案详情失败')
+    return
+  }
+  const preview = buildChangedDisplayNamePreview(dictionaryCurrent.value?.items ?? [], schemeItems)
+  if (!window.confirm(`确认应用字典方案「${scheme?.schemeName ?? selectedSchemeId.value}」到当前比赛吗？${preview}`)) {
+    return
+  }
+  savingDictionary.value = true
+  try {
+    const result = await applyAdminDictionarySchemeToCurrent({ schemeId: selectedSchemeId.value })
+    dictionaryStore.applyCurrent(result)
+    dictionaryDraftItems.value = cloneDictionaryItems(result.items)
+    await dictionaryStore.loadChangeLogs(1, 20)
+    pageMessage.value = { type: 'success', text: '已应用字典方案到当前比赛。' }
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '应用字典方案失败')
+  } finally {
+    savingDictionary.value = false
+  }
+}
+
+async function restoreCurrentDefault() {
+  const currentItems = dictionaryCurrent.value?.items ?? []
+  const defaultItems = currentItems.map((item) => ({
+    ...item,
+    displayName: item.defaultName,
+  }))
+  const preview = buildChangedDisplayNamePreview(currentItems, defaultItems)
+  if (!window.confirm(`确认恢复当前版本默认显示名称吗？${preview}`)) {
+    return
+  }
+  savingDictionary.value = true
+  try {
+    const result = await restoreAdminDictionaryCurrentDefault()
+    dictionaryStore.applyCurrent(result)
+    dictionaryDraftItems.value = cloneDictionaryItems(result.items)
+    await dictionaryStore.loadChangeLogs(1, 20)
+    pageMessage.value = { type: 'success', text: '已恢复当前比赛默认显示名称。' }
+  } catch (error) {
+    pageMessage.value = toErrorMessage(error, '恢复默认显示名称失败')
+  } finally {
+    savingDictionary.value = false
+  }
+}
+
 async function goToSummary() {
   await router.replace('/sandbox-game/admin/summary')
+}
+
+async function goToBaseline() {
+  await router.push('/sandbox-game/admin/baseline')
 }
 
 function syncGroupCountDraft() {
@@ -277,6 +635,58 @@ function syncEditionCodeDraft() {
 function normalizeGroupCount(value: number) {
   const rounded = Number.isFinite(value) ? Math.round(value) : 10
   return Math.min(10, Math.max(1, rounded))
+}
+
+function cloneDictionaryItems(items: AdminDictionaryItem[]) {
+  return items.map((item) => ({ ...item }))
+}
+
+function mergeDictionaryItems(baseItems: AdminDictionaryItem[], overrideItems: AdminDictionaryItem[]) {
+  const overrideMap = new Map(overrideItems.map((item) => [item.itemCode, item.displayName]))
+  return cloneDictionaryItems(baseItems).map((item) => ({
+    ...item,
+    displayName: overrideMap.get(item.itemCode) ?? item.displayName,
+  }))
+}
+
+function buildChangedDisplayNamePreview(beforeItems: AdminDictionaryItem[], afterItems: AdminDictionaryItem[]) {
+  const beforeMap = new Map(beforeItems.map((item) => [item.itemCode, item]))
+  const changedItems = afterItems
+    .map((item) => ({
+      item,
+      beforeName: beforeMap.get(item.itemCode)?.displayName ?? item.defaultName,
+    }))
+    .filter(({ item, beforeName }) => beforeName !== item.displayName)
+  const detailLines = changedItems.slice(0, 8).map(({ item, beforeName }) => `\n- ${item.defaultName}: ${beforeName} -> ${item.displayName}`)
+  const moreText = changedItems.length > 8 ? `\n- 其余 ${changedItems.length - 8} 项略` : ''
+  return `预计会覆盖 ${changedItems.length} 个显示名称。${detailLines.join('')}${moreText}`
+}
+
+function toDictionaryInputs(items: AdminDictionaryItem[]) {
+  return items.map((item) => ({
+    itemCode: item.itemCode,
+    displayName: item.displayName.trim(),
+  }))
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return '--'
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatChangeType(value: string) {
+  const map: Record<string, string> = {
+    INITIALIZE: '初始化',
+    UPDATE_CURRENT: '修改当前名称',
+    APPLY_SCHEME: '应用方案',
+    RESTORE_DEFAULT: '恢复默认',
+    SAVE_SCHEME: '保存方案',
+    DELETE_SCHEME: '删除方案',
+  }
+  return map[value] ?? value
 }
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {
@@ -305,24 +715,29 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
   font-size: 24px;
 }
 
-.hero p {
-  margin: 0;
+.hero p,
+.panel-head span,
+.confirm-panel span,
+.meta-panel span,
+.log-item span,
+.log-item small {
   color: var(--muted);
   line-height: 1.6;
 }
 
 .hero-actions,
-.action-row {
+.toolbar-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .btn {
   border: 1px solid var(--line);
   background: #ffffff;
   border-radius: 12px;
-  padding: 10px 16px;
+  padding: 10px 14px;
   cursor: pointer;
 }
 
@@ -335,6 +750,10 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
 .btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.link-btn {
+  margin-top: 14px;
 }
 
 .message-bar {
@@ -362,16 +781,18 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
 }
 
 .card,
-.panel-card {
+.panel-card,
+.setup-section,
+.confirm-panel {
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 16px;
   background: #ffffff;
-  padding: 18px;
 }
 
 .card {
   display: grid;
   gap: 8px;
+  padding: 18px;
 }
 
 .card-label {
@@ -380,12 +801,40 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
 }
 
 .card strong {
-  font-size: 24px;
+  font-size: 22px;
 }
 
-.split-layout {
+.panel-card,
+.setup-section,
+.confirm-panel {
+  padding: 16px;
+}
+
+.setup-flow,
+.initialized-view {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 16px;
+}
+
+.steps-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.step-pill {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: var(--accent);
+  border: 1px solid #ccd9f3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
   gap: 16px;
 }
 
@@ -393,24 +842,20 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .panel-head strong {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   font-size: 18px;
 }
 
-.panel-head span {
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.form-grid {
+.form-grid,
+.meta-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .field {
@@ -419,12 +864,13 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
 }
 
 .field span {
-  font-size: 13px;
   color: var(--muted);
+  font-size: 13px;
 }
 
 .field input,
-.field select {
+.field select,
+.toolbar-actions select {
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
@@ -433,45 +879,122 @@ function toErrorMessage(error: unknown, fallback: string): PageMessage {
 }
 
 .field input.invalid {
-  border-color: #e17979;
+  border-color: var(--danger);
   background: #fff6f6;
   color: var(--danger);
 }
 
-.note-list,
-.timeline {
+.meta-panel {
   display: grid;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.note-list span,
-.timeline-item span {
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.timeline-item {
-  display: grid;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: 14px;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
   background: #f7f9fc;
 }
 
-.timeline-item strong {
+.meta-grid div {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f7f9fc;
+}
+
+.meta-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.meta-grid strong {
   font-size: 14px;
+}
+
+.confirm-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.dictionary-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.dictionary-group {
+  display: grid;
+  gap: 10px;
+}
+
+.dictionary-group h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.dictionary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dictionary-field {
+  display: grid;
+  gap: 6px;
+}
+
+.dictionary-field span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dictionary-field input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fbfcfe;
+}
+
+.dictionary-field input[readonly] {
+  background: var(--readonly-bg);
+}
+
+.log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.log-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f7f9fc;
+}
+
+.log-item small {
+  font-size: 12px;
+}
+
+.empty-state {
+  color: var(--muted);
+  text-align: center;
+  padding: 16px;
 }
 
 @media (max-width: 1180px) {
   .cards-grid,
-  .split-layout,
-  .form-grid {
+  .setup-grid,
+  .form-grid,
+  .meta-grid,
+  .dictionary-grid {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 860px) {
+  .panel-head,
+  .confirm-panel,
   .hero {
     flex-direction: column;
     align-items: flex-start;

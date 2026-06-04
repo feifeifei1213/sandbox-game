@@ -31,6 +31,7 @@ const items = computed(() => {
     ]
   }
   return [
+    { to: '/sandbox-game/admin/setup', label: '赛前配置', description: '查看版本、公式和维护显示名称' },
     { to: '/sandbox-game/admin/summary', label: '汇总', description: '年度汇总区 + 最终排名区' },
     { to: '/sandbox-game/admin/control', label: '年度控制', description: '最终年份、开放下一年、阻断摘要' },
     { to: '/sandbox-game/admin/baseline', label: '初始基线', description: '共享模板录入与提交锁定' },

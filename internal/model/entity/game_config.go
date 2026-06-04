@@ -12,6 +12,7 @@ type GameConfig struct {
 	ReportTemplateVersion    string `gorm:"column:report_template_version"`
 	OrderTemplateVersion     string `gorm:"column:order_template_version"`
 	ProcessRuleVersion       string `gorm:"column:process_rule_version"`
+	DictionaryRevision       int    `gorm:"column:dictionary_revision"`
 	InitialBaselineSubmitted bool   `gorm:"column:initial_baseline_submitted"`
 	BaseEntity
 }

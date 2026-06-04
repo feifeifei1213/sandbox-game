@@ -1,0 +1,26 @@
+app:
+  name: sandbox-game-shengchan-competition
+  version: 0.1.0
+
+server:
+  host: 0.0.0.0
+  port: 18080
+  mode: release
+  readTimeoutSeconds: 15
+  writeTimeoutSeconds: 15
+
+frontend:
+  distDir: frontend/dist
+
+log:
+  level: info
+
+mysql:
+  dsn: root:123456@tcp(127.0.0.1:3306)/sandbox_game_shengchan_prod?charset=utf8mb4&parseTime=True&loc=Local
+  maxOpenConns: 20
+  maxIdleConns: 10
+
+auth:
+  mode: local
+  tokenSecret: sandbox-game-shengchan-2026-secret
+  tokenExpireSeconds: 28800

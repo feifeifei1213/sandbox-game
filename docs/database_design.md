@@ -45,6 +45,7 @@
 首版原则：
 
 - 历史提交、汇总快照、异常解锁日志、管理员动作日志不允许物理删除
+- 状态快照、回退日志、回退前安全快照不允许物理删除
 - 核心业务数据以“状态失效 / 快照保留”为主，不依赖删除回滚
 - 若后续需要逻辑删除，仅用于配置型 / 辅助型表，不建议用于提交流水表
 
@@ -172,6 +173,7 @@
 | `report_template_version` | VARCHAR(64) | 财报页字段模板版本 |
 | `order_template_version` | VARCHAR(64) | 订单字段模板版本 |
 | `process_rule_version` | VARCHAR(64) | 流程规则版本 |
+| `dictionary_revision` | INT | 当前比赛字典快照版本，用于前端轻量同步 |
 | `initial_baseline_submitted` | TINYINT(1) | 初始基线是否已提交 |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
 
@@ -182,7 +184,130 @@
 - 当前生产版和贵宾版公式、流程一致，可共用 `COMMON_FORMULA_V1` 与 `COMMON_PROCESS_V1`。
 - `PRODUCTION_V1` 首轮应写入 `PRODUCTION_OPERATING_TEMPLATE_V1`、`PRODUCTION_REPORT_TEMPLATE_V1`，订单模板暂写入 `VIP_ORDER_TEMPLATE_V1`；待生产版订单字段确认后再补充新的订单模板版本。
 - 比赛初始化后版本包不允许切换；如需切换，应重新初始化新的比赛环境或比赛库。
+- `dictionary_revision` 每次当前比赛字典快照变化时自增；玩家端和管理员端据此静默同步显示名称。
 - `final_year` 不能小于 `current_open_year`。
+
+---
+
+#### 4.2.2 `sg_dictionary_scheme`
+
+用途：管理员可复用的业务显示字典方案模板。
+
+关键字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `edition_code` | VARCHAR(64) | 绑定沙盘版本包 |
+| `scheme_name` | VARCHAR(64) | 字典方案名称 |
+| `description` | VARCHAR(255) | 方案说明 |
+| `built_in` | TINYINT(1) | 是否系统内置方案 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_dictionary_scheme_name(edition_code, scheme_name)`
+- `idx_dictionary_scheme_edition(edition_code)`
+
+说明：
+
+- 字典方案只保存业务显示名，不保存字段结构或公式规则。
+- 字典方案必须绑定版本包；首版不支持跨版本直接套用。
+- 删除或编辑方案不影响当前比赛字典快照。
+
+#### 4.2.3 `sg_dictionary_scheme_item`
+
+用途：字典方案的具体显示名条目。
+
+关键字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `scheme_id` | BIGINT | 所属字典方案 |
+| `edition_code` | VARCHAR(64) | 冗余版本包编码，便于校验 |
+| `item_code` | VARCHAR(128) | 稳定编码，例如 `market.LOCAL`、`orderType.BUSINESS_VIP`、`report.rawMaterials` |
+| `item_category` | VARCHAR(32) | `MARKET` / `ORDER_TYPE` / `OPERATING` / `REPORT` / `BASELINE` |
+| `default_name` | VARCHAR(128) | 当前版本包默认显示名 |
+| `display_name` | VARCHAR(128) | 方案中的显示名称 |
+| `display_order` | INT | 展示排序 |
+| `editable` | TINYINT(1) | 是否允许管理员修改显示名 |
+| `related_payload` | JSON NULL | 前端映射辅助信息 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_dictionary_scheme_item(scheme_id, item_code)`
+- `idx_dictionary_scheme_item_edition(edition_code)`
+- `idx_dictionary_scheme_item_category(item_category)`
+
+说明：
+
+- `item_code` 是公式、payload、数据库之外的显示映射稳定键；管理员端默认不展示。
+- `display_name` 不允许为空；同一类业务名称原则上不重复。
+
+#### 4.2.4 `sg_current_dictionary_item`
+
+用途：当前比赛真正使用的业务显示名称快照。
+
+关键字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `edition_code` | VARCHAR(64) | 当前比赛版本包 |
+| `item_code` | VARCHAR(128) | 稳定编码 |
+| `item_category` | VARCHAR(32) | 字典项分类 |
+| `default_name` | VARCHAR(128) | 当前版本包默认显示名 |
+| `display_name` | VARCHAR(128) | 当前比赛显示名 |
+| `display_order` | INT | 展示排序 |
+| `editable` | TINYINT(1) | 是否允许管理员修改显示名 |
+| `related_payload` | JSON NULL | 前端映射辅助信息 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_current_dictionary_item(item_code)`
+- `idx_current_dictionary_edition(edition_code)`
+- `idx_current_dictionary_category(item_category)`
+
+说明：
+
+- 当前系统不做多场比赛历史归档，因此本表按单场比赛快照设计。
+- 初始化时从版本默认字典或自定义方案复制生成。
+- 比赛中解锁修改、应用方案或恢复默认时，只更新本表，不修改字典方案模板。
+- 页面展示读取本表；公式、提交 payload 与数据库字段仍读取稳定业务字段。
+
+#### 4.2.5 `sg_dictionary_change_log`
+
+用途：记录当前比赛显示名称的修改轨迹。
+
+关键字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `edition_code` | VARCHAR(64) | 沙盘版本包编码 |
+| `change_type` | VARCHAR(32) | `INITIALIZE` / `UPDATE_CURRENT` / `APPLY_SCHEME` / `RESTORE_DEFAULT` / `SAVE_SCHEME` / `DELETE_SCHEME` |
+| `scheme_id` | BIGINT NULL | 关联方案 ID |
+| `reason` | VARCHAR(255) | 变更原因或说明 |
+| `before_json` | JSON | 变更前快照 |
+| `after_json` | JSON | 变更后快照 |
+| `revision` | INT | 变更后当前比赛字典版本；方案维护日志可为 `0` |
+| `operator_id` | BIGINT | 操作管理员 ID |
+| `operator_name` | VARCHAR(64) | 操作管理员名称 |
+| `operate_time` | DATETIME | 操作时间 |
+
+关键约束：
+
+- `idx_dictionary_log_edition(edition_code)`
+- `idx_dictionary_log_operate_time(operate_time)`
+- `idx_dictionary_log_revision(revision)`
+
+说明：
+
+- 日志用于管理员解释现场显示名称变化和后续追溯，不给玩家展示。
+- 记录的是显示名称变化，不代表字段含义、公式或历史提交发生变化。
 
 ---
 
@@ -206,6 +331,10 @@
 | `summary_effective` | TINYINT(1) | 是否计入正式汇总 |
 | `latest_stage_submit_version` | INT | 当前经营提交版本号 |
 | `latest_report_submit_version` | INT | 当前财报提交版本号 |
+| `rollback_pending` | TINYINT(1) | 是否处于回退补提 / 待重提 |
+| `rollback_target_year_no` | INT NULL | 最近一次回退目标年份 |
+| `rollback_target_stage_code` | VARCHAR(32) NULL | 最近一次回退目标阶段 |
+| `rollback_log_id` | BIGINT NULL | 最近一次回退日志 ID |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
 
 关键约束：
@@ -213,11 +342,13 @@
 - `uk_group_year(group_id, year_no)`
 - `idx_year_status(year_status)`
 - `idx_group_id(group_id)`
+- `idx_rollback_pending(rollback_pending)`
 
 说明：
 
 - `sg_group_year_state` 不保存所有明细，但必须保存当前有效状态。
 - 前端锁定区、汇总生效、异常解锁回收，都依赖本表。
+- 单组快照回退后，本表用于标记该组是否仍处于回退补提 / 待重提；年度控制页据此阻断开放下一年。
 
 #### 4.3.2 `sg_group_operating_draft`
 
@@ -345,6 +476,8 @@
 | `ranking_value` | DECIMAL(18,2) | 排名依据值，首版即 `equity` |
 | `summary_effective` | TINYINT(1) | 当前快照是否生效 |
 | `source_report_submit_version` | INT | 来源财报提交版本 |
+| `invalidated_by_rollback_id` | BIGINT NULL | 被快照回退置为失效时对应回退日志 |
+| `invalidated_at` | DATETIME NULL | 失效时间 |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
 
 关键约束：
@@ -356,6 +489,7 @@
 说明：
 
 - 被异常解锁后，本表对应年份记录应改为 `summary_effective=0` 或更新为失效态。
+- 被单组快照回退后，目标节点之后的汇总记录应改为 `summary_effective=0`，并记录 `invalidated_by_rollback_id`。
 - 汇总页查询正式口径时，只取 `summary_effective=1`。
 
 ---
@@ -406,6 +540,10 @@
 | `adjustment_type` | VARCHAR(16) | `REWARD` / `PENALTY` |
 | `amount` | DECIMAL(18,2) | 金额 |
 | `reason` | VARCHAR(500) | 奖惩原因 |
+| `effective` | TINYINT(1) | 是否仍参与经营 / 财报 / 汇总计算 |
+| `invalidated_by_rollback_id` | BIGINT NULL | 被回退置为失效时对应回退日志 |
+| `invalid_reason` | VARCHAR(255) NULL | 失效原因 |
+| `invalidated_at` | DATETIME NULL | 失效时间 |
 | `published_at` | DATETIME | 发布时间 |
 | `operator_id` | BIGINT | 操作管理员 |
 | `operator_name` | VARCHAR(64) | 操作管理员名称 |
@@ -415,12 +553,14 @@
 
 - `idx_group_year_stage(group_id, year_no, stage_code)`
 - `idx_published_at(published_at)`
+- `idx_adjustment_effective(effective)`
 
 说明：
 
 - 首版允许同一季度存在多条奖惩记录，查询层按季度聚合展示。
 - 奖惩只允许作用于尚未锁定的季度；锁定后如需修正，应走异常解锁。
 - 经营页、财报页和汇总口径只读取当前有效年份状态对应的奖惩聚合结果。
+- 单组快照回退后，目标节点之后的奖惩记录不删除，改为 `effective=0`；如仍需要生效，由管理员重新发送。
 
 ---
 
@@ -463,13 +603,112 @@
 | `group_id` | BIGINT | 所属组 |
 | `year_no` | INT | 年份 |
 | `reason` | VARCHAR(500) | 解锁原因 |
+| `unlock_target_type` | VARCHAR(32) | `OPERATING` / `REPORT` |
+| `target_stage_code` | VARCHAR(32) NULL | 经营页回退目标阶段 |
+| `safety_snapshot_id` | BIGINT NULL | 执行前自动创建的安全快照 |
 | `state_before_json` | JSON | 解锁前状态 |
 | `state_after_json` | JSON | 解锁后状态 |
 | `operator_id` | BIGINT | 操作管理员 |
 | `operator_name` | VARCHAR(64) | 操作管理员名称 |
 | `operate_time` | DATETIME | 操作时间 |
 
-#### 4.6.3 `sg_admin_action_log`
+说明：
+
+- 异常解锁在产品入口上属于 `回退与修正 / 退回重提`，但保留独立日志表便于兼容已实现链路。
+- 执行前必须创建安全快照，并写入 `safety_snapshot_id`。
+
+#### 4.6.3 `sg_state_snapshot`
+
+用途：状态快照主表，记录单组或全局流程节点的可恢复 / 可审计快照元数据。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `snapshot_scope` | VARCHAR(16) | `GROUP` / `GLOBAL` |
+| `snapshot_type` | VARCHAR(16) | `AUTO` / `MANUAL` / `SAFETY` |
+| `trigger_code` | VARCHAR(64) | 触发节点，例如 `STAGE_SUBMITTED`、`REPORT_SUBMITTED`、`ORDER_POOL_CONFIRMED`、`SEGMENT_COMPLETED`、`OPEN_NEXT_YEAR`、`BEFORE_ROLLBACK` |
+| `target_group_id` | BIGINT NULL | 单组快照所属组；全局快照为空 |
+| `target_year_no` | INT NULL | 快照对应年份 |
+| `target_stage_code` | VARCHAR(32) NULL | 快照对应阶段 |
+| `target_report_status` | VARCHAR(32) NULL | 快照对应财报状态 |
+| `description` | VARCHAR(500) NULL | 管理员说明或系统说明 |
+| `payload_hash` | VARCHAR(128) | 快照载荷哈希，用于追溯 |
+| `created_by_id` | BIGINT | 创建人；系统自动快照可记录系统管理员或约定账号 |
+| `created_by_name` | VARCHAR(64) | 创建人名称 |
+| `created_at` | DATETIME | 创建时间 |
+
+关键约束：
+
+- `idx_snapshot_scope_type(snapshot_scope, snapshot_type)`
+- `idx_snapshot_group_year(target_group_id, target_year_no)`
+- `idx_snapshot_created_at(created_at)`
+
+说明：
+
+- 单组快照用于恢复某个小组的阶段级状态。
+- 全局快照用于记录订单池确认、标段完成、开放下一年等全局流程节点，首版只用于审计和后续扩展，不提供自动全局恢复。
+- 快照在本场比赛内不自动清理。
+
+#### 4.6.4 `sg_state_snapshot_payload`
+
+用途：状态快照载荷表，保存快照 JSON 内容，避免主表过宽。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `snapshot_id` | BIGINT | 快照主表 ID |
+| `payload_version` | VARCHAR(32) | 快照载荷结构版本 |
+| `payload_json` | JSON | 快照业务载荷 |
+| `payload_size` | INT | 载荷大小，便于排查异常 |
+| `creator/create_time/updater/update_time` | - | 审计字段 |
+
+关键约束：
+
+- `uk_snapshot_payload(snapshot_id)`
+
+载荷范围建议：
+
+- `GROUP` 快照：小组年份状态、经营草稿、经营提交摘要、财报草稿与提交摘要、订单归属与交付状态、奖惩有效状态、汇总有效状态、破产状态摘要。
+- `GLOBAL` 快照：游戏配置、全部小组关键状态、订单池、标段状态、选单顺序、订单归属摘要。
+
+#### 4.6.5 `sg_rollback_log`
+
+用途：回退与修正日志，统一记录 `退回重提` 与 `恢复快照` 的执行轨迹。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `rollback_type` | VARCHAR(32) | `UNLOCK_RETRY` / `GROUP_SNAPSHOT_RESTORE` |
+| `target_group_id` | BIGINT | 被修正小组 |
+| `target_year_no` | INT | 目标年份 |
+| `target_stage_code` | VARCHAR(32) NULL | 目标阶段 |
+| `snapshot_id` | BIGINT NULL | 恢复快照 ID；退回重提可为空 |
+| `safety_snapshot_id` | BIGINT | 回退前安全快照 ID |
+| `reason` | VARCHAR(500) | 管理员填写原因 |
+| `state_before_json` | JSON | 执行前状态摘要 |
+| `state_after_json` | JSON | 执行后状态摘要 |
+| `operator_id` | BIGINT | 操作管理员 |
+| `operator_name` | VARCHAR(64) | 操作管理员名称 |
+| `operate_time` | DATETIME | 操作时间 |
+
+关键约束：
+
+- `idx_rollback_group_year(target_group_id, target_year_no)`
+- `idx_rollback_operate_time(operate_time)`
+
+说明：
+
+- 每次回退都必须记录原因。
+- 允许连续回退，每次回退都要生成新的安全快照和日志。
+- 该表不替代 `sg_admin_action_log`，关键动作仍应同步写管理员动作日志。
+
+#### 4.6.6 `sg_admin_action_log`
 
 用途：管理员关键动作日志。`action_code` 建议至少固定为：`UPDATE_FINAL_YEAR`、`OPEN_NEXT_YEAR`、`SUBMIT_INITIAL_BASELINE`。
 
@@ -479,6 +718,9 @@
 - 开放下一年
 - 提交初始基线
 - 管理员代跳过当前标段选单小组
+- 创建状态快照
+- 执行退回重提
+- 执行单组快照恢复
 
 关键字段建议：
 
@@ -620,6 +862,7 @@
 | `year_no` | INT | 年份，正式年份从 `1` 开始 |
 | `market_code` | VARCHAR(32) | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
 | `market_enabled` | TINYINT(1) | 是否开启该市场 |
+| `market_investment_limit` | DECIMAL(18,2) NULL | 单市场投入上限，`NULL` 表示无上限；业务上要求为非负整数 |
 | `config_status` | VARCHAR(32) | `DRAFT / LOCKED` |
 | `locked_batch_id` | BIGINT NULL | 锁定时对应确认订单池批次 |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
@@ -633,10 +876,11 @@
 
 - 本地市场默认 `market_enabled=1`。
 - 区域市场、全国市场、全球市场默认 `market_enabled=0`。
-- 订单池确认前可修改市场开启状态；确认后该年市场开启状态锁定。
+- 订单池确认前且本年尚无任何小组提交市场投入时，可修改市场开启状态和单市场投入上限；订单池确认后或已有任意小组提交市场投入后，该年市场配置锁定。
 - 市场开启完全以管理员当年手动配置为准，不因多年订单数量控制台中存在订单数量而自动开启。
 - 未开启市场下四个标段不生成订单池、不占用有效释放顺序、不进入选单。
-- 玩家仍需提交未开启市场对应的 4 项投入，且必须为 `0`；服务端负责拦截非 `0`。
+- 单市场投入上限按 `年份 + 市场` 配置，单位为 `M`；`NULL` 表示无上限，非 `NULL` 时必须为非负整数。
+- 未开启市场下四个投入输入框在玩家端禁用，提交时系统自动按 `0` 保存；服务端负责拦截绕过前端提交的非 `0`。
 
 #### 4.7.3 `sg_order_pool`
 
@@ -721,7 +965,7 @@
 | `year_no` | INT | 年份 |
 | `market_code` | VARCHAR(32) | 市场 |
 | `order_type` | VARCHAR(32) | 订单类型 |
-| `market_investment` | DECIMAL(18,2) | 市场投入 |
+| `market_investment` | DECIMAL(18,2) | 市场投入，业务上要求为非负整数 |
 | `bid_status` | VARCHAR(32) | `SUBMITTED / LOCKED` |
 | `submitted_at` | DATETIME | 提交时间 |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
@@ -735,6 +979,8 @@
 
 - 提交后不可修改。
 - 每组每年必须提交 16 条投入记录；`market_investment=0` 可保存，但普通小组不参与该标段选单。
+- 若所属市场关闭，该市场下 4 条投入由系统自动保存为 `0`。
+- 若所属市场配置了单市场投入上限，该组该年该市场下 4 条投入合计不得超过上限。
 - 市场投入从经营页前移到年度订单页提交，经营页只读带入汇总值。
 
 #### 4.7.6 `sg_market_selection_order`
@@ -791,6 +1037,9 @@
 | `delivery_status` | VARCHAR(32) | `SELECTED / DELIVERED / UNFINISHED` |
 | `delivered_stage_code` | VARCHAR(16) NULL | `Q1 / Q2 / Q3 / Q4` |
 | `delivered_at` | DATETIME NULL | 交付确认时间 |
+| `delivery_effective` | TINYINT(1) | 交付状态是否仍有效 |
+| `invalidated_by_rollback_id` | BIGINT NULL | 交付状态被回退置为失效时对应回退日志 |
+| `invalidated_at` | DATETIME NULL | 交付状态失效时间 |
 | `selected_at` | DATETIME | 选择时间 |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
 
@@ -806,6 +1055,8 @@
 - 一个订单只能被一个小组选择。
 - 账期字段来自订单池，首版只展示，不驱动经营页应收账款自动计算。
 - 年末仍未交付时更新为 `UNFINISHED`，但首版不阻断财报提交。
+- 单组快照回退不释放订单归属，不删除选择记录；目标节点之后的交付状态改为失效，玩家重新推进到对应阶段后再确认交付。
+- 若未来年份订单已被该组选择，回退后仍保持归属，不重新进入订单池。
 
 ---
 
@@ -824,6 +1075,8 @@
 - `sg_group` 1:N `sg_market_selection_order`
 - `sg_group` 1:N `sg_group_order_selection`
 - `sg_group` 1:N `sg_admin_unlock_log`
+- `sg_group` 1:N `sg_state_snapshot`（单组快照）
+- `sg_group` 1:N `sg_rollback_log`
 - `sg_account` N:1 `sg_group`（玩家账号场景）
 - `sg_game_config` 为单实例全局配置表，并锁定本场比赛沙盘版本包与字段/公式/流程版本
 - `sg_order_generation_batch` 1:N `sg_order_generation_config`
@@ -831,6 +1084,8 @@
 - `sg_order_generation_batch` 1:N `sg_order_pool`
 - `sg_order_pool` 1:0/1 `sg_group_order_selection`
 - `sg_market_bidding_state` 1:N `sg_market_selection_order`
+- `sg_state_snapshot` 1:1 `sg_state_snapshot_payload`
+- `sg_state_snapshot` 1:N `sg_rollback_log`（作为恢复来源或安全快照引用）
 
 ---
 
@@ -854,6 +1109,9 @@
 - `sg_market_selection_order`：`uk_market_sequence`、`uk_group_market_sequence`
 - `sg_group_order_selection`：`uk_group_year_segment_selection`、`uk_order_selected`
 - `sg_admin_unlock_log`：`idx_group_year`（可加）
+- `sg_state_snapshot`：`idx_snapshot_scope_type`、`idx_snapshot_group_year`、`idx_snapshot_created_at`
+- `sg_state_snapshot_payload`：`uk_snapshot_payload`
+- `sg_rollback_log`：`idx_rollback_group_year`、`idx_rollback_operate_time`
 - `sg_admin_action_log`：`idx_operate_time`
 
 ### 6.2 查询建议

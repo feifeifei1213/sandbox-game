@@ -108,10 +108,12 @@ type UpdateFinalYearCommand struct {
 }
 
 type InitializeGameCommand struct {
-	GroupCount   int
-	EditionCode  string
-	OperatorID   int64
-	OperatorName string
+	GroupCount         int
+	EditionCode        string
+	DictionarySchemeID *int64
+	DictionaryItems    []DictionaryItemInput
+	OperatorID         int64
+	OperatorName       string
 }
 
 type InitializeGameResult struct {
@@ -121,6 +123,7 @@ type InitializeGameResult struct {
 	EditionName           string `json:"editionName"`
 	RuleVersion           string `json:"ruleVersion"`
 	TemplateVersion       string `json:"templateVersion"`
+	DictionaryRevision    int    `json:"dictionaryRevision"`
 	CreatedGroupCount     int    `json:"createdGroupCount"`
 	CreatedAccountCount   int    `json:"createdAccountCount"`
 	CreatedYearStateCount int    `json:"createdYearStateCount"`
@@ -222,6 +225,7 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 		txAccountRepo := repository.NewAccountRepository(tx)
 		txGroupYearRepo := repository.NewGroupYearStateRepository(tx)
 		txAdminActionLogRepo := repository.NewAdminActionLogRepository(tx)
+		txDictionaryRepo := repository.NewDictionaryRepository(tx)
 
 		gameConfig, err := txGameConfigRepo.GetCurrentForUpdate(ctx)
 		if err != nil {
@@ -264,6 +268,16 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 			return fmt.Errorf("create group year states: %w", err)
 		}
 
+		dictionaryItems, dictionarySchemeID, err := resolveInitializeDictionaryItems(ctx, txDictionaryRepo, edition.EditionCode, cmd.DictionarySchemeID, cmd.DictionaryItems)
+		if err != nil {
+			return err
+		}
+		dictionaryRevision := 1
+		currentDictionaryItems := currentDictionaryEntitiesFromResults(edition.EditionCode, dictionaryItems, operatorName, now)
+		if err := txDictionaryRepo.ReplaceCurrentItems(ctx, currentDictionaryItems); err != nil {
+			return fmt.Errorf("initialize current dictionary: %w", err)
+		}
+
 		if err := txGameConfigRepo.PrepareForInitialization(ctx, gameConfig.ID, repository.PrepareGameConfigInitializationCommand{
 			EditionCode:              edition.EditionCode,
 			EditionName:              edition.EditionName,
@@ -273,6 +287,7 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 			ReportTemplateVersion:    edition.ReportTemplateVersion,
 			OrderTemplateVersion:     edition.OrderTemplateVersion,
 			ProcessRuleVersion:       edition.ProcessRuleVersion,
+			DictionaryRevision:       dictionaryRevision,
 			OperatorName:             operatorName,
 			OperateTime:              now,
 		}); err != nil {
@@ -293,6 +308,8 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 			"editionName":           edition.EditionName,
 			"ruleVersion":           edition.RuleVersion,
 			"templateVersion":       edition.TemplateVersion,
+			"dictionaryRevision":    dictionaryRevision,
+			"dictionarySchemeId":    dictionarySchemeID,
 			"createdGroupCount":     len(groups),
 			"createdAccountCount":   len(accounts),
 			"createdYearStateCount": len(yearStates),
@@ -313,6 +330,9 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 		if err := txAdminActionLogRepo.Create(ctx, logItem); err != nil {
 			return fmt.Errorf("create initialize game action log: %w", err)
 		}
+		if err := createDictionaryChangeLog(ctx, txDictionaryRepo, edition.EditionCode, dictionaryChangeTypeInitialize, dictionarySchemeID, "初始化比赛时生成当前比赛字典快照", nil, dictionaryItems, dictionaryRevision, cmd.OperatorID, operatorName, now); err != nil {
+			return err
+		}
 
 		result = &InitializeGameResult{
 			Initialized:           true,
@@ -321,6 +341,7 @@ func (s *AdminControlCommandService) InitializeGame(ctx context.Context, cmd Ini
 			EditionName:           edition.EditionName,
 			RuleVersion:           edition.RuleVersion,
 			TemplateVersion:       edition.TemplateVersion,
+			DictionaryRevision:    dictionaryRevision,
 			CreatedGroupCount:     len(groups),
 			CreatedAccountCount:   len(accounts),
 			CreatedYearStateCount: len(yearStates),
@@ -883,6 +904,40 @@ func validateInitializeGameEdition(editionCode string) (GameEdition, error) {
 		return GameEdition{}, ErrAdminControlEditionInvalid
 	}
 	return edition, nil
+}
+
+func resolveInitializeDictionaryItems(
+	ctx context.Context,
+	repo *repository.DictionaryRepository,
+	editionCode string,
+	schemeID *int64,
+	inputs []DictionaryItemInput,
+) ([]DictionaryItemResult, *int64, error) {
+	if schemeID != nil && *schemeID > 0 {
+		scheme, err := repo.GetSchemeByID(ctx, *schemeID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load dictionary scheme: %w", err)
+		}
+		if scheme.EditionCode != editionCode {
+			return nil, nil, ErrDictionarySchemeCrossEdition
+		}
+		if len(inputs) == 0 {
+			items, err := repo.ListSchemeItems(ctx, scheme.ID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("load dictionary scheme items: %w", err)
+			}
+			return buildDictionaryItemResultsFromSchemeItems(items), &scheme.ID, nil
+		}
+	}
+
+	items, err := buildDictionaryItemsForEdition(editionCode, inputs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if schemeID != nil && *schemeID > 0 {
+		return items, schemeID, nil
+	}
+	return items, nil, nil
 }
 
 func ensureInitializeGameEnvironmentClean(existingGroupAccountCount int64, existingYearStateCount int64) error {

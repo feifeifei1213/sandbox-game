@@ -469,17 +469,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { MARKET_OPTIONS, ORDER_TYPE_OPTIONS, useAdminOrderStore } from '@/stores/admin-order'
+import { useDictionaryStore } from '@/stores/dictionary'
 import type { OrderPoolStatus } from '@/types/sandbox-game-admin'
 import type { AdminOrderSegmentStatus, OrderMarketForecastMarket } from '@/types/sandbox-game-order'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
 const store = useAdminOrderStore()
+const dictionaryStore = useDictionaryStore()
 
 const { config: shellConfig } = storeToRefs(shellStore)
 const {
@@ -511,8 +513,18 @@ const {
   enabledMarketCount,
 } = storeToRefs(store)
 
-const marketOptions = MARKET_OPTIONS
-const orderTypeOptions = ORDER_TYPE_OPTIONS
+const marketOptions = computed(() =>
+  MARKET_OPTIONS.map((item) => ({
+    ...item,
+    name: dictionaryStore.marketName(item.code, item.name),
+  })),
+)
+const orderTypeOptions = computed(() =>
+  ORDER_TYPE_OPTIONS.map((item) => ({
+    ...item,
+    name: dictionaryStore.orderTypeName(item.code, item.name),
+  })),
+)
 const selectedSequenceSegmentKey = ref('')
 
 const yearOptions = computed(() => {
@@ -573,12 +585,20 @@ onMounted(async () => {
       await shellStore.bootstrap()
     }
     const defaultYear = Math.max(shellConfig.value?.currentOpenYear ?? 1, 1)
-    await store.bootstrap(defaultYear)
+    await Promise.all([
+      store.bootstrap(defaultYear),
+      dictionaryStore.loadCurrent(shellStore.config?.editionCode ?? shellStore.setupStatus?.editionCode, { silent: true }),
+    ])
+    dictionaryStore.startSilentSync()
     await store.loadPool({ silent: true })
     await store.loadSelectionStatus({ silent: true })
   } catch {
     // 页面消息由 store 统一处理。
   }
+})
+
+onUnmounted(() => {
+  dictionaryStore.stopSilentSync()
 })
 
 async function handleYearChange() {

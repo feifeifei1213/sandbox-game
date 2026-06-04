@@ -96,8 +96,9 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import OperatingSheet from '@/components/sandbox-game/player/OperatingSheet.vue'
 import OperatingSidebar from '@/components/sandbox-game/player/OperatingSidebar.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
-import { resolveOperatingLabels } from '@/configs/sandbox-game-service-labels'
+import { applyDictionaryToOperatingLabels, resolveOperatingLabels } from '@/configs/sandbox-game-service-labels'
 import { useAuthStore } from '@/stores/auth'
+import { useDictionaryStore } from '@/stores/dictionary'
 import { formatReportStatus, formatStageCode, formatYearStatus } from '@/utils/sandbox-game-display'
 import { buildOperatingPreviewCalculation } from '@/utils/sandbox-game-operating-preview'
 import type { PageMessage } from '@/stores/player-operating'
@@ -117,6 +118,7 @@ const route = useRoute()
 const router = useRouter()
 const store = usePlayerOperatingStore()
 const authStore = useAuthStore()
+const dictionaryStore = useDictionaryStore()
 const {
   currentConfig,
   yearTabs,
@@ -162,6 +164,7 @@ const previewConfig = computed<CurrentGameConfigResult>(() => ({
   reportTemplateVersion: 'VIP_REPORT_TEMPLATE_V1',
   orderTemplateVersion: 'VIP_ORDER_TEMPLATE_V1',
   processRuleVersion: 'COMMON_PROCESS_V1',
+  dictionaryRevision: 0,
   demoYearEnabled: true,
 }))
 const previewYearTabs = computed<YearTabItem[]>(() => {
@@ -205,7 +208,9 @@ const activeDirty = computed(() => (previewMode.value ? previewDirty.value : dir
 const activeSaving = computed(() => (previewMode.value ? previewSaving.value : saving.value))
 const activeSubmitting = computed(() => (previewMode.value ? previewSubmitting.value : submitting.value))
 const activeReportEnabled = computed(() => (previewMode.value ? true : reportEnabled.value))
-const activeOperatingLabels = computed(() => resolveOperatingLabels(activeConfig.value?.editionCode))
+const activeOperatingLabels = computed(() =>
+  applyDictionaryToOperatingLabels(resolveOperatingLabels(activeConfig.value?.editionCode), dictionaryStore.displayName),
+)
 
 onMounted(async () => {
   if (previewMode.value) {
@@ -213,7 +218,11 @@ onMounted(async () => {
     return
   }
 
-  await store.bootstrap(readRouteYear())
+  await Promise.all([
+    store.bootstrap(readRouteYear()),
+    dictionaryStore.loadCurrent(null, { silent: true }),
+  ])
+  dictionaryStore.startSilentSync()
   initialized = true
   if (selectedYear.value !== readRouteYear()) {
     syncRouteYear(selectedYear.value)
@@ -260,6 +269,7 @@ onBeforeUnmount(() => {
   if (autoSaveTimer) {
     window.clearInterval(autoSaveTimer)
   }
+  dictionaryStore.stopSilentSync()
 })
 
 function readRouteYear() {

@@ -51,6 +51,8 @@
 - 首版新增沙盘版本包口径：系统字段名和 payload 结构保持稳定，经营页、财报页、订单页的中文显示名由字段模板版本控制。
 - 当前已落地 `VIP_SERVICE_V1` 贵宾服务版字段模板，经营页和财报页字段从 `guibing` 分支已有服务/贵宾字段配置提取；下一步新增 `PRODUCTION_V1` 生产制造版字段模板，经营页和财报页字段从 `shengchan` 分支现有生产制造口径提取。
 - `PRODUCTION_V1` 的订单字段暂时继续使用 `VIP_ORDER_TEMPLATE_V1` 贵宾订单口径，等拿到生产版订单字段来源后再新增生产版订单字段模板。
+- 字段模板版本提供默认显示名称；管理员可通过业务显示字典覆盖当前比赛显示名，但只改变页面名称，不改变系统字段名、payload、数据库字段、公式或流程。
+- 管理员端字段名称配置表默认不展示系统字段名或稳定编码，只展示分类、所属页面/区块、当前名称和修改后名称；稳定编码由系统内部保存。
 - 系统字段名与数据库字段名保持稳定，不因 Excel 中文标签微调直接改名。
 
 ### 2.3 字段分类
@@ -61,6 +63,22 @@
 | `PLAYER_INPUT` | 玩家手工录入 |
 | `SYSTEM_CALCULATED` | 后端规则层计算 |
 | `SYSTEM_DERIVED` | 汇总或状态派生字段 |
+
+---
+
+### 2.4 业务显示字典覆盖原则
+
+- 字典项必须绑定稳定编码，例如：
+  - `market.LOCAL`
+  - `orderType.BUSINESS_VIP`
+  - `report.rawMaterials`
+  - `operating.quarter.deliverySettlement.salesRevenue`
+- 字典只保存默认显示名和当前显示名，不保存公式或业务含义。
+- 公式、提交 payload、数据库字段、跨年承接和汇总计算只使用稳定系统字段，不读取中文显示名。
+- 字典修改不改历史提交内容，只影响重新展示时使用的显示名称。
+- 汇总页、回退与修正页、通知/奖惩页中若展示业务字段、市场或订单类型，应使用当前比赛字典显示名；流程状态、按钮、菜单、错误提示和自由文本不做字典替换。
+- 市场和订单类型数量固定，只允许改显示名，不允许通过字典新增或删除。
+- 经营页、财报页和初始基线字段结构固定，只允许改显示名，不允许通过字典新增字段、隐藏字段、调整位置或改变字段含义。
 
 ---
 
@@ -203,7 +221,7 @@
 - 多年订单数量控制台固定覆盖 `1年~8年 × 四个市场 × 四类产品`，是市场预测和年度订单池的共同订单数量来源。
 - 市场预测固定按 `1~3年 / 4~5年 / 6~8年` 三段展示，不受管理员配置的最终年份裁剪；玩家端图表采用 Excel 竖状柱状图口径，每个阶段下按市场分图，年份为横轴，四类订单为柱状系列。
 - 首版管理员先维护多年订单数量控制台；每年开始前再配置当年市场开启状态，系统读取该年已开启市场的控制台数量生成预览订单池，确认后保存为固定业务数据。
-- 本地市场默认开启，区域/全国/全球默认关闭；未开启市场不生成订单、不进入抢单，但玩家仍需在投入表中手动填写 `0`。
+- 本地市场默认开启，区域/全国/全球默认关闭；未开启市场不生成订单、不进入抢单，玩家端投入输入禁用并由系统自动按 `0` 提交。
 - 生成批次需保存随机种子、公式版本、控制台参数快照和公式参数快照，用于复盘与审计。
 
 | 系统字段名 | 数据库存储名 | 来源/页面 | 当前显示名 | 类型 | 说明 |
@@ -214,7 +232,8 @@
 | `forecastOrderCount` | `order_count` | 多年订单数量控制台 | 订单数量控制 | `ADMIN_INPUT` | `1~8年 × 市场 × 订单类型` 的订单卡片数量，范围 `0~15` |
 | `forecastNarrative` | `narrative` | 市场预测 | 市场预测说明 | `ADMIN_INPUT` | Excel 右侧说明文字，玩家端只读展示 |
 | `marketCode` | `market_code` | 订单池/年度订单页 | 市场 | `ADMIN_INPUT + PLAYER_INPUT` | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
-| `marketEnabled` | `market_enabled` | 管理员订单管理/年度订单页 | 市场开启 | `ADMIN_INPUT + SYSTEM_DERIVED` | 本地市场默认开启，其他市场默认关闭；市场开启以管理员当年手动状态为准，不随控制台数量自动开启；未开启市场投入必须为 `0` |
+| `marketEnabled` | `market_enabled` | 管理员订单管理/年度订单页 | 市场开启 | `ADMIN_INPUT + SYSTEM_DERIVED` | 本地市场默认开启，其他市场默认关闭；市场开启以管理员当年手动状态为准，不随控制台数量自动开启；未开启市场投入自动按 `0` |
+| `marketInvestmentLimit` | `market_investment_limit` | 管理员订单管理/年度订单页 | 单市场投入上限 | `ADMIN_INPUT + SYSTEM_DERIVED` | 按 `年份 + 市场` 配置，单位 `M`，非负整数；空值表示无上限；关闭市场时不生效 |
 | `orderType` | `order_type` | 订单池/年度订单页 | 订单类型 | `ADMIN_INPUT + SYSTEM_DERIVED` | `代办过检 / 两舱贵宾 / 商务贵宾 / 会员定制` |
 | `segmentCode` | `segment_code` | 订单池/年度订单页 | 标段 | `SYSTEM_DERIVED` | `市场 + 订单类型` 的组合编码 |
 | `releaseSequenceNo` | `release_sequence_no` | 管理员订单管理 | 标段释放顺序 | `ADMIN_INPUT` | 管理员配置同一年内标段开标先后；当年订单数量从多年控制台只读带入 |
@@ -232,7 +251,7 @@
 | `unitPrice` | `unit_price` | 订单池 | 单价 | `SYSTEM_DERIVED` | 订单卡片单价字段；允许小数，由后端自动校准有效单价以保证订单金额为整数 |
 | `accountTerm` | `account_term` | 订单池 | 账期 | `SYSTEM_DERIVED` | 订单卡片账期字段；首版只展示，不参与应收账款自动计算 |
 | `orderPoolStatus` | `status` | 订单池 | 订单状态 | `SYSTEM_DERIVED` | `AVAILABLE / SELECTED / VOID` 等后续实现枚举 |
-| `marketInvestment` | `market_investment` | 年度订单页 | 市场投入 | `PLAYER_INPUT` | 玩家按 `市场 + 订单类型` 提交 16 项投入，提交后不可修改；未开启市场必须手动填写 `0` |
+| `marketInvestment` | `market_investment` | 年度订单页 | 市场投入 | `PLAYER_INPUT + SYSTEM_DERIVED` | 玩家按 `市场 + 订单类型` 提交 16 项投入，提交后不可修改；已开启市场由玩家填写非负整数，未开启市场由系统自动按 `0` |
 | `selectedOrderId` | `order_id` | 年度订单页 | 已选订单 | `PLAYER_INPUT + SYSTEM_DERIVED` | 玩家轮到本组且当前标段释放时选择的订单 |
 | `selectedOrderAmount` | `selected_order_amount` | 年度订单页/经营页 | 已选订单金额 | `SYSTEM_DERIVED` | 汇总进入经营页订单总额 |
 | `selectedOrderTotal` | - | 经营页 | 订单总额 | `SYSTEM_DERIVED` | 正式年份由本组全部标段已选订单金额汇总 |

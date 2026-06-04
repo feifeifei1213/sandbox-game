@@ -9,6 +9,8 @@
         </div>
         <div class="header-pills">
           <span class="pill">初始化：{{ setupStatus?.initialized ? '已完成' : '未完成' }}</span>
+          <span class="pill">版本：{{ currentEditionName }}</span>
+          <span class="pill">字典：v{{ config?.dictionaryRevision ?? setupStatus?.dictionaryRevision ?? 0 }}</span>
           <span class="pill">小组数：{{ setupStatus?.groupCount ?? '--' }}</span>
           <span class="pill">最终年份：{{ config?.finalYear ?? '--' }}</span>
           <span class="pill">当前开放：{{ config?.currentOpenYear ?? '--' }}</span>
@@ -36,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterView, useRouter } from 'vue-router'
 
@@ -49,6 +51,7 @@ const shellStore = useAdminShellStore()
 const authStore = useAuthStore()
 const { config, pageMessage, setupStatus } = storeToRefs(shellStore)
 const { currentUser } = storeToRefs(authStore)
+const currentEditionName = computed(() => config.value?.editionName || setupStatus.value?.editionName || '--')
 
 onMounted(async () => {
   if (config.value) {

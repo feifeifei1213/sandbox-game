@@ -9,6 +9,9 @@ server:
   readTimeoutSeconds: 10
   writeTimeoutSeconds: 10
 
+frontend:
+  distDir: frontend/dist
+
 log:
   level: debug
 

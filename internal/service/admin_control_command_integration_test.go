@@ -28,6 +28,7 @@ func TestOpenNextYearOpensFormalYearForNormalGroupsOnly(t *testing.T) {
 
 	ctx := context.Background()
 	ensureIntegrationGameConfig(t, ctx, tx, 2, 0, true)
+	clearAdminActionLogsForIntegrationTest(t, ctx, tx)
 	markAllExistingGroupsBankrupt(t, ctx, tx, 0)
 
 	bankruptYearNo := 0
@@ -425,6 +426,14 @@ func clearInitializationFixtures(t *testing.T, ctx context.Context, tx *gorm.DB)
 	}
 }
 
+func clearAdminActionLogsForIntegrationTest(t *testing.T, ctx context.Context, tx *gorm.DB) {
+	t.Helper()
+
+	if err := tx.WithContext(ctx).Where("1 = 1").Delete(&entity.AdminActionLog{}).Error; err != nil {
+		t.Fatalf("clear admin action logs: %v", err)
+	}
+}
+
 func ensureFormalYearStatesForAllGroups(t *testing.T, ctx context.Context, tx *gorm.DB, fromYear int, toYear int) {
 	t.Helper()
 
@@ -469,6 +478,7 @@ func ensureIntegrationGameConfig(t *testing.T, ctx context.Context, tx *gorm.DB,
 			ReportTemplateVersion:    ReportTemplateVersionVIPServiceV1,
 			OrderTemplateVersion:     OrderTemplateVersionVIPServiceV1,
 			ProcessRuleVersion:       ProcessRuleVersionCommonV1,
+			DictionaryRevision:       0,
 			InitialBaselineSubmitted: baselineSubmitted,
 			BaseEntity: entity.BaseEntity{
 				Creator:    "integration-test",
@@ -497,6 +507,7 @@ func ensureIntegrationGameConfig(t *testing.T, ctx context.Context, tx *gorm.DB,
 				"report_template_version":    ReportTemplateVersionVIPServiceV1,
 				"order_template_version":     OrderTemplateVersionVIPServiceV1,
 				"process_rule_version":       ProcessRuleVersionCommonV1,
+				"dictionary_revision":        0,
 				"initial_baseline_submitted": baselineSubmitted,
 				"updater":                    "integration-test",
 				"update_time":                now,

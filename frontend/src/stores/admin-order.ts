@@ -18,6 +18,7 @@ import {
   updateAdminOrderMarketConfig,
   uploadAdminOrderExcel,
 } from '@/api/sandbox-game/admin-order'
+import { useDictionaryStore } from '@/stores/dictionary'
 import type {
   AdminOrderType,
   OrderControlConfigItem,
@@ -55,6 +56,7 @@ export const ORDER_TYPE_OPTIONS: Array<{ code: AdminOrderType; name: string }> =
 ]
 
 export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
+  const dictionaryStore = useDictionaryStore()
   const selectedYearNo = ref(1)
   const config = ref<OrderControlConfigResult | null>(null)
   const forecastControl = ref<OrderForecastControlResult | null>(null)
@@ -405,7 +407,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
       pageMessage.value = {
         type: 'success',
-        text: `${marketName(controlForm.marketCode)}投入已开放。`,
+        text: `${dictionaryStore.marketName(controlForm.marketCode, marketName(controlForm.marketCode))}投入已开放。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '开放市场投入失败')
@@ -426,7 +428,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
       pageMessage.value = {
         type: 'success',
-        text: `${marketName(controlForm.marketCode)}投入已关闭，选单顺序已生成或市场已跳过。`,
+        text: `${dictionaryStore.marketName(controlForm.marketCode, marketName(controlForm.marketCode))}投入已关闭，选单顺序已生成或市场已跳过。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '关闭市场投入失败')
@@ -494,7 +496,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
 
   function applyConfig(result: OrderControlConfigResult) {
     config.value = result
-    editableMarketConfigs.value = (result.marketConfigs ?? defaultMarketConfigs(result.yearNo)).map((item) => ({ ...item }))
+    editableMarketConfigs.value = (result.marketConfigs ?? defaultMarketConfigs(result.yearNo, dictionaryStore.marketName)).map((item) => ({ ...item }))
     const marketEnabledMap = new Map(editableMarketConfigs.value.map((item) => [item.marketCode, item.enabled]))
     editableItems.value = result.items.map((item) => ({
       ...item,
@@ -575,11 +577,11 @@ function marketName(code: OrderMarketCode) {
   return MARKET_OPTIONS.find((item) => item.code === code)?.name ?? code
 }
 
-function defaultMarketConfigs(yearNo: number): OrderMarketConfigItem[] {
+function defaultMarketConfigs(yearNo: number, resolveMarketName: (code: string, fallback: string) => string): OrderMarketConfigItem[] {
   return MARKET_OPTIONS.map((item) => ({
     yearNo,
     marketCode: item.code,
-    marketName: item.name,
+    marketName: resolveMarketName(item.code, item.name),
     enabled: item.code === 'LOCAL',
     marketInvestmentLimit: null,
     configStatus: 'DRAFT',

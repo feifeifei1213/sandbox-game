@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 
 	"sandbox-game/internal/enum"
+	"sandbox-game/internal/model/entity"
 	"sandbox-game/internal/repository"
 )
 
@@ -24,6 +25,7 @@ func TestGetYearSummaryAndFinalRankingUseFormalSnapshotsConsistently(t *testing.
 	ctx := context.Background()
 	ensureIntegrationGameConfig(t, ctx, tx, 2, 2, true)
 	markAllExistingGroupsBankrupt(t, ctx, tx, 2)
+	withdrawExistingSummarySnapshotsForIntegrationTest(t, ctx, tx, 2)
 
 	bankruptYearNo := 2
 	groupOneID := createAdminIntegrationGroup(t, ctx, tx, "汇总测试-第1组", enum.BusinessStatusNormal, nil)
@@ -84,4 +86,15 @@ func buildAdminSummaryQueryService(db *gorm.DB) *AdminSummaryQueryService {
 		repository.NewGroupYearStateRepository(db),
 		repository.NewSummarySnapshotRepository(db),
 	)
+}
+
+func withdrawExistingSummarySnapshotsForIntegrationTest(t *testing.T, ctx context.Context, tx *gorm.DB, yearNo int) {
+	t.Helper()
+
+	if err := tx.WithContext(ctx).
+		Model(&entity.GroupSummarySnapshot{}).
+		Where("year_no = ?", yearNo).
+		Update("summary_effective", false).Error; err != nil {
+		t.Fatalf("withdraw existing summary snapshots: %v", err)
+	}
 }

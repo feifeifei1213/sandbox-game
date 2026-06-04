@@ -376,6 +376,7 @@ import { useRoute, useRouter } from 'vue-router'
 import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useDictionaryStore } from '@/stores/dictionary'
 import { investmentKey, PLAYER_ORDER_MARKETS, PLAYER_ORDER_TYPES, usePlayerOrderStore } from '@/stores/player-order'
 import type { OrderDeliveryStageCode, OrderMarketCode, OrderMarketForecastMarket, OrderTypeCode, PlayerOrderPoolItem, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
 import { hasFractionInput } from '@/utils/manual-integer'
@@ -384,6 +385,7 @@ const route = useRoute()
 const router = useRouter()
 const store = usePlayerOrderStore()
 const authStore = useAuthStore()
+const dictionaryStore = useDictionaryStore()
 const {
   currentConfig,
   yearTabs,
@@ -410,8 +412,18 @@ let pollTimer = 0
 const deliveryStageDraft = ref<Record<number, OrderDeliveryStageCode>>({})
 const bulkDeliveryStage = ref<OrderDeliveryStageCode>('Q1')
 const selectedDeliveryOrderIds = ref<number[]>([])
-const marketOptions = PLAYER_ORDER_MARKETS
-const orderTypeOptions = PLAYER_ORDER_TYPES
+const marketOptions = computed(() =>
+  PLAYER_ORDER_MARKETS.map((item) => ({
+    ...item,
+    name: dictionaryStore.marketName(item.code, item.name),
+  })),
+)
+const orderTypeOptions = computed(() =>
+  PLAYER_ORDER_TYPES.map((item) => ({
+    ...item,
+    name: dictionaryStore.orderTypeName(item.code, item.name),
+  })),
+)
 
 const visibleSegment = computed(() => currentSegment.value ?? selectedMarket.value?.segments[0] ?? null)
 const activeSegmentTitle = computed(() => {
@@ -443,7 +455,11 @@ const pendingDeliveryOrders = computed(() =>
 )
 
 onMounted(async () => {
-  await store.bootstrap(readRouteYear())
+  await Promise.all([
+    store.bootstrap(readRouteYear()),
+    dictionaryStore.loadCurrent(null, { silent: true }),
+  ])
+  dictionaryStore.startSilentSync()
   initialized = true
   if (selectedYear.value !== readRouteYear()) {
     syncRouteYear(selectedYear.value)
@@ -469,6 +485,7 @@ watch(
 
 onBeforeUnmount(() => {
   stopPolling()
+  dictionaryStore.stopSilentSync()
 })
 
 function readRouteYear() {

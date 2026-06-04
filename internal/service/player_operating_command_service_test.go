@@ -134,6 +134,7 @@ func openIntegrationMySQL(t *testing.T) *gorm.DB {
 	ensureIntegrationNoticeTables(t, db)
 	ensureIntegrationOrderTables(t, db)
 	ensureIntegrationRollbackTables(t, db)
+	ensureIntegrationDictionaryTables(t, db)
 	return db
 }
 
@@ -147,6 +148,7 @@ func ensureIntegrationGameConfigEditionColumns(t *testing.T, db *gorm.DB) {
 		"ReportTemplateVersion",
 		"OrderTemplateVersion",
 		"ProcessRuleVersion",
+		"DictionaryRevision",
 	}
 	for _, column := range columns {
 		if db.Migrator().HasColumn(&entity.GameConfig{}, column) {
@@ -155,6 +157,19 @@ func ensureIntegrationGameConfigEditionColumns(t *testing.T, db *gorm.DB) {
 		if err := db.Migrator().AddColumn(&entity.GameConfig{}, column); err != nil {
 			t.Fatalf("ensure game config edition column %s: %v", column, err)
 		}
+	}
+}
+
+func ensureIntegrationDictionaryTables(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	if err := db.AutoMigrate(
+		&entity.DictionaryScheme{},
+		&entity.DictionarySchemeItem{},
+		&entity.CurrentDictionaryItem{},
+		&entity.DictionaryChangeLog{},
+	); err != nil {
+		t.Fatalf("ensure dictionary tables: %v", err)
 	}
 }
 

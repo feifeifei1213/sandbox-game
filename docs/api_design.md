@@ -89,6 +89,13 @@
 - `sandbox-game:admin-control:initialize-game`
 - `sandbox-game:admin-control:open-next-year`
 - `sandbox-game:admin-control:unlock-year`
+- `sandbox-game:admin-dictionary:query`
+- `sandbox-game:admin-dictionary:manage-scheme`
+- `sandbox-game:admin-dictionary:update-current`
+- `sandbox-game:admin-rollback:query`
+- `sandbox-game:admin-rollback:create-snapshot`
+- `sandbox-game:admin-rollback:restore-group-snapshot`
+- `sandbox-game:admin-rollback:unlock-retry`
 - `sandbox-game:admin-notice:query`
 - `sandbox-game:admin-notice:send-general`
 - `sandbox-game:admin-notice:send-adjustment`
@@ -164,12 +171,14 @@
   - 当前阶段已提交，重复提交
   - 年份已开放，重复开放下一年
   - 年度已完成，再次提交财报
+  - 回退或提交过程中状态已变化，需要刷新后重试
 - `422` 适用于：
   - 当前阶段必填项未完成
   - 财报平衡校验失败
   - 当前年份未开放
   - 当前阶段未到可提交时机
   - 破产组继续提交
+  - 存在回退补提 / 待重提小组时尝试开放下一年
 
 ---
 
@@ -186,7 +195,9 @@
 | `player-report` | 财报页读取、草稿保存、财报提交 |
 | `admin-order` | 管理员多年订单数量控制台、年度市场开启、预览/确认订单池、标段释放与竞标控制 |
 | `admin-summary` | 汇总页、最终排名 |
-| `admin-control` | 最终年份设置、开放下一年、初始基线、异常解锁 |
+| `admin-control` | 最终年份设置、开放下一年、初始基线、异常解锁兼容旧接口 |
+| `admin-dictionary` | 赛前业务显示字典方案、当前比赛字典快照、应用方案与修改日志 |
+| `admin-rollback` | 管理员回退与修正、退回重提、快照列表、手动快照、单组快照恢复 |
 | `admin-group-data` | 管理员查看任意组任一年经营/财报数据 |
 | `audit-log` | 提交日志、解锁日志、管理员动作日志 |
 
@@ -199,9 +210,11 @@
 
 - 沙盘版本包为系统内置配置，不提供管理员在线新增、编辑或删除版本包的接口。
 - 管理员只能在比赛初始化前从服务端返回的版本包列表中选择本场比赛版本。
-- 初始化完成后，版本包锁定；`game-config`、玩家经营页、玩家财报页、年度订单页等接口应返回当前版本标识，供前端选择字段模板和展示文案。
+- 初始化完成后，版本包锁定；`game-config`、玩家经营页、玩家财报页、年度订单页等接口应返回当前版本标识和当前比赛字典版本，供前端选择字段模板并叠加业务显示字典。
 - 当前已内置 `VIP_SERVICE_V1`，绑定贵宾服务版字段模板与通用公式/流程规则。
 - 下一步新增 `PRODUCTION_V1`，绑定生产制造版经营页和财报页字段模板，公式规则和流程规则继续共用通用版本；订单字段模板暂时仍绑定 `VIP_ORDER_TEMPLATE_V1`，待生产版订单字段确认后再升级为生产版订单模板。
+- 版本包负责字段结构、公式版本和流程规则；业务显示字典只负责显示名称，不改变稳定字段编码、payload、数据库字段、公式或流程。
+- 业务显示字典方案必须绑定版本包；当前比赛初始化时复制一份字典快照，后续比赛中修改的是当前比赛字典快照。
 
 ---
 
@@ -523,6 +536,7 @@
 | `markets[].marketCode` | 市场编码 |
 | `markets[].marketName` | 市场名称 |
 | `markets[].marketEnabled` | 当前年份该市场是否开启；未开启市场不生成订单、不抢单 |
+| `markets[].marketInvestmentLimit` | 当前年份该市场投入上限；`null` 表示无上限，未开启市场前端显示为不可投 |
 | `investmentStatus` | 本组当年 16 项市场投入提交状态 |
 | `canSubmitInvestment` | 是否可提交本年市场投入 |
 | `markets[].segments[].marketInvestment` | 本组该标段投入 |
@@ -544,7 +558,8 @@
 规则：
 
 - `0年` 返回 `orderRequired=false`，不进入市场选单。
-- 未开启市场仍返回其 4 个订单类型投入项，但 `marketInvestment` 必须由玩家提交为 `0`；未开启市场的标段不返回可选订单。
+- 未开启市场仍返回其 4 个订单类型投入项，但玩家端输入框禁用，提交时系统自动带 `0`；若绕过前端提交非 `0`，服务端返回 `422`。
+- 玩家端应展示每个市场的 `marketInvestmentLimit`；`null` 显示为“无上限”，未开启市场显示为“未开启”。
 - 玩家不返回其他组已选订单明细。
 - 已被选择的订单在玩家端显示为灰色不可选，但不返回被哪个小组选走。
 - 只有当前释放到的标段才允许选择订单。
@@ -582,8 +597,9 @@
 - 仅正式年份允许提交。
 - `0年` 不走独立市场投入提交。
 - 每次提交必须包含本年全部 `16` 个 `市场 + 订单类型` 投入值。
-- 投入金额必须大于等于 `0`；空值不允许提交。
-- 若某市场未开启，该市场下 4 项 `marketInvestment` 必须全部为 `0`；填非 `0` 返回 `422`。
+- 投入金额必须大于等于 `0` 且必须为整数；空值和小数不允许提交。
+- 若某市场未开启，该市场下 4 项 `marketInvestment` 必须全部为 `0`；前端应自动带 `0`，绕过前端提交非 `0` 返回 `422`。
+- 若某市场配置了 `marketInvestmentLimit`，该市场下 4 项投入合计不得超过该上限；未配置上限时不做单市场上限校验。
 - 提交后不可修改；重复提交返回 `409`。
 - 普通小组某标段投入为 `0` 时，不参与该标段选单。
 - 市场投入提交后回写经营页年初市场投入区域为只读展示，经营页 `Q1` 不再允许修改。
@@ -896,20 +912,22 @@
 {
   "yearNo": 1,
   "markets": [
-    { "marketCode": "LOCAL", "enabled": true },
-    { "marketCode": "REGIONAL", "enabled": false },
-    { "marketCode": "NATIONAL", "enabled": false },
-    { "marketCode": "GLOBAL", "enabled": false }
+    { "marketCode": "LOCAL", "enabled": true, "marketInvestmentLimit": null },
+    { "marketCode": "REGIONAL", "enabled": false, "marketInvestmentLimit": null },
+    { "marketCode": "NATIONAL", "enabled": true, "marketInvestmentLimit": 80 },
+    { "marketCode": "GLOBAL", "enabled": false, "marketInvestmentLimit": null }
   ]
 }
 ```
 
 规则：
 
-- 只能在订单池确认前更新；订单池确认后本年市场开启状态锁定。
+- 只能在订单池确认前且本年尚无任何小组提交市场投入时更新；订单池确认后或已有任意小组提交市场投入后，本年市场开启状态和单市场投入上限锁定。
 - `LOCAL` 默认开启，`REGIONAL / NATIONAL / GLOBAL` 默认关闭。
 - 市场开启完全以管理员当年手动配置为准，不根据多年订单数量控制台中是否存在订单数量自动开启。
 - 未开启市场下四个标段不生成订单池、不占用有效释放顺序、不进入选单。
+- `marketInvestmentLimit` 为 `null` 表示无上限；非 `null` 时必须为非负整数，单位为 `M`。
+- 关闭市场时上限不生效，前端应禁用上限输入。
 - 若关闭市场时该市场已有未确认预览订单，应随重新生成预览流程覆盖或作废。
 
 #### 6.4A.2 获取当年释放顺序配置
@@ -922,7 +940,7 @@
 
 - 按 `年份 + 市场 + 订单类型` 返回当年只读订单数量和标段释放顺序。
 - 订单卡片数量来自多年订单数量控制台，在当前年度订单管理区只读展示，不在该接口中维护。
-- 返回 `items[].marketEnabled`，用于前端将未开启市场行置灰，并固定订单数量为 `0`。
+- 返回 `items[].marketEnabled` 与 `items[].marketInvestmentLimit`，用于前端将未开启市场行置灰、展示/编辑单市场投入上限；未开启市场的控制台数量只读保留，但不参与当年订单生成和释放顺序。
 - 返回风险提示列表 `warnings[]`，用于提示订单数量不足、标段数量不足、某组可能没有可参与标段等情况。
 - 首版不返回均价、波动系数、最小/最大数量等复杂参数。
 
@@ -1148,6 +1166,9 @@ Go DTO 建议：
 | `editionName` | `string` | 当前或默认沙盘版本包显示名 |
 | `availableEditions` | `array` | 可选沙盘版本包列表；当前包含 `VIP_SERVICE_V1`，新增生产制造版后包含 `PRODUCTION_V1` |
 | `initialBaselineSubmitted` | `bool` | 初始基线是否已提交 |
+| `dictionaryRevision` | `int` | 当前比赛字典快照版本；未初始化时为当前编辑草稿或默认版本 |
+| `selectedDictionarySchemeId` | `int64/null` | 初始化前当前选中的字典方案；使用版本默认名称时为空 |
+| `dictionarySchemeCount` | `int` | 当前版本包下可用自定义字典方案数量 |
 | `defaultRoute` | `string` | 管理员当前默认跳转地址 |
 
 说明：
@@ -1155,6 +1176,7 @@ Go DTO 建议：
 - 首版建议直接以 `sg_group` 实际记录数推断 `initialized` 与 `groupCount`。
 - 当 `initialized=false` 时，`defaultRoute` 应返回 `admin/setup`；当 `initialized=true` 时，应返回 `admin/summary`。
 - 当 `initialized=false` 时，前端允许管理员选择 `availableEditions` 中的版本包；当 `initialized=true` 时，该版本包只读展示。
+- 当 `initialized=false` 时，前端允许管理员选择或编辑与当前版本包绑定的字典方案；当 `initialized=true` 时，前端只读展示当前比赛字典快照，并允许管理员通过 `admin-dictionary` 接口解锁修改显示名称。
 
 #### 6.5.2 初始化比赛
 
@@ -1172,7 +1194,14 @@ Go DTO 建议：
 ```json
 {
   "groupCount": 6,
-  "editionCode": "VIP_SERVICE_V1"
+  "editionCode": "VIP_SERVICE_V1",
+  "dictionarySchemeId": 12,
+  "dictionaryItems": [
+    {
+      "itemCode": "orderType.BUSINESS_VIP",
+      "displayName": "商务接待"
+    }
+  ]
 }
 ```
 
@@ -1191,6 +1220,8 @@ Go DTO 建议：
 |---|---|---|---|
 | `groupCount` | `int` | 是 | 本场比赛要初始化的小组数量，首版建议限制在 `1 ~ 10` |
 | `editionCode` | `string` | 是 | 沙盘版本包编码，当前支持 `VIP_SERVICE_V1`；新增生产制造版后支持 `PRODUCTION_V1` |
+| `dictionarySchemeId` | `int64/null` | 否 | 本次初始化选择的字典方案；为空表示使用版本默认名称或前端传入的临时名称 |
+| `dictionaryItems` | `array` | 否 | 本次初始化最终采用的业务显示名称；服务端以稳定编码保存为当前比赛字典快照 |
 
 响应字段建议：
 
@@ -1200,6 +1231,7 @@ Go DTO 建议：
 | `groupCount` | `int` | 实际初始化的小组数量 |
 | `editionCode` | `string` | 本场比赛锁定的沙盘版本包编码 |
 | `editionName` | `string` | 本场比赛锁定的沙盘版本包显示名 |
+| `dictionaryRevision` | `int` | 初始化后当前比赛字典快照版本 |
 | `createdGroupCount` | `int` | 本次创建的小组主数据数量 |
 | `createdAccountCount` | `int` | 本次创建的账号数量 |
 | `createdYearStateCount` | `int` | 本次创建的年份状态数量 |
@@ -1209,7 +1241,10 @@ Go DTO 建议：
 - 仅管理员可调用。
 - 仅允许在比赛未初始化时调用；若已初始化，应返回 `409`。
 - `editionCode` 必须属于系统内置版本包；非法版本返回 `422`。
+- `dictionarySchemeId` 若不为空，必须属于当前 `editionCode` 绑定版本包；非法或跨版本方案返回 `422`。
+- `dictionaryItems` 只允许传稳定编码与显示名；显示名不允许为空；服务端不得用中文显示名驱动公式或字段含义。
 - 服务端应以单事务一次性创建 `sg_group`、`sg_account`、`sg_group_year_state`。
+- 服务端应在同一初始化事务内写入当前比赛字典快照。
 - 初始化成功后，本场比赛沙盘版本包锁定，不提供运行中切换接口。
 - 初始化成功后，管理员账号保留 `admin`，玩家账号建议按 `group01 ~ groupNN` 自动生成。
 - 初始化成功后，系统应处于“`0年` 已开放、正式年份已预置但锁定”的初始状态。
@@ -1244,6 +1279,8 @@ Go DTO 建议：
 | `initialBaselineSubmitted` | `bool` | 初始基线是否已提交 |
 | `initialBaselineSubmittedAt` | `string \| null` | 初始基线提交时间，RFC3339 |
 | `initialBaselineSubmitterName` | `string \| null` | 初始基线提交人 |
+| `hasRollbackPending` | `bool` | 是否存在回退补提 / 待重提小组 |
+| `rollbackBlockedGroupCount` | `int` | 阻断开放下一年的回退补提小组数量 |
 | `latestAdminAction` | `object \| null` | 最近一次关键管理员动作摘要 |
 
 说明：
@@ -1322,7 +1359,9 @@ Go DTO 建议：
 - `targetYearNo` 必须等于 `currentOpenYear + 1`
 - 不能超过 `finalYear`
 - 仅当“当前开放年份下，全部未破产组已完成本年财报”时才允许开放
+- 不存在处于 `回退补提 / 待重提` 状态的未破产小组时才允许开放
 - 已破产组在新年份仍保持不可编辑
+- 开放成功后生成全局状态快照，用于审计和后续全局恢复扩展
 - 本接口默认依赖 `update-final-year` 已经补齐目标年份的状态空间；若目标年份状态记录缺失，应视为服务端初始化缺陷，而不是前端调用方式错误
 
 响应字段建议：
@@ -1335,6 +1374,8 @@ Go DTO 建议：
 | `finalYear` | `int` | 当前最终年份 |
 | `canOpenNextYear` | `bool` | 开放完成后是否还能继续开放下一年 |
 | `openNextYearBlockedReason` | `string` | 若已到最终年份或后续被阻塞，返回摘要原因 |
+| `hasRollbackPending` | `bool` | 开放后是否仍存在回退补提 / 待重提小组 |
+| `rollbackBlockedGroupCount` | `int` | 开放后阻断后续开放的小组数量 |
 | `latestAdminAction` | `object` | 本次动作摘要 |
 
 #### 6.5.6 获取初始基线
@@ -1404,11 +1445,226 @@ Go DTO 建议：
 | `submittedAt` | `string` | 提交时间，RFC3339 |
 | `submitterName` | `string` | 提交管理员名称 |
 
+### 6.5A `admin-dictionary`
+
+#### 6.5A.1 获取版本包默认字典与当前显示名称
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/get-current?editionCode=VIP_SERVICE_V1`
+- 权限：登录态均可调用；初始化前主要供管理员赛前配置页使用，初始化后供玩家端和管理员端静默同步使用
+
+用途：
+
+- 初始化前：返回所选版本包的默认字典和前端编辑草稿所需字段。
+- 初始化后：返回当前比赛字典快照、`dictionaryRevision` 和是否允许解锁修改。
+
+返回字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `initialized` | `bool` | 比赛是否已初始化 |
+| `editionCode` | `string` | 版本包编码 |
+| `editionName` | `string` | 版本包名称 |
+| `dictionaryRevision` | `int` | 当前比赛字典快照版本；未初始化时可为默认版本 |
+| `canUpdateCurrent` | `bool` | 是否允许修改当前比赛字典快照 |
+| `items` | `array` | 字典项列表 |
+
+字典项字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `itemCode` | `string` | 稳定编码，例如 `market.LOCAL`、`orderType.BUSINESS_VIP`、`report.rawMaterials` |
+| `itemCategory` | `string` | `MARKET` / `ORDER_TYPE` / `OPERATING` / `REPORT` / `BASELINE` |
+| `defaultName` | `string` | 当前版本包默认名称 |
+| `displayName` | `string` | 当前实际显示名称 |
+| `displayOrder` | `int` | 展示排序 |
+| `editable` | `bool` | 是否允许管理员修改 |
+| `relatedPayload` | `object/null` | 前端映射辅助信息，不参与公式计算 |
+
+规则：
+
+- 前端默认不展示 `itemCode`，但接口必须返回稳定编码。
+- 字典项只驱动显示名称，不驱动公式、字段含义或提交 payload。
+- 系统状态、按钮、菜单、错误提示、Q1/Q2/Q3/Q4 等流程文案不通过字典替换。
+
+#### 6.5A.2 查询字典方案列表
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/list-schemes?editionCode=VIP_SERVICE_V1`
+- 权限：管理员
+
+返回字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `editionCode` | `string` | 绑定版本包 |
+| `list` | `array` | 字典方案列表 |
+
+方案摘要字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | `int64` | 字典方案 ID；`0` 表示版本默认名称 |
+| `editionCode` | `string` | 绑定版本包 |
+| `schemeName` | `string` | 字典方案名称 |
+| `description` | `string` | 方案说明 |
+| `builtIn` | `bool` | 是否内置项 |
+| `itemCount` | `int` | 字典项数量 |
+| `updatedAt` | `string` | 最近更新时间 |
+| `updatedBy` | `string` | 最近更新人 |
+
+规则：
+
+- 只返回与当前版本包绑定的方案。
+- 删除或编辑方案不影响当前比赛字典快照。
+
+#### 6.5A.3 获取字典方案详情
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/get-scheme-detail?id=12`
+- 权限：管理员
+
+返回字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | `int64` | 字典方案 ID |
+| `editionCode` | `string` | 绑定版本包 |
+| `schemeName` | `string` | 方案名称 |
+| `description` | `string` | 方案说明 |
+| `builtIn` | `bool` | 是否内置项 |
+| `items` | `array` | 方案字典项，字段同 `get-current.items` |
+| `updatedAt` | `string` | 最近更新时间 |
+| `updatedBy` | `string` | 最近更新人 |
+
+#### 6.5A.4 保存字典方案
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/save-scheme`
+- 权限：管理员
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `schemeId` | `int64/null` | 否 | 为空时新建，不为空时编辑 |
+| `editionCode` | `string` | 是 | 绑定版本包 |
+| `schemeName` | `string` | 是 | 方案名称 |
+| `description` | `string` | 否 | 方案说明 |
+| `items` | `array` | 是 | 方案字典项，仅包含 `itemCode / displayName` |
+
+规则：
+
+- 字典方案必须绑定版本包。
+- 显示名不允许为空。
+- 保存方案默认只影响以后新比赛，不自动影响当前比赛。
+- 编辑已使用过的方案也不影响当前比赛字典快照，除非管理员后续执行“应用方案到当前比赛”。
+
+#### 6.5A.5 删除字典方案
+
+- 方法：`DELETE`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/delete-scheme?id=12`
+- 权限：管理员
+
+规则：
+
+- 可删除已使用过的方案，因为当前系统不做多场比赛历史归档。
+- 删除方案不影响当前比赛字典快照。
+
+#### 6.5A.6 更新当前比赛显示名称
+
+- 方法：`PUT`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/update-current`
+- 权限：管理员
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `items` | `array` | 是 | 当前比赛字典项，仅包含 `itemCode / displayName` |
+| `reason` | `string` | 否 | 修改原因或备注 |
+
+规则：
+
+- 仅比赛已初始化后可调用。
+- 只修改当前比赛字典快照。
+- 更新成功后 `dictionaryRevision` 自增，并写入字段名称修改日志。
+- 玩家端和管理员端通过轻量 revision 检查静默同步显示名称。
+- 首版不要求前端提交 `baseRevision`；服务端在事务内读取当前配置并自增 `dictionaryRevision`。
+
+#### 6.5A.7 应用字典方案到当前比赛
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/apply-scheme-to-current`
+- 权限：管理员
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `schemeId` | `int64` | 是 | 要应用的字典方案 |
+
+规则：
+
+- 方案必须与当前比赛版本包绑定。
+- 采用整体覆盖当前比赛字典快照方式。
+- 前端确认弹窗展示变更数量和前若干项变更明细。
+- 不改变公式、数据、订单、流程，只改变页面显示名称。
+- 更新成功后写日志并返回新的 `dictionaryRevision`。
+
+#### 6.5A.8 恢复当前版本默认名称
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/restore-current-default`
+- 权限：管理员
+
+规则：
+
+- 仅恢复当前比赛字典快照为当前版本包默认名称。
+- 前端确认弹窗展示变更数量和前若干项变更明细。
+- 更新成功后立即影响当前比赛显示名称，写入日志。
+
+#### 6.5A.9 查询字段名称修改日志
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/page-change-logs`
+- 权限：管理员
+
+返回列表字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | `int64` | 日志 ID |
+| `editionCode` | `string` | 沙盘版本包编码 |
+| `changeType` | `string` | `INITIALIZE` / `UPDATE_CURRENT` / `APPLY_SCHEME` / `RESTORE_DEFAULT` / `SAVE_SCHEME` / `DELETE_SCHEME` |
+| `schemeId` | `int64/null` | 关联方案 ID |
+| `reason` | `string` | 修改原因或备注 |
+| `revision` | `int` | 变更后当前比赛字典版本；方案维护日志可为 `0` |
+| `operatorName` | `string` | 操作人 |
+| `operateTime` | `string` | 操作时间 |
+| `changedSummary` | `string` | 变更摘要 |
+
+#### 6.5A.10 字典 revision 轻量检查
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-dictionary/get-revision`
+- 权限：管理员或玩家登录态均可调用
+
+规则：
+
+- 返回当前比赛 `dictionaryRevision`。
+- 玩家端页面可按较低频率轻量检查；发现版本变化后只刷新名称映射，不重新加载经营/财报/订单业务数据。
+- 不允许出现刷新后页面跳到顶部、草稿丢失或输入焦点被强制打断。
+
 #### 6.5.8 异常解锁某组某年
+
+> 产品入口说明：异常解锁保留为 `回退与修正` 页面中的 `退回重提` 模式。该接口可继续沿用 `admin-control/unlock-year` 的旧路径，也可在实现 `admin-rollback` 时增加等价代理入口；无论路径如何，业务规则与日志口径必须一致。
 
 - 方法：`POST`
 - 路径：`/api/v1/sandbox-game/admin-control/unlock-year`
 - 权限：`sandbox-game:admin-control:unlock-year`
+- 新页面代理路径：`/api/v1/sandbox-game/admin-rollback/unlock-retry`
+- 新页面代理权限：`sandbox-game:admin-rollback:unlock-retry`
 
 Go DTO 建议：
 
@@ -1440,9 +1696,10 @@ Go DTO 建议：
 规则：
 
 - 仅管理员可执行。
-- 仅允许在 `下一年尚未开放前` 执行。
+- 轻量退回重提仍优先用于下一年尚未开放前的本年修正；若需要跨年恢复，使用 `admin-rollback` 的单组快照恢复接口。
 - 前端不做复杂可解锁预判，管理员点击后直接提交；服务端负责最终硬校验。
 - 仅允许对“已正式提交”的目标阶段或财报结果执行异常解锁。
+- 执行前必须自动创建目标组的回退前安全快照。
 - 当 `unlockTargetType = OPERATING` 时，服务端不得仅因财报页仍处于可编辑状态，就返回“当前年份已处于可编辑状态”。
 - 当 `unlockTargetType = REPORT` 时，不回退经营页已生效阶段。
 - 经营页异常解锁后：
@@ -1472,6 +1729,7 @@ Go DTO 建议：
 | `summaryEffective` | `bool` | 是否仍计入正式汇总 |
 | `businessStatus` | `string` | 解锁后经营状态 |
 | `unlockLogId` | `int64` | 解锁日志 ID |
+| `safetySnapshotId` | `int64` | 本次执行前自动创建的安全快照 ID |
 
 #### 6.5.9 后端实现规则清单
 
@@ -1514,6 +1772,170 @@ Go DTO 建议：
 8. 测试覆盖
 - 单元测试覆盖：`OPERATING/Q1`、`OPERATING/Q2`、`OPERATING/YEAR_END`、`REPORT` 四类主场景。
 - 集成测试覆盖：失效草稿保留、汇总失效、破产恢复、重新提交后重新生效。
+
+### 6.5B `admin-rollback`
+
+#### 6.5B.1 分页查询状态快照
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-rollback/page-snapshots`
+- 权限：`sandbox-game:admin-rollback:query`
+
+查询参数建议：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `snapshotScope` | `string` | 否 | `GROUP` / `GLOBAL` |
+| `snapshotType` | `string` | 否 | `AUTO` / `MANUAL` / `SAFETY` |
+| `groupId` | `int64` | 否 | 小组快照筛选条件 |
+| `yearNo` | `int` | 否 | 年份筛选条件 |
+| `stageCode` | `string` | 否 | 阶段筛选条件 |
+| `pageNo` | `int` | 是 | 页码 |
+| `pageSize` | `int` | 是 | 每页条数 |
+
+返回列表字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | `int64` | 快照 ID |
+| `snapshotScope` | `string` | `GROUP` / `GLOBAL` |
+| `snapshotType` | `string` | `AUTO` / `MANUAL` / `SAFETY` |
+| `triggerCode` | `string` | 生成节点，例如 `STAGE_SUBMITTED`、`REPORT_SUBMITTED`、`ORDER_POOL_CONFIRMED`、`SEGMENT_COMPLETED`、`OPEN_NEXT_YEAR`、`BEFORE_ROLLBACK` |
+| `groupId` | `int64 \| null` | 小组快照所属组；全局快照为空 |
+| `groupName` | `string \| null` | 小组名称 |
+| `yearNo` | `int \| null` | 快照对应年份 |
+| `stageCode` | `string \| null` | 快照对应阶段 |
+| `description` | `string` | 管理员说明或系统说明 |
+| `createdByName` | `string` | 创建人 |
+| `createdAt` | `string` | 创建时间，RFC3339 |
+
+说明：
+
+- 列表默认按 `createdAt` 倒序。
+- 首版全局快照只用于审计和后续扩展，不提供全局恢复按钮。
+
+#### 6.5B.2 查看快照详情
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-rollback/get-snapshot-detail`
+- 权限：`sandbox-game:admin-rollback:query`
+
+查询参数：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `snapshotId` | `int64` | 是 | 快照 ID |
+
+返回字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `snapshot` | `object` | 快照摘要 |
+| `stateSummary` | `object` | 快照中可读状态摘要 |
+| `payloadPreview` | `object` | 经营、财报、订单、汇总等业务区块摘要；首版不要求展示完整 JSON |
+
+#### 6.5B.3 手动创建状态快照
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-rollback/create-snapshot`
+- 权限：`sandbox-game:admin-rollback:create-snapshot`
+
+请求体建议：
+
+```json
+{
+  "snapshotScope": "GROUP",
+  "groupId": 1,
+  "yearNo": 3,
+  "stageCode": "Q2",
+  "description": "管理员现场确认前手动留档"
+}
+```
+
+字段建议：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `snapshotScope` | `string` | 是 | `GROUP` / `GLOBAL` |
+| `groupId` | `int64` | 条件必填 | `GROUP` 快照必填 |
+| `yearNo` | `int` | 否 | 目标年份；为空时按当前状态生成摘要 |
+| `stageCode` | `string` | 否 | 目标阶段 |
+| `description` | `string` | 是 | 管理员填写说明 |
+
+规则：
+
+- `GROUP` 快照只覆盖目标小组相关状态、经营、财报、订单归属、奖惩、汇总摘要。
+- `GLOBAL` 快照覆盖全局配置、订单池、标段状态、全部小组当前关键状态摘要。
+- 手动快照不改变任何业务状态，只写快照与管理员动作日志。
+
+#### 6.5B.4 恢复单组快照
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-rollback/restore-group-snapshot`
+- 权限：`sandbox-game:admin-rollback:restore-group-snapshot`
+
+请求体建议：
+
+```json
+{
+  "snapshotId": 1001,
+  "reason": "第三组 3年 Q2 起数据录入错误，需要回到该节点重新提交",
+  "confirmText": "确认恢复"
+}
+```
+
+字段建议：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `snapshotId` | `int64` | 是 | 目标单组快照 ID |
+| `reason` | `string` | 是 | 回退原因 |
+| `confirmText` | `string` | 是 | 二次确认文本，防止误操作 |
+
+响应字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `rollbackLogId` | `int64` | 回退日志 ID |
+| `safetySnapshotId` | `int64` | 回退前自动创建的安全快照 ID |
+| `groupId` | `int64` | 被回退小组 |
+| `targetYearNo` | `int` | 恢复到的年份 |
+| `targetStageCode` | `string` | 恢复到的阶段 |
+| `yearStatus` | `string` | 恢复后的年份状态 |
+| `stageStatus` | `string` | 恢复后的经营阶段状态 |
+| `reportStatus` | `string` | 恢复后的财报状态 |
+| `businessStatus` | `string` | 恢复后的经营状态 |
+| `hasRollbackPending` | `bool` | 是否进入回退补提 / 待重提 |
+
+规则：
+
+- 首版只允许恢复 `GROUP` 快照，不允许恢复 `GLOBAL` 快照。
+- 回退粒度是阶段级，不支持字段级回退。
+- 支持单组跨年度回退，例如从 `5年` 回到 `3年 Q2`。
+- 回退不改变全局当前开放年份。
+- 执行前必须自动创建目标组的 `SAFETY` 快照。
+- 回退后，目标节点之后的经营、财报、奖惩、汇总生效结果进入失效态，但原值保留为 `失效草稿` 或历史记录。
+- 普通通知不回退。
+- 若破产发生在目标节点之后，回退后临时恢复为 `NORMAL`，待重新提交后重新判定。
+- 单组快照回退不释放已选订单、不重排历史选单顺序、不重算市场龙头、不重新生成已确认订单池。
+- 订单交付状态在目标节点之后的记录失效，玩家重新推进到对应年份后再确认交付。
+- 已选的未来年份订单保持归属，但处于“失效但不释放”口径，待该组重新推进到对应年份时继续作为订单来源。
+- 如果该组尚未参与某个已生成顺序的标段，系统只提示风险，现场节奏由管理员控制。
+- 回退执行期间短暂锁定目标组写操作；玩家并发提交时返回 `409`，提示“状态已变化，请刷新页面”。
+- 存在任意未破产小组处于回退补提 / 待重提状态时，管理员不能开放下一年。
+
+#### 6.5B.5 后端自动快照节点
+
+系统应在以下节点自动生成快照：
+
+- 单组经营阶段提交成功后生成 `GROUP + AUTO` 快照。
+- 单组财报提交成功后生成 `GROUP + AUTO` 快照。
+- 管理员执行退回重提或恢复快照前生成 `GROUP + SAFETY` 快照。
+- 管理员确认订单池后生成 `GLOBAL + AUTO` 快照。
+- 每个标段完成后生成 `GLOBAL + AUTO` 快照。
+- 管理员开放下一年后生成 `GLOBAL + AUTO` 快照。
+
+快照在本场比赛内不自动清理。
 
 ### 6.6 `admin-notice`
 
@@ -1842,6 +2264,7 @@ type AdminActionSummaryResp struct {
 | `ErrAdminControlTargetYearMismatch` | `409` | `targetYearNo != currentOpenYear + 1` | `开放年份与当前状态不一致` |
 | `ErrAdminControlFinalYearReached` | `409` | 已到最终年份仍尝试开放 | `已达到最终年份，无法继续开放` |
 | `ErrAdminControlOpenNextYearBlocked` | `422` | 未满足开放下一年条件 | `当前仍有未完成财报的小组` |
+| `ErrAdminControlRollbackPending` | `422` | 存在回退补提 / 待重提小组时尝试开放下一年 | `仍有小组处于回退补提中，不能开放下一年` |
 | `ErrAdminControlInitialBaselineSubmitted` | `409` | 初始基线重复提交 | `初始基线已提交，不能重复提交` |
 | `ErrAdminControlInitialBaselineInvalid` | `422` | 初始基线载荷缺失或结构非法 | `初始基线数据不完整` |
 | `ErrAdminControlUnlockTargetNotFound` | `404` | 目标组或目标年份不存在 | `未找到需要解锁的目标数据` |
@@ -1854,6 +2277,13 @@ type AdminActionSummaryResp struct {
 | `ErrAdminControlOperatingAlreadyEditable` | `409` | 经营页当前无需解锁 | `经营页当前无需解锁` |
 | `ErrAdminControlReportAlreadyEditable` | `409` | 财报页当前无需解锁 | `财报页当前无需解锁` |
 | `ErrAdminControlUnlockReasonRequired` | `422` | 未填写解锁原因 | `请填写异常解锁原因` |
+| `ErrRollbackSnapshotNotFound` | `404` | 快照不存在 | `未找到状态快照` |
+| `ErrRollbackSnapshotScopeUnsupported` | `422` | 首版尝试恢复全局快照 | `首版暂不支持恢复全局快照` |
+| `ErrRollbackTargetInvalid` | `422` | 快照目标无法作为回退节点 | `快照目标状态不支持恢复` |
+| `ErrRollbackReasonRequired` | `422` | 未填写回退原因 | `请填写回退原因` |
+| `ErrRollbackConfirmRequired` | `422` | 未完成二次确认 | `请完成回退确认` |
+| `ErrRollbackStateChanged` | `409` | 回退执行期间目标组状态被并发改变 | `状态已变化，请刷新页面` |
+| `ErrRollbackGroupWriteLocked` | `409` | 目标组正在回退中仍提交写操作 | `小组状态正在修正，请刷新后重试` |
 
 ---
 
@@ -1931,12 +2361,14 @@ type OrderMarketEnabledItemReq struct {
 | Go 常量名 | 默认 HTTP | 触发场景 | 默认提示语建议 |
 |---|---|---|---|
 | `ErrOrderNotRequiredForDemoYear` | `422` | `0年` 试图提交订单动作 | `0年不需要订单` |
-| `ErrOrderMarketDisabledInvestmentMustBeZero` | `422` | 未开启市场提交非零投入 | `该市场未开启，市场投入必须填写0` |
-| `ErrOrderMarketConfigLocked` | `409` | 订单池确认后修改市场开启状态 | `订单池已确认，不能修改市场开启状态` |
+| `ErrOrderMarketDisabledInvestmentMustBeZero` | `422` | 未开启市场提交非零投入 | `该市场未开启，系统自动按0提交，不允许填写非0投入` |
+| `ErrOrderMarketConfigLocked` | `409` | 订单池确认后或已有小组提交市场投入后修改市场配置 | `市场配置已锁定，不能修改开启状态或投入上限` |
 | `ErrOrderPoolNotGenerated` | `422` | 订单池未生成或未确认就尝试开标/选单 | `订单池尚未确认` |
 | `ErrOrderPoolNotConfirmed` | `422` | 未确认预览批次就生成选单顺序 | `请先确认订单池` |
 | `ErrOrderCountOutOfRange` | `422` | 订单卡片数量超出 `0 ~ 15` | `订单数量必须在0到15之间` |
 | `ErrOrderInvestmentIncomplete` | `422` | 未提交完整 16 项市场投入 | `请先提交本年全部市场投入` |
+| `ErrOrderInvestmentNotInteger` | `422` | 市场投入或单市场投入上限包含小数 | `市场投入和投入上限必须为整数` |
+| `ErrOrderInvestmentLimitExceeded` | `422` | 某市场 4 项投入合计超过单市场上限 | `市场投入超过单市场上限` |
 | `ErrOrderInvestmentSubmitted` | `409` | 重复提交市场投入 | `本年市场投入已提交，不能修改` |
 | `ErrOrderMarketNoInvestment` | `422` | 当前组无标段投入却尝试选单 | `本组未投入该标段，不能选择订单` |
 | `ErrOrderSelectionNotReady` | `422` | 选单顺序未生成 | `该标段尚未进入选单阶段` |
@@ -2020,3 +2452,4 @@ type OrderMarketEnabledItemReq struct {
 - 详细接口示例 JSON 样例库
 - `.http` 用例文件
 - 异常解锁日志的高级筛选条件与导出策略
+

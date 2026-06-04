@@ -23,6 +23,23 @@ export function initializeAdminGame(groupCount: number, editionCode: string) {
   })
 }
 
+export function initializeAdminGameWithDictionary(
+  groupCount: number,
+  editionCode: string,
+  dictionaryItems: Array<{ itemCode: string; displayName: string }>,
+  dictionarySchemeId?: number | null,
+) {
+  return request<InitializeGameResult>('/api/v1/sandbox-game/admin-control/initialize-game', {
+    method: 'POST',
+    body: JSON.stringify({
+      groupCount,
+      editionCode,
+      dictionaryItems,
+      dictionarySchemeId: dictionarySchemeId ?? null,
+    }),
+  })
+}
+
 export function getAdminControlConfig() {
   return request<AdminControlConfigResult>('/api/v1/sandbox-game/admin-control/get-config')
 }

@@ -83,10 +83,12 @@ func (h *AdminControlHandler) InitializeGame(c *gin.Context) {
 
 	identity, _ := middleware.GetAuthIdentity(c)
 	result, err := h.commandService.InitializeGame(c.Request.Context(), service.InitializeGameCommand{
-		GroupCount:   *req.GroupCount,
-		EditionCode:  req.EditionCode,
-		OperatorID:   identity.UserID,
-		OperatorName: identity.Username,
+		GroupCount:         *req.GroupCount,
+		EditionCode:        req.EditionCode,
+		DictionarySchemeID: req.DictionarySchemeID,
+		DictionaryItems:    toDictionaryItemInputs(req.DictionaryItems),
+		OperatorID:         identity.UserID,
+		OperatorName:       identity.Username,
 	})
 	if err != nil {
 		switch {
@@ -129,6 +131,27 @@ func (h *AdminControlHandler) InitializeGame(c *gin.Context) {
 				"沙盘版本不合法",
 				err,
 			))
+		case errors.Is(err, service.ErrDictionarySchemeCrossEdition):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"字典方案不属于当前沙盘版本",
+				err,
+			))
+		case errors.Is(err, service.ErrDictionaryDisplayNameRequired):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"字典显示名称不能为空",
+				err,
+			))
+		case errors.Is(err, service.ErrDictionaryItemInvalid):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusUnprocessableEntity,
+				enum.UnprocessableEntityCode,
+				"字典项不合法",
+				err,
+			))
 		default:
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,
@@ -141,6 +164,17 @@ func (h *AdminControlHandler) InitializeGame(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.Success(result))
+}
+
+func toDictionaryItemInputs(items []dto.AdminDictionaryItemInput) []service.DictionaryItemInput {
+	result := make([]service.DictionaryItemInput, 0, len(items))
+	for _, item := range items {
+		result = append(result, service.DictionaryItemInput{
+			ItemCode:    item.ItemCode,
+			DisplayName: item.DisplayName,
+		})
+	}
+	return result
 }
 
 func (h *AdminControlHandler) GetConfig(c *gin.Context) {

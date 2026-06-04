@@ -44,7 +44,13 @@ export interface AdminControlSetupStatusResult {
   editionCode: string
   editionName: string
   ruleVersion: string
+  formulaVersion: string
   templateVersion: string
+  operatingTemplateVersion: string
+  reportTemplateVersion: string
+  orderTemplateVersion: string
+  processRuleVersion: string
+  dictionaryRevision: number
   availableEditions: GameEdition[]
   initialBaselineSubmitted: boolean
   defaultRoute: string
@@ -65,6 +71,7 @@ export interface AdminControlConfigResult {
   reportTemplateVersion: string
   orderTemplateVersion: string
   processRuleVersion: string
+  dictionaryRevision: number
   initialBaselineSubmitted: boolean
   initialBaselineSubmittedAt: string | null
   initialBaselineSubmitterName: string | null
@@ -78,11 +85,104 @@ export interface InitializeGameResult {
   editionName: string
   ruleVersion: string
   templateVersion: string
+  dictionaryRevision: number
   createdGroupCount: number
   createdAccountCount: number
   createdYearStateCount: number
   initializedAt: string
   initializedBy: string
+}
+
+export interface AdminDictionaryItem {
+  itemCode: string
+  itemCategory: string
+  defaultName: string
+  displayName: string
+  displayOrder: number
+  editable: boolean
+  relatedPayload?: unknown
+}
+
+export interface AdminDictionaryCurrentResult {
+  initialized: boolean
+  editionCode: string
+  editionName: string
+  dictionaryRevision: number
+  canUpdateCurrent: boolean
+  items: AdminDictionaryItem[]
+}
+
+export interface AdminDictionarySchemeSummary {
+  id: number
+  editionCode: string
+  schemeName: string
+  description: string
+  builtIn: boolean
+  itemCount: number
+  updatedAt: string
+  updatedBy: string
+}
+
+export interface AdminDictionarySchemeListResult {
+  editionCode: string
+  list: AdminDictionarySchemeSummary[]
+}
+
+export interface AdminDictionarySchemeDetailResult {
+  id: number
+  editionCode: string
+  schemeName: string
+  description: string
+  builtIn: boolean
+  items: AdminDictionaryItem[]
+  updatedAt: string
+  updatedBy: string
+}
+
+export interface AdminDictionaryItemInput {
+  itemCode: string
+  displayName: string
+}
+
+export interface AdminDictionarySaveSchemeRequest {
+  schemeId?: number | null
+  editionCode: string
+  schemeName: string
+  description: string
+  items: AdminDictionaryItemInput[]
+}
+
+export interface AdminDictionaryUpdateCurrentRequest {
+  items: AdminDictionaryItemInput[]
+  reason: string
+}
+
+export interface AdminDictionaryApplySchemeRequest {
+  schemeId: number
+}
+
+export interface AdminDictionaryRevisionResult {
+  editionCode: string
+  dictionaryRevision: number
+}
+
+export interface AdminDictionaryChangeLogItem {
+  id: number
+  editionCode: string
+  changeType: string
+  schemeId: number | null
+  reason: string
+  revision: number
+  operatorName: string
+  operateTime: string
+  changedSummary: string
+}
+
+export interface AdminDictionaryChangeLogPageResult {
+  list: AdminDictionaryChangeLogItem[]
+  pageNo: number
+  pageSize: number
+  total: number
 }
 
 export interface UpdateFinalYearResult {

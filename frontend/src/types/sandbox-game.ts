@@ -31,6 +31,7 @@ export interface CurrentGameConfigResult {
   reportTemplateVersion: string
   orderTemplateVersion: string
   processRuleVersion: string
+  dictionaryRevision: number
   demoYearEnabled: boolean
 }
 

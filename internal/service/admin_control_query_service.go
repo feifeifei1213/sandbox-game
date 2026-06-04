@@ -45,6 +45,7 @@ type AdminControlConfigResult struct {
 	ReportTemplateVersion      string              `json:"reportTemplateVersion"`
 	OrderTemplateVersion       string              `json:"orderTemplateVersion"`
 	ProcessRuleVersion         string              `json:"processRuleVersion"`
+	DictionaryRevision         int                 `json:"dictionaryRevision"`
 	InitialBaselineSubmitted   bool                `json:"initialBaselineSubmitted"`
 	InitialBaselineSubmittedAt *string             `json:"initialBaselineSubmittedAt"`
 	InitialBaselineSubmitter   *string             `json:"initialBaselineSubmitterName"`
@@ -60,6 +61,12 @@ type AdminControlSetupStatusResult struct {
 	EditionName              string        `json:"editionName"`
 	RuleVersion              string        `json:"ruleVersion"`
 	TemplateVersion          string        `json:"templateVersion"`
+	FormulaVersion           string        `json:"formulaVersion"`
+	OperatingTemplateVersion string        `json:"operatingTemplateVersion"`
+	ReportTemplateVersion    string        `json:"reportTemplateVersion"`
+	OrderTemplateVersion     string        `json:"orderTemplateVersion"`
+	ProcessRuleVersion       string        `json:"processRuleVersion"`
+	DictionaryRevision       int           `json:"dictionaryRevision"`
 	AvailableEditions        []GameEdition `json:"availableEditions"`
 	InitialBaselineSubmitted bool          `json:"initialBaselineSubmitted"`
 	DefaultRoute             string        `json:"defaultRoute"`
@@ -150,6 +157,7 @@ func (s *AdminControlQueryService) GetConfig(ctx context.Context) (*AdminControl
 		ReportTemplateVersion:      edition.ReportTemplateVersion,
 		OrderTemplateVersion:       edition.OrderTemplateVersion,
 		ProcessRuleVersion:         edition.ProcessRuleVersion,
+		DictionaryRevision:         gameConfig.DictionaryRevision,
 		InitialBaselineSubmitted:   gameConfig.InitialBaselineSubmitted,
 		InitialBaselineSubmittedAt: baselineSubmittedAt,
 		InitialBaselineSubmitter:   baselineSubmitterName,
@@ -184,6 +192,12 @@ func (s *AdminControlQueryService) GetSetupStatus(ctx context.Context) (*AdminCo
 		EditionName:              edition.EditionName,
 		RuleVersion:              edition.RuleVersion,
 		TemplateVersion:          edition.TemplateVersion,
+		FormulaVersion:           edition.FormulaVersion,
+		OperatingTemplateVersion: edition.OperatingTemplateVersion,
+		ReportTemplateVersion:    edition.ReportTemplateVersion,
+		OrderTemplateVersion:     edition.OrderTemplateVersion,
+		ProcessRuleVersion:       edition.ProcessRuleVersion,
+		DictionaryRevision:       gameConfig.DictionaryRevision,
 		AvailableEditions:        ListGameEditions(),
 		InitialBaselineSubmitted: gameConfig.InitialBaselineSubmitted,
 		DefaultRoute:             defaultRoute,

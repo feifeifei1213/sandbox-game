@@ -23,12 +23,11 @@
 - 一套专用 `正式比赛数据库`
 - 一个统一访问地址
 - 前端打包为静态资源
-- `Nginx` 提供统一访问入口与静态页面
-- Go 服务提供业务 API
+- Go 服务同时提供前端静态页面与业务 API
 
 推荐访问形式：
 
-- `http://<比赛主机IP>`
+- `http://<比赛主机IP>:<server.port>/sandbox-game/login`
 - `http://sandbox-game.company.local` （若公司内网支持固定域名）
 
 正式比赛时，玩家与管理员都不应再访问：
@@ -63,7 +62,6 @@
 比赛主机建议承担以下职责：
 
 - 承载 Go 后端正式服务
-- 承载 `Nginx`
 - 承载前端打包后的静态资源
 - 连接正式比赛数据库
 - 对局域网内所有参赛电脑提供统一访问入口
@@ -79,7 +77,7 @@
 推荐网络口径：
 
 - 玩家电脑、管理员电脑、比赛主机位于同一局域网
-- 对浏览器开放的端口统一为 `80` 或 `8080`
+- 对浏览器开放的端口以 `competition.yaml` 中的 `server.port` 为准
 - 数据库端口不对普通玩家电脑开放
 
 ---
@@ -89,9 +87,8 @@
 首版推荐的部署结构如下：
 
 1. 前端执行 `build`，产出 `dist`
-2. `Nginx` 提供前端 `dist` 与统一访问地址
-3. Go 后端读取正式比赛配置启动，仅提供 `/api/v1/sandbox-game/*` 接口
-4. MySQL 使用正式比赛库
+2. Go 后端读取正式比赛配置启动，同时提供前端 `dist` 与 `/api/v1/sandbox-game/*` 接口
+3. MySQL 使用正式比赛库
 
 对现场参赛人员来说，应该感知为：
 
@@ -113,7 +110,6 @@
 - 正式比赛配置文件
 - 正式比赛数据库初始化脚本
 - 正式比赛启动脚本
-- `Nginx` 统一入口配置
 - 正式版上线包打包脚本
 
 当前仓库 `2026-04-02` 已补齐以下正式比赛落点：
@@ -124,7 +120,6 @@
 - `scripts/reset-competition.ps1`
 - `scripts/start-competition.ps1`
 - `scripts/build-competition-package.ps1`
-- `scripts/nginx/sandbox-game.competition.conf`
 
 ---
 
@@ -135,7 +130,7 @@
 1. 准备正式比赛数据库，建议命名为 `sandbox_game_competition`。
 2. 复制并修改正式比赛配置文件：`configs/competition.yaml`。
 3. 确定比赛主机固定 IP，例如 `192.168.8.200`。
-4. 确认 `Nginx` 已安装，且比赛主机允许对浏览器开放 `80` 或 `8080`。
+4. 确认比赛主机允许对浏览器开放 `competition.yaml` 中配置的服务端口，例如 `8080`。
 5. 确认正式比赛库与开发 / 演练库完全隔离。
 
 ### 7.2 赛前当天完成
@@ -173,14 +168,7 @@ cd "E:\project\sand box game"
 .\scripts\start-competition.ps1 -ConfigPath .\configs\competition.yaml
 ```
 
-5. 按样例配置 `Nginx`：
-
-- 配置文件样例：`scripts/nginx/sandbox-game.competition.conf`
-- 核心口径：
-  - `/` 指向前端 `dist`
-  - `/api/` 反向代理到 `http://127.0.0.1:8080`
-
-6. 由管理员电脑和至少一台玩家电脑分别验证：
+5. 由管理员电脑和至少一台玩家电脑分别验证：
 
 - 登录页可访问
 - 管理员可登录
@@ -191,7 +179,7 @@ cd "E:\project\sand box game"
 
 ### 7.3 比赛开始前最后确认
 
-统一下发访问地址，例如 `http://192.168.8.200`。
+统一下发访问地址，例如 `http://192.168.8.200:8080/sandbox-game/login`。
 不要下发开发机个人地址、`localhost`、`127.0.0.1`、`5173` 开发入口，或后端裸 API 地址。
 
 ---
@@ -262,11 +250,11 @@ cd "E:\project\sand box game"
 - 一台专用比赛主机
 - 一套专用正式比赛库
 - 一个统一访问地址
-- 前端打包后由 `Nginx` 提供
-- Go 服务专注提供 API
+- 前端打包后随正式包一起交付
+- Go 服务同时提供页面与 API
 
 对现场参赛人员来说，最理想的正式入口应收口为：
 
-- `http://<比赛主机IP>`
+- `http://<比赛主机IP>:<server.port>/sandbox-game/login`
 
 这也是首版最稳、最容易现场控制、最符合当前业务场景的上线方式。

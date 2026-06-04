@@ -3,8 +3,10 @@ package dto
 import "sandbox-game/internal/model/payload"
 
 type AdminControlInitializeGameRequest struct {
-	GroupCount  *int   `json:"groupCount" binding:"required"`
-	EditionCode string `json:"editionCode"`
+	GroupCount         *int                       `json:"groupCount" binding:"required"`
+	EditionCode        string                     `json:"editionCode"`
+	DictionarySchemeID *int64                     `json:"dictionarySchemeId"`
+	DictionaryItems    []AdminDictionaryItemInput `json:"dictionaryItems"`
 }
 
 type AdminControlUpdateFinalYearRequest struct {

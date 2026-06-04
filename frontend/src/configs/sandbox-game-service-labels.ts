@@ -172,6 +172,10 @@ export type SandboxGameOperatingLabels = typeof vipServiceOperatingLabels | type
 export type SandboxGameReportLabels = typeof vipServiceReportLabels | typeof productionReportLabels
 export type SandboxGameReportRequiredFieldLabels = typeof vipServiceReportRequiredFieldLabels | typeof productionReportRequiredFieldLabels
 export type SandboxGameBaselineLabels = typeof vipServiceBaselineLabels | typeof productionBaselineLabels
+export type DictionaryDisplayResolver = (itemCode: string, fallback: string) => string
+type ProductionLineRowLabel = SandboxGameOperatingLabels['productionLineRows'][number] & {
+  groupLabel?: string
+}
 
 export const serviceOperatingLabels = vipServiceOperatingLabels
 export const serviceReportLabels = vipServiceReportLabels
@@ -192,6 +196,101 @@ export function resolveReportRequiredFieldLabels(editionCode?: string | null): S
 
 export function resolveBaselineLabels(editionCode?: string | null): SandboxGameBaselineLabels {
   return isProductionEdition(editionCode) ? productionBaselineLabels : vipServiceBaselineLabels
+}
+
+export function applyDictionaryToOperatingLabels<T extends SandboxGameOperatingLabels>(labels: T, displayName: DictionaryDisplayResolver): T {
+  return {
+    ...labels,
+    taxPolicyNote: displayName('operating.taxPolicyNote', labels.taxPolicyNote),
+    materialGroupTitle: displayName('operating.materialGroupTitle', labels.materialGroupTitle),
+    productionAdjustmentGroupTitle: displayName('operating.productionAdjustmentGroupTitle', labels.productionAdjustmentGroupTitle),
+    humanResourceGroupTitle: displayName('operating.humanResourceGroupTitle', labels.humanResourceGroupTitle),
+    humanResourceLabel: displayName('operating.humanResourceLabel', labels.humanResourceLabel),
+    salaryGroupTitle: displayName('operating.salaryGroupTitle', labels.salaryGroupTitle),
+    salaryLabel: displayName('operating.salaryLabel', labels.salaryLabel),
+    researchAndManagementGroupTitle: displayName('operating.researchAndManagementGroupTitle', labels.researchAndManagementGroupTitle),
+    newOrderReminder: displayName('operating.newOrderReminder', labels.newOrderReminder),
+    receivableGroupTitle: displayName('operating.receivableGroupTitle', labels.receivableGroupTitle),
+    receivableLabel: displayName('operating.receivableLabel', labels.receivableLabel),
+    receivableReminder: displayName('operating.receivableReminder', labels.receivableReminder),
+    deliveryGroupTitle: displayName('operating.deliveryGroupTitle', labels.deliveryGroupTitle),
+    deliveryRevenueLabel: displayName('operating.deliveryRevenueLabel', labels.deliveryRevenueLabel),
+    deliveryCostLabel: displayName('operating.deliveryCostLabel', labels.deliveryCostLabel),
+    managementStaffGroupTitle: displayName('operating.managementStaffGroupTitle', labels.managementStaffGroupTitle),
+    lineMaintenanceGroupTitle: displayName('operating.lineMaintenanceGroupTitle', labels.lineMaintenanceGroupTitle),
+    lineMaintenanceNote: displayName('operating.lineMaintenanceNote', labels.lineMaintenanceNote),
+    assetGroupTitle: displayName('operating.assetGroupTitle', labels.assetGroupTitle),
+    assetValueNote: displayName('operating.assetValueNote', labels.assetValueNote),
+    rentGroupTitle: displayName('operating.rentGroupTitle', labels.rentGroupTitle),
+    rentValueNote: displayName('operating.rentValueNote', labels.rentValueNote),
+    residualGroupTitle: displayName('operating.residualGroupTitle', labels.residualGroupTitle),
+    depreciationGroupTitle: displayName('operating.depreciationGroupTitle', labels.depreciationGroupTitle),
+    workInConstructionLabel: displayName('operating.workInConstructionLabel', labels.workInConstructionLabel),
+    marketProductFields: labels.marketProductFields.map((item) => ({
+      ...item,
+      label: displayName(`operating.marketProductFields.${item.key}`, item.label),
+    })),
+    materialFields: labels.materialFields.map((item) => ({
+      ...item,
+      label: displayName(`operating.materialFields.${item.key}`, item.label),
+    })),
+    productionLineRows: labels.productionLineRows.map((rawItem) => {
+      const item = rawItem as ProductionLineRowLabel
+      return {
+        ...item,
+        label: displayName(`operating.productionLineRows.${item.key}`, item.label),
+        groupLabel: item.groupLabel
+          ? displayName(`operating.productionLineRows.${item.key}.groupLabel`, item.groupLabel)
+          : item.groupLabel,
+      }
+    }),
+    researchFields: labels.researchFields.map((item) => ({
+      ...item,
+      label: displayName(`operating.researchFields.${item.key}`, item.label),
+    })),
+    progressUpdateReminder: displayName('operating.progressUpdateReminder', labels.progressUpdateReminder),
+  } as T
+}
+
+export function applyDictionaryToReportLabels<T extends SandboxGameReportLabels>(labels: T, displayName: DictionaryDisplayResolver): T {
+  return {
+    ...labels,
+    workInConstruction: displayName('report.workInConstruction', labels.workInConstruction),
+    factoryAsset: displayName('report.factoryAsset', labels.factoryAsset),
+    lineResidual: displayName('report.lineResidual', labels.lineResidual),
+    workInProgress: displayName('report.workInProgress', labels.workInProgress),
+    finishedGoods: displayName('report.finishedGoods', labels.finishedGoods),
+    rawMaterials: displayName('report.rawMaterials', labels.rawMaterials),
+    row19Label: displayName('report.row19Label', labels.row19Label),
+    totalLiabilityEquity: displayName('report.totalLiabilityEquity', labels.totalLiabilityEquity),
+    bestProductionHumanDirector: displayName('report.bestProductionHumanDirector', labels.bestProductionHumanDirector),
+    taxRateEnterprise15: displayName('report.taxRateEnterprise15', labels.taxRateEnterprise15),
+  } as T
+}
+
+export function applyDictionaryToReportRequiredFieldLabels<T extends SandboxGameReportRequiredFieldLabels>(labels: T, displayName: DictionaryDisplayResolver): T {
+  return {
+    ...labels,
+    workInProgress: displayName('reportRequired.workInProgress', labels.workInProgress),
+    finishedGoods: displayName('reportRequired.finishedGoods', labels.finishedGoods),
+    rawMaterials: displayName('reportRequired.rawMaterials', labels.rawMaterials),
+    incomeTaxRate: displayName('reportRequired.incomeTaxRate', labels.incomeTaxRate),
+    enterpriseCertificationScore: displayName('reportRequired.enterpriseCertificationScore', labels.enterpriseCertificationScore),
+    productionHumanScore: displayName('reportRequired.productionHumanScore', labels.productionHumanScore),
+    closingSpeedScore: displayName('reportRequired.closingSpeedScore', labels.closingSpeedScore),
+  } as T
+}
+
+export function applyDictionaryToBaselineLabels<T extends SandboxGameBaselineLabels>(labels: T, displayName: DictionaryDisplayResolver): T {
+  return {
+    ...labels,
+    workInConstruction: displayName('baseline.workInConstruction', labels.workInConstruction),
+    factoryAsset: displayName('baseline.factoryAsset', labels.factoryAsset),
+    lineResidual: displayName('baseline.lineResidual', labels.lineResidual),
+    workInProgress: displayName('baseline.workInProgress', labels.workInProgress),
+    finishedGoods: displayName('baseline.finishedGoods', labels.finishedGoods),
+    rawMaterials: displayName('baseline.rawMaterials', labels.rawMaterials),
+  } as T
 }
 
 function isProductionEdition(editionCode?: string | null) {

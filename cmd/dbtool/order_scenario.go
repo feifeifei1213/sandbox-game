@@ -20,15 +20,7 @@ const (
 )
 
 type seededOrderScenario struct {
-	GroupIDs              []int64
-	ForecastControlCount  int
-	YearTwoBatchID        int64
-	YearTwoGeneratedCount int
-}
-
-type orderScenarioSegment struct {
-	MarketCode string
-	OrderType  string
+	GroupIDs []int64
 }
 
 func seedOrderScenario(ctx context.Context, db *gorm.DB) error {
@@ -45,28 +37,15 @@ func seedOrderScenario(ctx context.Context, db *gorm.DB) error {
 		if err := seedOrderScenarioPreviousOrders(ctx, tx, seeded.GroupIDs); err != nil {
 			return err
 		}
-		seeded.ForecastControlCount, err = seedOrderScenarioForecastAndPool(ctx, tx)
-		if err != nil {
-			return err
-		}
-		confirmed, err := findConfirmedOrderBatch(ctx, tx, 2)
-		if err != nil {
-			return err
-		}
-		seeded.YearTwoBatchID = confirmed.ID
-		seeded.YearTwoGeneratedCount = confirmed.GeneratedOrderCount
 		return nil
 	}); err != nil {
 		return fmt.Errorf("seed order scenario transaction: %w", err)
 	}
 
 	fmt.Printf(
-		"order scenario seeded: groups=%d groupIDs=%v forecastControls=%d year2Batch=%d year2Orders=%d stop=2年订单池已确认、市场投入未提交\n",
+		"order scenario seeded: groups=%d groupIDs=%v stop=2年已开放、1年订单历史已写入、2年订单配置未开始\n",
 		len(seeded.GroupIDs),
 		seeded.GroupIDs,
-		seeded.ForecastControlCount,
-		seeded.YearTwoBatchID,
-		seeded.YearTwoGeneratedCount,
 	)
 	return nil
 }
@@ -354,142 +333,6 @@ func seedOrderScenarioPreviousOrders(ctx context.Context, tx *gorm.DB, groupIDs 
 	return nil
 }
 
-func seedOrderScenarioForecastAndPool(ctx context.Context, tx *gorm.DB) (int, error) {
-	adminOrderService := service.NewAdminOrderCommandService(tx)
-	forecastItems := buildScenarioForecastControlItems()
-	if _, err := adminOrderService.UpdateForecastControl(ctx, service.UpdateOrderForecastControlCommand{
-		Items:        forecastItems,
-		Narratives:   buildScenarioForecastNarratives(),
-		OperatorID:   orderScenarioOperatorID,
-		OperatorName: orderScenarioOperatorName,
-	}); err != nil {
-		return 0, fmt.Errorf("update scenario forecast control: %w", err)
-	}
-	if _, err := adminOrderService.UpdateMarketConfig(ctx, service.UpdateOrderMarketConfigCommand{
-		YearNo: 2,
-		Markets: []service.UpdateOrderMarketConfigItem{
-			{MarketCode: enum.MarketCodeLocal, Enabled: true},
-			{MarketCode: enum.MarketCodeRegional, Enabled: true},
-			{MarketCode: enum.MarketCodeNational, Enabled: true},
-			{MarketCode: enum.MarketCodeGlobal, Enabled: false},
-		},
-		OperatorID:   orderScenarioOperatorID,
-		OperatorName: orderScenarioOperatorName,
-	}); err != nil {
-		return 0, fmt.Errorf("update scenario market config: %w", err)
-	}
-	if _, err := adminOrderService.UpdateControlConfig(ctx, service.UpdateOrderControlConfigCommand{
-		YearNo:       2,
-		Items:        buildScenarioControlConfigItems(2),
-		OperatorID:   orderScenarioOperatorID,
-		OperatorName: orderScenarioOperatorName,
-	}); err != nil {
-		return 0, fmt.Errorf("update scenario release config: %w", err)
-	}
-	generated, err := adminOrderService.GenerateOrderPool(ctx, service.GenerateOrderPoolCommand{
-		YearNo:       2,
-		Overwrite:    true,
-		OperatorID:   orderScenarioOperatorID,
-		OperatorName: orderScenarioOperatorName,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("generate scenario year 2 order pool: %w", err)
-	}
-	if _, err := adminOrderService.ConfirmOrderPool(ctx, service.ConfirmOrderPoolCommand{
-		YearNo:       2,
-		BatchID:      generated.BatchID,
-		OperatorID:   orderScenarioOperatorID,
-		OperatorName: orderScenarioOperatorName,
-	}); err != nil {
-		return 0, fmt.Errorf("confirm scenario year 2 order pool: %w", err)
-	}
-	return len(forecastItems), nil
-}
-
-func buildScenarioForecastControlItems() []service.UpdateOrderForecastControlItem {
-	counts := map[string]int{
-		scenarioForecastKey(1, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection):    2,
-		scenarioForecastKey(1, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP):         2,
-		scenarioForecastKey(1, enum.MarketCodeRegional, enum.OrderTypeAgencyInspection): 1,
-		scenarioForecastKey(2, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection):    4,
-		scenarioForecastKey(2, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP):         3,
-		scenarioForecastKey(2, enum.MarketCodeLocal, enum.OrderTypeBusinessVIP):         2,
-		scenarioForecastKey(2, enum.MarketCodeRegional, enum.OrderTypeAgencyInspection): 3,
-		scenarioForecastKey(2, enum.MarketCodeRegional, enum.OrderTypeTwoCabinVIP):      2,
-		scenarioForecastKey(2, enum.MarketCodeNational, enum.OrderTypeAgencyInspection): 2,
-		scenarioForecastKey(2, enum.MarketCodeGlobal, enum.OrderTypeAgencyInspection):   2,
-		scenarioForecastKey(3, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection):    5,
-		scenarioForecastKey(4, enum.MarketCodeRegional, enum.OrderTypeBusinessVIP):      3,
-		scenarioForecastKey(5, enum.MarketCodeNational, enum.OrderTypeTwoCabinVIP):      4,
-		scenarioForecastKey(6, enum.MarketCodeGlobal, enum.OrderTypeMemberCustom):       4,
-		scenarioForecastKey(7, enum.MarketCodeGlobal, enum.OrderTypeBusinessVIP):        5,
-		scenarioForecastKey(8, enum.MarketCodeNational, enum.OrderTypeMemberCustom):     5,
-	}
-	items := make([]service.UpdateOrderForecastControlItem, 0, 8*len(orderScenarioSegments()))
-	for yearNo := 1; yearNo <= 8; yearNo++ {
-		for _, segment := range orderScenarioSegments() {
-			items = append(items, service.UpdateOrderForecastControlItem{
-				YearNo:     yearNo,
-				MarketCode: segment.MarketCode,
-				OrderType:  segment.OrderType,
-				OrderCount: counts[scenarioForecastKey(yearNo, segment.MarketCode, segment.OrderType)],
-			})
-		}
-	}
-	return items
-}
-
-func buildScenarioForecastNarratives() []service.UpdateOrderForecastNarrativeItem {
-	stages := []string{"YEAR_1_3", "YEAR_4_5", "YEAR_6_8"}
-	markets := []string{enum.MarketCodeLocal, enum.MarketCodeRegional, enum.MarketCodeNational, enum.MarketCodeGlobal}
-	items := make([]service.UpdateOrderForecastNarrativeItem, 0, len(stages)*len(markets))
-	for _, stage := range stages {
-		for _, marketCode := range markets {
-			items = append(items, service.UpdateOrderForecastNarrativeItem{
-				ForecastStageCode: stage,
-				MarketCode:        marketCode,
-				Content:           fmt.Sprintf("I4-07测试预测：%s %s", stage, scenarioMarketName(marketCode)),
-			})
-		}
-	}
-	return items
-}
-
-func buildScenarioControlConfigItems(yearNo int) []service.UpdateOrderControlConfigItem {
-	items := make([]service.UpdateOrderControlConfigItem, 0, len(orderScenarioSegments()))
-	for index, segment := range orderScenarioSegments() {
-		items = append(items, service.UpdateOrderControlConfigItem{
-			MarketCode:        segment.MarketCode,
-			OrderType:         segment.OrderType,
-			ReleaseSequenceNo: index + 1,
-		})
-	}
-	return items
-}
-
-func orderScenarioSegments() []orderScenarioSegment {
-	markets := []string{enum.MarketCodeLocal, enum.MarketCodeRegional, enum.MarketCodeNational, enum.MarketCodeGlobal}
-	orderTypes := []string{enum.OrderTypeAgencyInspection, enum.OrderTypeTwoCabinVIP, enum.OrderTypeBusinessVIP, enum.OrderTypeMemberCustom}
-	segments := make([]orderScenarioSegment, 0, len(markets)*len(orderTypes))
-	for _, marketCode := range markets {
-		for _, orderType := range orderTypes {
-			segments = append(segments, orderScenarioSegment{MarketCode: marketCode, OrderType: orderType})
-		}
-	}
-	return segments
-}
-
-func findConfirmedOrderBatch(ctx context.Context, tx *gorm.DB, yearNo int) (*entity.OrderGenerationBatch, error) {
-	var item entity.OrderGenerationBatch
-	if err := tx.WithContext(ctx).
-		Where("year_no = ? AND batch_status = ?", yearNo, enum.OrderGenerationBatchStatusConfirmed).
-		Order("id DESC").
-		First(&item).Error; err != nil {
-		return nil, fmt.Errorf("load confirmed scenario order batch: %w", err)
-	}
-	return &item, nil
-}
-
 func buildScenarioReportJSON() ([]byte, []byte, error) {
 	manual := payload.ReportManualPayload{
 		WorkInProgress:               float64Ptr(6),
@@ -625,25 +468,6 @@ func marshalScenarioJSON(value any) ([]byte, error) {
 		return nil, fmt.Errorf("marshal scenario json: %w", err)
 	}
 	return raw, nil
-}
-
-func scenarioForecastKey(yearNo int, marketCode string, orderType string) string {
-	return fmt.Sprintf("%d|%s|%s", yearNo, marketCode, orderType)
-}
-
-func scenarioMarketName(marketCode string) string {
-	switch marketCode {
-	case enum.MarketCodeLocal:
-		return "本地市场"
-	case enum.MarketCodeRegional:
-		return "区域市场"
-	case enum.MarketCodeNational:
-		return "全国市场"
-	case enum.MarketCodeGlobal:
-		return "全球市场"
-	default:
-		return marketCode
-	}
 }
 
 func float64Ptr(value float64) *float64 {

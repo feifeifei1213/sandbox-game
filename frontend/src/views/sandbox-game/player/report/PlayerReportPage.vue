@@ -105,8 +105,14 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import ReportSheet from '@/components/sandbox-game/player/ReportSheet.vue'
 import ReportSidebar from '@/components/sandbox-game/player/ReportSidebar.vue'
-import { resolveReportLabels, resolveReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
+import {
+  applyDictionaryToReportLabels,
+  applyDictionaryToReportRequiredFieldLabels,
+  resolveReportLabels,
+  resolveReportRequiredFieldLabels,
+} from '@/configs/sandbox-game-service-labels'
 import { useAuthStore } from '@/stores/auth'
+import { useDictionaryStore } from '@/stores/dictionary'
 import { formatBusinessStatus, formatReportStatus, formatYearStatus } from '@/utils/sandbox-game-display'
 import { usePlayerReportStore } from '@/stores/player-report'
 import type { PageMessage } from '@/stores/player-report'
@@ -128,6 +134,7 @@ const route = useRoute()
 const router = useRouter()
 const store = usePlayerReportStore()
 const authStore = useAuthStore()
+const dictionaryStore = useDictionaryStore()
 const {
   currentConfig,
   yearTabs,
@@ -185,6 +192,7 @@ const previewConfig = computed<CurrentGameConfigResult>(() => ({
   reportTemplateVersion: 'VIP_REPORT_TEMPLATE_V1',
   orderTemplateVersion: 'VIP_ORDER_TEMPLATE_V1',
   processRuleVersion: 'COMMON_PROCESS_V1',
+  dictionaryRevision: 0,
   demoYearEnabled: true,
 }))
 const previewYearTabs = computed<YearTabItem[]>(() => {
@@ -252,7 +260,9 @@ const previewBalanceGap = computed(
   () => previewComputedPayloadLocal.value.reportTotalAssets - previewComputedPayloadLocal.value.reportTotalLiabilityEquity,
 )
 const previewBalancePassed = computed(() => Math.abs(previewBalanceGap.value) <= balanceTolerance)
-const previewRequiredFieldLabels = computed(() => resolveReportRequiredFieldLabels(previewConfig.value.editionCode))
+const previewRequiredFieldLabels = computed(() =>
+  applyDictionaryToReportRequiredFieldLabels(resolveReportRequiredFieldLabels(previewConfig.value.editionCode), dictionaryStore.displayName),
+)
 const previewMissingFields = computed(() => {
   const missing: string[] = []
   if (previewDraftManualPayload.value.workInProgress === null) {
@@ -317,7 +327,9 @@ const activePageMessage = computed(() => (previewMode.value ? previewPageMessage
 const activeDirty = computed(() => (previewMode.value ? previewDirty.value : dirty.value))
 const activeSaving = computed(() => (previewMode.value ? previewSaving.value : saving.value))
 const activeSubmitting = computed(() => (previewMode.value ? previewSubmitting.value : submitting.value))
-const activeReportLabels = computed(() => resolveReportLabels(activeConfig.value?.editionCode))
+const activeReportLabels = computed(() =>
+  applyDictionaryToReportLabels(resolveReportLabels(activeConfig.value?.editionCode), dictionaryStore.displayName),
+)
 
 onMounted(async () => {
   if (previewMode.value) {
@@ -329,7 +341,11 @@ onMounted(async () => {
   }
 
   try {
-    await store.bootstrap(readRouteYear())
+    await Promise.all([
+      store.bootstrap(readRouteYear()),
+      dictionaryStore.loadCurrent(null, { silent: true }),
+    ])
+    dictionaryStore.startSilentSync()
     initialized = true
     if (selectedYear.value !== readRouteYear()) {
       syncRouteYear(selectedYear.value)
@@ -377,6 +393,7 @@ onBeforeUnmount(() => {
   if (autoSaveTimer) {
     window.clearInterval(autoSaveTimer)
   }
+  dictionaryStore.stopSilentSync()
 })
 
 function readRouteYear() {

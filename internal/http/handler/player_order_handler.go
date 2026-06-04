@@ -124,6 +124,7 @@ func (h *PlayerOrderHandler) SelectOrder(c *gin.Context) {
 		MarketCode:   req.MarketCode,
 		OrderType:    req.OrderType,
 		OrderID:      *req.OrderID,
+		OperatorID:   identity.UserID,
 		OperatorName: identity.Username,
 	})
 	if err != nil {
@@ -152,6 +153,7 @@ func (h *PlayerOrderHandler) PassSegment(c *gin.Context) {
 		YearNo:       *req.YearNo,
 		MarketCode:   req.MarketCode,
 		OrderType:    req.OrderType,
+		OperatorID:   identity.UserID,
 		OperatorName: identity.Username,
 	})
 	if err != nil {

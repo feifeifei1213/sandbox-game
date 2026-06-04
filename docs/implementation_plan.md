@@ -21,11 +21,11 @@
 ## 开发执行层任务总览
 
 - 总任务数：`46`
-- 已完成：`39`
+- 已完成：`46`
 - 部分完成：`2`
-- 未开始：`5`
+- 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I7-02 已完成，下一步进入 I7-03 自动快照生成服务`
+- 当前状态：`I8-02 ~ I8-08 已完成，下一步进入赛前配置中心与业务显示字典人工联调验收`
 
 ---
 
@@ -523,10 +523,25 @@
 | I7-06 | 接入年度控制阻断、玩家提示与汇总待重提展示 | P0 | 已完成 | `I7-04`、`I7-05` | `internal/service/admin_control_query_service.go`、`internal/service/admin_summary_query_service.go`、玩家经营/财报视图、汇总页 | 存在回退补提 / 待重提小组时管理员不能开放下一年；玩家端提示被回退到的年份阶段；汇总页对失效结果显示 `待重提` 且不计入排名 | 已通过 `go test ./...` 与 `npm run build` |
 | I7-07 | 回归测试与人工验收清单 | P0 | 已完成 | `I7-02` ~ `I7-06` | `docs/rollback_module_acceptance_checklist.md`、服务层与前端构建验证 | 覆盖本年退回重提、跨年单组快照恢复、订单不释放、奖惩失效、汇总待重提、破产恢复、开放下一年阻断等关键场景 | 已补人工验收清单 |
 
+### 9.10 I8：赛前配置中心与业务显示字典
+
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I8-01 | 明确赛前配置中心与业务显示字典正式口径 | P0 | 已完成 | 用户 2026-06-03 确认、`I5` 版本包、`I6` 整数输入、`I7` 回退模块 | `docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/api_design.md`、`docs/database_design.md`、`docs/excel_field_mapping.md`、`docs/implementation_plan.md` | 已明确版本包负责字段结构/公式/流程，业务显示字典只改显示名；赛前配置中心采用向导式流程，初始化后只读展示并支持解锁修改显示名称；字典方案可复用，当前比赛使用字典快照；字段名修改静默同步，不影响玩家草稿、滚动和输入状态；公式编辑、Excel 抽公式、流程规则编辑、新增/删除市场或订单类型均不纳入本轮 | 本轮只做文档沉淀，不进入代码实现 |
+| I8-02 | 建立字典方案、当前比赛字典快照与修改日志模型 | P0 | 已完成 | `I8-01` | `migrations/mysql/0012_dictionary.sql`、`internal/model/entity/dictionary.go`、`internal/repository/dictionary_repository.go`、`internal/model/entity/game_config.go`、`internal/repository/game_config_repository.go`、`cmd/dbtool/main.go` | 已新增字典方案、方案明细、当前比赛字典快照、修改日志和 `sg_game_config.dictionary_revision`；支持当前比赛快照替换、方案明细替换、revision 更新与日志分页；未改变字段模板、公式或流程表结构 | 已通过 `go test ./...` |
+| I8-03 | 实现业务显示字典后端接口 | P0 | 已完成 | `I8-02` | `internal/service/admin_dictionary_service.go`、`internal/service/dictionary_defaults.go`、`internal/http/handler/admin_dictionary_handler.go`、`internal/http/dto/admin_dictionary_dto.go`、`internal/app/router.go`、`internal/service/admin_control_command_service.go` | 已实现当前字典查询、方案列表、方案明细、保存/删除方案、更新当前比赛、应用方案、恢复默认、日志分页、revision 查询；初始化时写入当前比赛字典快照；跨版本方案应用会被拒绝 | 已通过 `go test ./...` |
+| I8-04 | 改造赛前配置页面为向导式配置中心 | P0 | 已完成 | `I8-03`、现有 `admin/setup`、`admin/baseline` | `frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue`、`frontend/src/api/sandbox-game/admin-control.ts`、`frontend/src/api/sandbox-game/admin-dictionary.ts`、`frontend/src/types/sandbox-game-admin.ts` | 赛前配置页已集中展示基础信息、版本包选择、字典方案编辑、初始基线入口和确认初始化；支持保存、更新、删除、选择字典方案；初始化时提交最终字典快照 | 已通过 `frontend/npm.cmd run build` |
+| I8-05 | 实现初始化后当前比赛配置与字典维护页 | P1 | 已完成 | `I8-03`、`I8-04` | `frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue`、`frontend/src/stores/dictionary.ts`、`docs/dictionary_module_acceptance_checklist.md` | 初始化后赛前配置页切为当前比赛配置视图，展示版本、公式、流程、字段模板、当前显示名称和修改日志；支持解锁修改当前比赛显示名称、应用方案、恢复默认、另存为方案；最终年份仍在年度控制页维护 | 已通过 `frontend/npm.cmd run build` |
+| I8-06 | 玩家端和管理员端页面接入当前比赛字典显示名 | P0 | 已完成 | `I8-03`、`I8-05` | `frontend/src/stores/dictionary.ts`、`frontend/src/configs/sandbox-game-service-labels.ts`、玩家经营/财报/订单页、管理员初始基线/订单/组数据页 | 玩家经营页、财报页、订单页、管理员初始基线页、订单管理页、组数据只读经营/财报视图已接入当前比赛字典显示名；市场和订单类型按字典显示；系统状态、按钮、菜单、错误提示和自由文本不做字典替换 | 本轮补齐 `frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue` 字典接入；已通过 `frontend/npm.cmd run build` |
+| I8-07 | 实现字典 revision 静默同步 | P0 | 已完成 | `I8-03`、`I8-06` | `frontend/src/stores/dictionary.ts`、玩家经营/财报/订单页、管理员初始基线/订单/组数据页 | 前端字典 store 已按 `dictionaryRevision` 轻量检查并静默拉取新名称；页面只更新名称映射，不重新拉经营/财报/订单业务数据，不清空草稿、不改变输入状态、不滚动到顶部、不弹窗打断玩家 | 本轮补齐管理员组数据页静默同步；已通过 `frontend/npm.cmd run build` |
+| I8-08 | 回归测试与人工验收清单 | P0 | 已完成 | `I8-02` ~ `I8-07` | `internal/service/admin_dictionary_service_integration_test.go`、`docs/dictionary_module_acceptance_checklist.md`、前端构建验证 | 已覆盖字典方案保存、读取、编辑、删除，初始化生成当前比赛快照，初始化后修改当前字典并自增 revision，应用方案、恢复默认、日志记录、跨版本拒绝；已补人工验收清单，覆盖玩家端静默同步和长名称展示 | 已通过 `go test ./...` 与 `frontend/npm.cmd run build` |
+
 ### 12.1 本轮新增记录
 
 | 日期 | 记录 |
 |---|---|
+| 2026-06-04 | 任务状态：✅ 已完成；落点：`migrations/mysql/0012_dictionary.sql`、`internal/service/admin_dictionary_service.go`、`internal/service/dictionary_defaults.go`、`internal/http/handler/admin_dictionary_handler.go`、`internal/http/dto/admin_dictionary_dto.go`、`internal/model/entity/dictionary.go`、`internal/repository/dictionary_repository.go`、`frontend/src/stores/dictionary.ts`、`frontend/src/api/sandbox-game/admin-dictionary.ts`、`frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue`、`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`docs/dictionary_module_acceptance_checklist.md`、`docs/implementation_plan.md`；偏差说明：本轮核对发现 `I8-02 ~ I8-08` 主体代码已在仓库中落地但计划表仍停留在未开始；本轮补齐管理员组数据页只读经营/财报视图的当前比赛字典显示名与 revision 静默同步接入，并将 I8 状态按实际完成情况回写。验证：已通过 `$env:GOCACHE=(Resolve-Path '.go-build-cache').Path; go test ./...` 与 `frontend/npm.cmd run build`。下一步：按 `docs/dictionary_module_acceptance_checklist.md` 做页面人工联调验收。 |
+| 2026-06-03 | 任务状态：✅ 已完成；落点：`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/api_design.md`、`docs/database_design.md`、`docs/excel_field_mapping.md`、`docs/implementation_plan.md`；偏差说明：本轮仅按用户要求把 `I8 赛前配置中心与业务显示字典` 写回文档，不进入代码实现。已确认：版本包负责字段结构、公式版本和流程规则；业务显示字典只改显示名，不改字段含义、公式、数据或流程；赛前配置集中承载小组数量、最终年份、版本包、字典方案、初始基线入口和确认初始化；初始化后可解锁修改当前比赛显示名称、应用同版本包字典方案、恢复默认并留日志；玩家端和管理员端静默同步名称变化，不影响草稿、输入状态或页面滚动。明确不做：管理员编辑公式、上传 Excel 自动抽公式、编辑流程规则、新增/删除市场或订单类型、调整字段结构、公式参数编辑、多场比赛历史归档。下一步：用户确认后可从 `I8-02` 建表与后端字典模型开始实现。 |
 | 2026-03-31 | 正式确认异常解锁采用“方案 2”：管理员必须选择 `OPERATING / REPORT`；当目标为 `OPERATING` 时，还需选择 `Q1 / Q2 / Q3 / Q4 / YEAR_END`。 |
 | 2026-03-31 | 正式确认经营页回退后的规则：后续经营阶段与财报结果失效，但原值不清空，统一保留为 `失效草稿`，并在重新提交后重新生效。 |
 | 2026-03-31 | `I1-01` 已落地：后端异常解锁接口已支持 `OPERATING / REPORT` 与 `targetStageCode`，管理端组数据页已接入目标类型 / 阶段选择，并完成 `go test ./...` 与 `npm run build` 验证。 |

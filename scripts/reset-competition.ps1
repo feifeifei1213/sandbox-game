@@ -25,7 +25,7 @@ try {
         }
     }
     else {
-        go run .\cmd\dbtool\main.go -config $resolvedConfigPath -action reset-competition
+        go run .\cmd\dbtool -config $resolvedConfigPath -action reset-competition
         if ($LASTEXITCODE -ne 0) {
             throw "go run reset-competition failed with exit code $LASTEXITCODE"
         }

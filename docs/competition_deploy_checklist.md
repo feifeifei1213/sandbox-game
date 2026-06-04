@@ -9,17 +9,23 @@
 本清单适用于以下目标：
 
 - 在一台 `Windows` 比赛主机上部署首版正式比赛系统
-- 使用 `Nginx + Go + MySQL` 提供统一访问地址
+- 使用 `Go + MySQL` 提供统一访问地址，由 Go 服务同时提供前端静态页面与业务 API
 - 正式比赛库只保留 `admin + sg_game_config` 初始化结果
 - 由管理员首次登录后，在系统内完成“赛前配置页”初始化小组数量
 
-本清单默认你已经拿到了当前仓库，且比赛主机可以运行：
+本清单默认你已经拿到了当前仓库。
+
+如果要在开发机现场打包，需要：
 
 - `PowerShell`
 - `Go`
 - `Node.js / npm`
 - `MySQL`
-- `Nginx`
+
+如果比赛主机直接使用已经构建好的正式版上线包，则比赛主机只需要：
+
+- `PowerShell`
+- `MySQL`
 
 ---
 
@@ -27,9 +33,8 @@
 
 部署完成后，现场应达到以下状态：
 
-- 玩家和管理员统一访问一个地址，例如 `http://192.168.8.200`
-- 前端页面由 `Nginx` 提供
-- `/api/` 请求由 `Nginx` 反向代理到本机 `127.0.0.1:8080`
+- 玩家和管理员统一访问一个地址，例如 `http://192.168.8.200:8080/sandbox-game/login`
+- 前端页面与 `/api/` 都由同一个 Go 服务直接提供
 - 正式比赛库已初始化，但尚未预建玩家组
 - 管理员首次登录后进入 `赛前配置页`
 - 管理员在页面中配置小组数量并点击“初始化比赛”后，才真正生成 `group01 ~ groupNN`
@@ -43,9 +48,8 @@
 - 比赛主机固定 IP 已确认，例如 `192.168.8.200`
 - 比赛主机和所有参赛电脑在同一局域网
 - MySQL 已安装并可用
-- Nginx 已安装并可用
-- 比赛主机已安装 `Go` 和 `Node.js`
-- 防火墙已放行对外访问端口，建议 `80`
+- 如果要在比赛主机本机打包，主机还需安装 `Go` 和 `Node.js`
+- 防火墙已放行对外访问端口，建议与 `competition.yaml` 中 `server.port` 保持一致
 - 已准备一个正式比赛数据库，例如 `sandbox_game_competition`
 - 已准备数据库账号，具备该库的建表和写入权限
 - 已明确正式比赛不复用开发库、不复用演练库
@@ -71,7 +75,8 @@ auth:
 
 - `mysql.dsn` 指向正式比赛库
 - `tokenSecret` 不再保留 `CHANGE_ME_TO_A_RANDOM_SECRET`
-- `server.port` 保持 `8080` 即可，供 `Nginx` 反向代理
+- `server.port` 就是正式对外访问端口，例如 `8080`
+- `frontend.distDir` 保持 `frontend/dist` 即可，由后端直接读取打包后的前端静态文件
 
 ---
 
@@ -98,7 +103,6 @@ Set-Location 'E:\project\sand box game'
 - `scripts\init-competition.ps1`
 - `scripts\reset-competition.ps1`
 - `scripts\start-competition.ps1`
-- `nginx\sandbox-game.competition.conf`
 - `docs\competition_launch_runbook.md`
 - `docs\competition_deploy_checklist.md`
 
@@ -156,54 +160,25 @@ curl.exe -s -i "http://127.0.0.1:8080/healthz"
 
 ---
 
-## 8. 第五步：配置 Nginx
+## 8. 第五步：现场联通验证
 
-参考样例文件 `scripts/nginx/sandbox-game.competition.conf`。
+当前正式版不再需要单独配置 `Nginx`。
 
-你至少要改一项：
+前端登录页与 `/api/` 接口都由 `sandbox-game-server.exe` 直接提供，因此只要后端服务启动成功，就可以直接访问：
 
-- 把 `root` 改成比赛主机上 `frontend/dist` 的真实绝对路径
-
-示例：
-
-```nginx
-server {
-    listen       80;
-    server_name  _;
-
-    root   E:/deploy/sandbox-game-competition/frontend/dist;
-    index  index.html;
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:8080;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-应用配置后，重载 `Nginx`。
-
-如果你使用的是 Windows 下的 `Nginx`，常见命令形态如下：
-
-```powershell
-cd 'E:\nginx'
-.\nginx.exe -s reload
-```
+- `http://127.0.0.1:8080/sandbox-game/login`
 
 ---
 
-## 9. 第六步：现场联通验证
+## 9. 第六步：现场联通验证补充
 
 先在比赛主机浏览器打开：
 
-- `http://127.0.0.1`
+- `http://127.0.0.1:8080/sandbox-game/login`
 
 再在管理员电脑和至少一台玩家电脑打开：
 
-- `http://比赛主机IP`
+- `http://比赛主机IP:8080/sandbox-game/login`
 
 必须逐项确认：
 
@@ -225,7 +200,7 @@ cd 'E:\nginx'
 
 1. 管理员完成赛前初始化
 2. 主持人确认小组数量正确
-3. 技术支持确认 `http://比赛主机IP` 可从多台电脑访问
+3. 技术支持确认 `http://比赛主机IP:8080/sandbox-game/login` 可从多台电脑访问
 4. 导出或截图保存一份当前数据库备份记录
 5. 再统一向玩家发放访问地址和账号
 
@@ -234,7 +209,7 @@ cd 'E:\nginx'
 - `http://127.0.0.1:5173`
 - `http://localhost:5173`
 - 开发者电脑临时 IP
-- 后端裸地址 `http://比赛主机IP:8080`
+- 健康检查地址或其他非登录页入口
 
 ---
 
@@ -244,10 +219,11 @@ cd 'E:\nginx'
 
 按顺序检查：
 
-1. `Nginx` 是否已启动
-2. `Nginx` 配置中的 `root` 是否指向正确的 `frontend/dist`
-3. 比赛主机防火墙是否放行 `80`
-4. 玩家电脑和比赛主机是否在同一局域网
+1. `sandbox-game-server.exe` 是否已启动
+2. `frontend/dist` 是否已随正式包一并拷贝
+3. `configs/competition.yaml` 中 `frontend.distDir` 是否仍指向 `frontend/dist`
+4. 比赛主机防火墙是否放行 `server.port`
+5. 玩家电脑和比赛主机是否在同一局域网
 
 ### 11.2 页面能打开，但登录失败或接口报错
 
@@ -256,7 +232,7 @@ cd 'E:\nginx'
 1. 后端服务是否仍在运行
 2. `http://127.0.0.1:8080/healthz` 是否正常
 3. `configs/competition.yaml` 中数据库连接是否正确
-4. `Nginx` 的 `/api/` 是否确实代理到 `127.0.0.1:8080`
+4. `configs/competition.yaml` 中 `server.port` 是否与当前访问地址一致
 
 ### 11.3 管理员登录后没有进入赛前配置页
 
@@ -296,14 +272,14 @@ Set-Location 'E:\deploy\sandbox-game-competition'
 2. 执行 `.\scripts\build-competition-package.ps1`
 3. 把上线包复制到比赛主机
 4. 执行 `.\scripts\init-competition.ps1`
-5. 执行 `.\scripts\start-competition.ps1` 并配置 `Nginx`
+5. 执行 `.\scripts\start-competition.ps1`
 6. 管理员登录后先完成 `赛前配置页` 初始化，再给玩家发网址
 
 ---
 
 ## 13. 角色分工建议
 
-- 技术支持：改配置、打包、启动后端、配 `Nginx`、做连通性验证
+- 技术支持：改配置、打包、启动后端、做连通性验证
 - 主持人 / 管理员：登录系统、配置小组数量、初始化比赛、发账号
 - 参赛玩家：只访问统一网址，不直接接触数据库、脚本和后端端口
 

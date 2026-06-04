@@ -104,20 +104,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 
-import { resolveBaselineLabels } from '@/configs/sandbox-game-service-labels'
+import { applyDictionaryToBaselineLabels, resolveBaselineLabels } from '@/configs/sandbox-game-service-labels'
 import { useAdminBaselineStore } from '@/stores/admin-baseline'
 import { useAdminShellStore } from '@/stores/admin-shell'
+import { useDictionaryStore } from '@/stores/dictionary'
 import type { BaselinePayload } from '@/types/sandbox-game-admin'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
 const baselineStore = useAdminBaselineStore()
+const dictionaryStore = useDictionaryStore()
 const { view, draftPayload, loading, submitting, pageMessage } = storeToRefs(baselineStore)
 
-const baselineLabels = computed(() => resolveBaselineLabels(shellStore.config?.editionCode ?? shellStore.setupStatus?.editionCode))
+const baselineLabels = computed(() =>
+  applyDictionaryToBaselineLabels(
+    resolveBaselineLabels(shellStore.config?.editionCode ?? shellStore.setupStatus?.editionCode),
+    dictionaryStore.displayName,
+  ),
+)
 const fieldDefs = computed<Array<{
   key: keyof BaselinePayload
   section: string
@@ -151,10 +158,18 @@ onMounted(async () => {
     if (!shellStore.config) {
       await shellStore.bootstrap()
     }
-    await baselineStore.bootstrap()
+    await Promise.all([
+      baselineStore.bootstrap(),
+      dictionaryStore.loadCurrent(shellStore.config?.editionCode ?? shellStore.setupStatus?.editionCode, { silent: true }),
+    ])
+    dictionaryStore.startSilentSync()
   } catch {
     // 页面消息由 store 统一处理。
   }
+})
+
+onUnmounted(() => {
+  dictionaryStore.stopSilentSync()
 })
 
 async function handleRefresh() {

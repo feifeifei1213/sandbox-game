@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
+import { useDictionaryStore } from '@/stores/dictionary'
 import {
   deliverPlayerOrders,
   getPlayerMarketForecast,
@@ -43,6 +44,7 @@ export const PLAYER_ORDER_TYPES: Array<{ code: OrderTypeCode; name: string }> = 
 ]
 
 export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
+  const dictionaryStore = useDictionaryStore()
   const currentConfig = ref<CurrentGameConfigResult | null>(null)
   const yearTabs = ref<YearTabItem[]>([])
   const currentView = ref<PlayerOrderYearView | null>(null)
@@ -126,7 +128,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   }
 
   async function submitInvestments() {
-    const validation = validateInvestmentDraft(currentView.value, investmentDraft)
+    const validation = validateInvestmentDraft(currentView.value, investmentDraft, dictionaryStore.orderTypeName)
     investmentErrors.value = validation.errors
     if (validation.message) {
       pageMessage.value = {
@@ -351,7 +353,11 @@ function buildInvestmentPayload(draft: Record<string, number | null>, view: Play
   )
 }
 
-function validateInvestmentDraft(view: PlayerOrderYearView | null, draft: Record<string, number | null>) {
+function validateInvestmentDraft(
+  view: PlayerOrderYearView | null,
+  draft: Record<string, number | null>,
+  resolveOrderTypeName: (code: string, fallback: string) => string,
+) {
   const errors: Record<string, string> = {}
   if (!view?.markets) {
     return { errors, message: '当前没有可提交的市场投入数据。' }
@@ -363,11 +369,11 @@ function validateInvestmentDraft(view: PlayerOrderYearView | null, draft: Record
       const rawValue = market.marketEnabled ? draft[key] : 0
       const value = Number(rawValue ?? 0)
       if (!Number.isFinite(value) || value < 0) {
-        errors[key] = `${market.marketName} ${orderType.name} 投入必须为非负整数`
+        errors[key] = `${market.marketName} ${resolveOrderTypeName(orderType.code, orderType.name)} 投入必须为非负整数`
         continue
       }
       if (!Number.isInteger(value)) {
-        errors[key] = `${market.marketName} ${orderType.name} 投入必须为整数`
+        errors[key] = `${market.marketName} ${resolveOrderTypeName(orderType.code, orderType.name)} 投入必须为整数`
         continue
       }
       marketTotal += value

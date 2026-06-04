@@ -124,6 +124,7 @@ npm run dev
 - [testing_guide.md](E:\project\sand box game\docs\testing_guide.md)
 - [integration_acceptance_runbook.md](E:\project\sand box game\docs\integration_acceptance_runbook.md)
 - [single_group_rehearsal_runbook.md](E:\project\sand box game\docs\single_group_rehearsal_runbook.md)
+- [test_demo_commands.md](E:\project\sand box game\docs\test_demo_commands.md)
 
 ### 7.5 看比赛上线与现场使用
 
@@ -138,7 +139,6 @@ npm run dev
 - `scripts/reset-competition.ps1`
 - `scripts/start-competition.ps1`
 - `scripts/build-competition-package.ps1`
-- `scripts/nginx/sandbox-game.competition.conf`
 - `docs/competition_deploy_checklist.md`
 
 ### 7.6 看 Excel 规则与对账样例
@@ -155,7 +155,7 @@ npm run dev
 - 单组演练脚本和单组演练库是测试工具，不是正式比赛主流程入口。
 - 正式产品方向已经收口为：管理员端赛前配置比赛，再录入初始基线，再开始比赛。
 - 正式比赛数据库初始化不应直接使用 `0002_seed_data.sql`，而应使用正式比赛专用初始化脚本，仅保留 `admin + sg_game_config`，再由管理员首登后在 `赛前配置页` 初始化比赛。
-- 当前正式版推荐采用 `Nginx + Go + MySQL` 结构：`Nginx` 提供前端静态资源与统一访问地址，Go 提供业务 API。
+- 当前正式版推荐采用 `Go + MySQL` 结构：Go 服务直接提供前端静态资源与业务 API，不再依赖单独的 `Nginx` 进程。
 - 文档若发生冲突，以最新需求文档、共识清单与实施计划为准。
 
 ## 9. 正式版上线最短路径
@@ -166,7 +166,7 @@ npm run dev
 2. 执行 `scripts/init-competition.ps1`
 3. 执行 `scripts/build-competition-package.ps1`
 4. 在比赛主机启动 `scripts/start-competition.ps1`
-5. 应用 `scripts/nginx/sandbox-game.competition.conf`
+5. 直接访问 `http://比赛主机IP:server.port/sandbox-game/login`
 6. 管理员登录后先完成 `赛前配置页` 初始化，再开始正式比赛
 
 现场如果需要逐条照着执行，请直接使用：

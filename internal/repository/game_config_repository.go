@@ -70,6 +70,17 @@ func (r *GameConfigRepository) UpdateInitialBaselineSubmitted(ctx context.Contex
 		}).Error
 }
 
+func (r *GameConfigRepository) UpdateDictionaryRevision(ctx context.Context, id int64, revision int, operatorName string, updateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.GameConfig{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"dictionary_revision": revision,
+			"updater":             operatorName,
+			"update_time":         updateTime,
+		}).Error
+}
+
 type PrepareGameConfigInitializationCommand struct {
 	EditionCode              string
 	EditionName              string
@@ -79,6 +90,7 @@ type PrepareGameConfigInitializationCommand struct {
 	ReportTemplateVersion    string
 	OrderTemplateVersion     string
 	ProcessRuleVersion       string
+	DictionaryRevision       int
 	OperatorName             string
 	OperateTime              time.Time
 }
@@ -97,6 +109,7 @@ func (r *GameConfigRepository) PrepareForInitialization(ctx context.Context, id 
 			"report_template_version":    cmd.ReportTemplateVersion,
 			"order_template_version":     cmd.OrderTemplateVersion,
 			"process_rule_version":       cmd.ProcessRuleVersion,
+			"dictionary_revision":        cmd.DictionaryRevision,
 			"initial_baseline_submitted": false,
 			"updater":                    cmd.OperatorName,
 			"update_time":                cmd.OperateTime,

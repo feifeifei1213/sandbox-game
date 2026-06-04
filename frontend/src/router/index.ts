@@ -151,9 +151,6 @@ router.beforeEach(async (to) => {
     if (defaultRoute === '/sandbox-game/admin/setup' && to.path !== defaultRoute) {
       return defaultRoute
     }
-    if (defaultRoute !== '/sandbox-game/admin/setup' && to.path === '/sandbox-game/admin/setup') {
-      return defaultRoute
-    }
   }
 
   return true

@@ -82,6 +82,7 @@
           :derived-values="operatingView.derivedValues"
           :period-end-cash="operatingView.periodEndCash"
           :carry-forward="operatingView.carryForward"
+          :labels="activeOperatingLabels"
           @update:model-value="noopOperatingUpdate"
         />
         <ReportSheet
@@ -91,6 +92,7 @@
           :can-edit="false"
           :has-invalid-draft="reportView.hasInvalidDraft"
           :tax-rate-options="reportView.manualFieldOptions.incomeTaxRateOptions"
+          :labels="activeReportLabels"
           @update:model-value="noopReportUpdate"
         />
         <section v-else class="loading-card">当前暂无可展示的数据。</section>
@@ -276,13 +278,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import OperatingSheet from '@/components/sandbox-game/player/OperatingSheet.vue'
 import ReportSheet from '@/components/sandbox-game/player/ReportSheet.vue'
+import {
+  applyDictionaryToOperatingLabels,
+  applyDictionaryToReportLabels,
+  resolveOperatingLabels,
+  resolveReportLabels,
+} from '@/configs/sandbox-game-service-labels'
 import { useAdminGroupDataStore } from '@/stores/admin-group-data'
 import { useAdminShellStore } from '@/stores/admin-shell'
+import { useDictionaryStore } from '@/stores/dictionary'
 import { reportBalanceGap, type OperatingPayload, type ReportManualPayload } from '@/types/sandbox-game'
 import type { AdminGroupDataPageType, UnlockStageCode, UnlockTargetType } from '@/types/sandbox-game-admin'
 import {
@@ -295,6 +304,7 @@ import {
 
 const shellStore = useAdminShellStore()
 const groupDataStore = useAdminGroupDataStore()
+const dictionaryStore = useDictionaryStore()
 const { config } = storeToRefs(shellStore)
 const {
   groups,
@@ -332,6 +342,12 @@ const activeYearStatusText = computed(() => {
   const status = selectedPageType.value === 'operating' ? operatingView.value?.yearStatus : reportView.value?.yearStatus
   return formatYearStatus(status)
 })
+const activeOperatingLabels = computed(() =>
+  applyDictionaryToOperatingLabels(resolveOperatingLabels(config.value?.editionCode), dictionaryStore.displayName),
+)
+const activeReportLabels = computed(() =>
+  applyDictionaryToReportLabels(resolveReportLabels(config.value?.editionCode), dictionaryStore.displayName),
+)
 
 const unlockStageOptions: UnlockStageCode[] = ['Q1', 'Q2', 'Q3', 'Q4', 'YEAR_END']
 
@@ -348,10 +364,18 @@ onMounted(async () => {
     if (!shellStore.config) {
       await shellStore.bootstrap()
     }
-    await groupDataStore.bootstrap(config.value?.finalYear ?? 0, config.value?.currentOpenYear ?? 0)
+    await Promise.all([
+      dictionaryStore.loadCurrent(config.value?.editionCode, { silent: true }),
+      groupDataStore.bootstrap(config.value?.finalYear ?? 0, config.value?.currentOpenYear ?? 0),
+    ])
+    dictionaryStore.startSilentSync()
   } catch {
     // 页面消息由 store 统一处理。
   }
+})
+
+onBeforeUnmount(() => {
+  dictionaryStore.stopSilentSync()
 })
 
 async function handleRefresh() {

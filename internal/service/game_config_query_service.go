@@ -31,6 +31,7 @@ type CurrentGameConfigResult struct {
 	ReportTemplateVersion    string `json:"reportTemplateVersion"`
 	OrderTemplateVersion     string `json:"orderTemplateVersion"`
 	ProcessRuleVersion       string `json:"processRuleVersion"`
+	DictionaryRevision       int    `json:"dictionaryRevision"`
 	DemoYearEnabled          bool   `json:"demoYearEnabled"`
 }
 
@@ -87,6 +88,7 @@ func (s *GameConfigQueryService) GetCurrent(ctx context.Context) (*CurrentGameCo
 		ReportTemplateVersion:    edition.ReportTemplateVersion,
 		OrderTemplateVersion:     edition.OrderTemplateVersion,
 		ProcessRuleVersion:       edition.ProcessRuleVersion,
+		DictionaryRevision:       gameConfig.DictionaryRevision,
 		DemoYearEnabled:          true,
 	}, nil
 }

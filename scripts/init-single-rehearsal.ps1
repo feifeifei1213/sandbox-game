@@ -16,7 +16,7 @@ $env:GOMODCACHE = $goModCache
 
 Push-Location $projectRoot
 try {
-    go run .\cmd\dbtool\main.go -config $resolvedConfigPath -action init-single
+    go run .\cmd\dbtool -config $resolvedConfigPath -action init-single
 }
 finally {
     Pop-Location

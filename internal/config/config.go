@@ -9,11 +9,12 @@ import (
 
 // Config 汇总首版 Go 服务的基础配置。
 type Config struct {
-	App    AppConfig    `mapstructure:"app"`
-	Server ServerConfig `mapstructure:"server"`
-	Log    LogConfig    `mapstructure:"log"`
-	MySQL  MySQLConfig  `mapstructure:"mysql"`
-	Auth   AuthConfig   `mapstructure:"auth"`
+	App      AppConfig      `mapstructure:"app"`
+	Server   ServerConfig   `mapstructure:"server"`
+	Frontend FrontendConfig `mapstructure:"frontend"`
+	Log      LogConfig      `mapstructure:"log"`
+	MySQL    MySQLConfig    `mapstructure:"mysql"`
+	Auth     AuthConfig     `mapstructure:"auth"`
 }
 
 type AppConfig struct {
@@ -27,6 +28,10 @@ type ServerConfig struct {
 	Mode                string `mapstructure:"mode"`
 	ReadTimeoutSeconds  int    `mapstructure:"readTimeoutSeconds"`
 	WriteTimeoutSeconds int    `mapstructure:"writeTimeoutSeconds"`
+}
+
+type FrontendConfig struct {
+	DistDir string `mapstructure:"distDir"`
 }
 
 type LogConfig struct {
@@ -70,6 +75,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("server.readTimeoutSeconds", 10)
 	v.SetDefault("server.writeTimeoutSeconds", 10)
+	v.SetDefault("frontend.distDir", "frontend/dist")
 	v.SetDefault("log.level", "debug")
 	v.SetDefault("mysql.dsn", "root:root@tcp(127.0.0.1:3306)/sandbox_game?charset=utf8mb4&parseTime=True&loc=Local")
 	v.SetDefault("mysql.maxOpenConns", 10)
