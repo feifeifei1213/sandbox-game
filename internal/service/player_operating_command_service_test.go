@@ -477,6 +477,35 @@ func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {
 			t.Fatalf("ensure order market config investment limit column: %v", err)
 		}
 	}
+	ensureIntegrationOrderTemplateColumns(t, db)
+}
+
+func ensureIntegrationOrderTemplateColumns(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	entitiesWithColumns := map[any][]string{
+		&entity.OrderGenerationConfig{}: {"OrderTemplateVersion"},
+		&entity.OrderForecastControl{}:  {"OrderTemplateVersion"},
+		&entity.OrderMarketForecast{}:   {"OrderTemplateVersion"},
+		&entity.OrderMarketConfig{}:     {"OrderTemplateVersion"},
+		&entity.OrderGenerationBatch{}:  {"OrderTemplateVersion"},
+		&entity.OrderPool{}:             {"OrderTemplateVersion", "OrderPayloadJSON"},
+		&entity.MarketBiddingState{}:    {"OrderTemplateVersion"},
+		&entity.GroupMarketBid{}:        {"OrderTemplateVersion"},
+		&entity.MarketSelectionOrder{}:  {"OrderTemplateVersion"},
+		&entity.GroupOrderSelection{}:   {"OrderTemplateVersion"},
+	}
+
+	for item, columns := range entitiesWithColumns {
+		for _, column := range columns {
+			if db.Migrator().HasColumn(item, column) {
+				continue
+			}
+			if err := db.Migrator().AddColumn(item, column); err != nil {
+				t.Fatalf("ensure order template column %s on %T: %v", column, item, err)
+			}
+		}
+	}
 }
 
 func ensureIntegrationRollbackTables(t *testing.T, db *gorm.DB) {

@@ -1,5 +1,5 @@
-export type OrderMarketCode = 'LOCAL' | 'REGIONAL' | 'NATIONAL' | 'GLOBAL'
-export type OrderTypeCode = 'AGENCY_INSPECTION' | 'TWO_CABIN_VIP' | 'BUSINESS_VIP' | 'MEMBER_CUSTOM'
+export type OrderMarketCode = string
+export type OrderTypeCode = string
 export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'VOID'
 export type OrderForecastStageCode = 'YEAR_1_3' | 'YEAR_4_5' | 'YEAR_6_8' | string
 export type OrderSegmentStatus =
@@ -24,6 +24,39 @@ export type OrderSelectionStatus =
   | string
 export type OrderDeliveryStatus = 'SELECTED' | 'DELIVERED' | 'UNFINISHED' | string
 export type OrderDeliveryStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4'
+
+export interface OrderTemplateMarket {
+  code: OrderMarketCode
+  name: string
+  defaultEnabled: boolean
+  sortOrder: number
+}
+
+export interface OrderTemplateOrderType {
+  code: OrderTypeCode
+  name: string
+  sortOrder: number
+}
+
+export interface OrderTemplateField {
+  code: string
+  name: string
+  valueType: string
+  unit?: string
+  order: number
+}
+
+export interface OrderTemplateMeta {
+  templateVersion: string
+  templateName: string
+  formulaVersion: string
+  segmentCount: number
+  maxCardCount: number
+  deliveryEnabled: boolean
+  markets: OrderTemplateMarket[]
+  orderTypes: OrderTemplateOrderType[]
+  fields: OrderTemplateField[]
+}
 
 export interface OrderMarketForecastProduct {
   orderType: OrderTypeCode
@@ -56,6 +89,7 @@ export interface OrderMarketForecastStage {
 
 export interface OrderMarketForecastResult {
   formulaVersion: string
+  orderTemplate: OrderTemplateMeta
   stages: OrderMarketForecastStage[]
 }
 
@@ -70,6 +104,7 @@ export interface PlayerOrderPoolItem {
   poolStatus: OrderPoolStatus
   deliveryStatus?: OrderDeliveryStatus
   deliveredStageCode?: string | null
+  orderPayload?: Record<string, unknown>
 }
 
 export interface PlayerOrderSequenceView {
@@ -120,6 +155,7 @@ export interface PlayerOrderMarketView {
 export interface PlayerOrderYearView {
   groupId: number
   yearNo: number
+  orderTemplate: OrderTemplateMeta
   orderRequired: boolean
   investmentSubmitted: boolean
   canSubmitInvestment: boolean
@@ -238,6 +274,7 @@ export interface AdminOrderSegmentStatus {
 
 export interface AdminMarketSelectionStatus {
   yearNo: number
+  orderTemplate: OrderTemplateMeta
   marketCode: OrderMarketCode
   marketName: string
   marketBidStatus: OrderSegmentStatus | ''

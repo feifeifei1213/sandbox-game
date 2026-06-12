@@ -143,14 +143,16 @@ type OrderMarketForecastStage struct {
 
 type OrderMarketForecastResult struct {
 	FormulaVersion string                     `json:"formulaVersion"`
+	OrderTemplate  OrderTemplateView          `json:"orderTemplate"`
 	Stages         []OrderMarketForecastStage `json:"stages"`
 }
 
 type OrderForecastControlResult struct {
-	Items      []OrderForecastControlItem   `json:"items"`
-	Narratives []OrderForecastNarrativeItem `json:"narratives"`
-	Forecast   OrderMarketForecastResult    `json:"forecast"`
-	YearLocks  []OrderForecastYearLock      `json:"yearLocks"`
+	OrderTemplate OrderTemplateView            `json:"orderTemplate"`
+	Items         []OrderForecastControlItem   `json:"items"`
+	Narratives    []OrderForecastNarrativeItem `json:"narratives"`
+	Forecast      OrderMarketForecastResult    `json:"forecast"`
+	YearLocks     []OrderForecastYearLock      `json:"yearLocks"`
 }
 
 type OrderControlConfigItem struct {
@@ -199,6 +201,7 @@ type OrderControlWarning struct {
 type OrderControlConfigResult struct {
 	YearNo                int                          `json:"yearNo"`
 	FinalYear             int                          `json:"finalYear"`
+	OrderTemplate         OrderTemplateView            `json:"orderTemplate"`
 	LatestBatchID         *int64                       `json:"latestBatchId"`
 	LatestBatchUploadedAt *string                      `json:"latestBatchUploadedAt"`
 	Forecast              OrderMarketForecastResult    `json:"forecast"`
@@ -256,6 +259,7 @@ type UpdateOrderForecastNarrativeItem struct {
 }
 
 type UpdateOrderForecastControlResult struct {
+	OrderTemplate    OrderTemplateView            `json:"orderTemplate"`
 	Items            []OrderForecastControlItem   `json:"items"`
 	Narratives       []OrderForecastNarrativeItem `json:"narratives"`
 	Forecast         OrderMarketForecastResult    `json:"forecast"`
@@ -326,31 +330,33 @@ type ConfirmOrderPoolResult struct {
 }
 
 type OrderPoolItem struct {
-	OrderID         int64   `json:"orderId"`
-	BusinessOrderNo string  `json:"businessOrderNo"`
-	CardSequenceNo  int     `json:"cardSequenceNo"`
-	YearNo          int     `json:"yearNo"`
-	MarketCode      string  `json:"marketCode"`
-	MarketName      string  `json:"marketName"`
-	OrderType       string  `json:"orderType"`
-	OrderTypeName   string  `json:"orderTypeName"`
-	OrderAmount     float64 `json:"orderAmount"`
-	OrderQuantity   float64 `json:"orderQuantity"`
-	UnitPrice       float64 `json:"unitPrice"`
-	AccountTerm     int     `json:"accountTerm"`
-	PoolStatus      string  `json:"poolStatus"`
-	SelectedGroupID *int64  `json:"selectedGroupId"`
-	SourceSheetName string  `json:"sourceSheetName"`
-	SourceCell      string  `json:"sourceCell"`
+	OrderID         int64          `json:"orderId"`
+	BusinessOrderNo string         `json:"businessOrderNo"`
+	CardSequenceNo  int            `json:"cardSequenceNo"`
+	YearNo          int            `json:"yearNo"`
+	MarketCode      string         `json:"marketCode"`
+	MarketName      string         `json:"marketName"`
+	OrderType       string         `json:"orderType"`
+	OrderTypeName   string         `json:"orderTypeName"`
+	OrderAmount     float64        `json:"orderAmount"`
+	OrderQuantity   float64        `json:"orderQuantity"`
+	UnitPrice       float64        `json:"unitPrice"`
+	AccountTerm     int            `json:"accountTerm"`
+	PoolStatus      string         `json:"poolStatus"`
+	SelectedGroupID *int64         `json:"selectedGroupId"`
+	SourceSheetName string         `json:"sourceSheetName"`
+	SourceCell      string         `json:"sourceCell"`
+	OrderPayload    map[string]any `json:"orderPayload,omitempty"`
 }
 
 type OrderPoolResult struct {
-	YearNo        int             `json:"yearNo"`
-	MarketCode    string          `json:"marketCode"`
-	MarketName    string          `json:"marketName"`
-	OrderType     string          `json:"orderType"`
-	OrderTypeName string          `json:"orderTypeName"`
-	List          []OrderPoolItem `json:"list"`
+	YearNo        int               `json:"yearNo"`
+	OrderTemplate OrderTemplateView `json:"orderTemplate"`
+	MarketCode    string            `json:"marketCode"`
+	MarketName    string            `json:"marketName"`
+	OrderType     string            `json:"orderType"`
+	OrderTypeName string            `json:"orderTypeName"`
+	List          []OrderPoolItem   `json:"list"`
 }
 
 type AdminOrderQueryService struct {
@@ -396,27 +402,38 @@ func NewAdminOrderQueryService(
 }
 
 func (s *AdminOrderQueryService) GetForecastControl(ctx context.Context) (*OrderForecastControlResult, error) {
+	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+	if err != nil {
+		return nil, err
+	}
 	items, err := s.forecastRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list order forecast control: %w", err)
 	}
+	items = filterForecastControlsByTemplate(items, template)
 	forecastRows, err := s.marketForecastRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list market forecast: %w", err)
 	}
+	forecastRows = filterMarketForecastsByTemplate(forecastRows, template)
 	if len(items) == 0 {
-		items = defaultForecastControlEntities("system", time.Now())
+		items = defaultForecastControlEntitiesForTemplate("system", time.Now(), template)
 	}
 	yearLocks, err := s.buildForecastYearLocks(ctx)
 	if err != nil {
 		return nil, err
 	}
-	forecast := buildMarketForecastResult(items, forecastRows)
+	forecast := buildMarketForecastResultForTemplate(items, forecastRows, template)
 	return &OrderForecastControlResult{
-		Items:      buildOrderForecastControlItems(items),
-		Narratives: buildOrderForecastNarratives(forecastRows),
-		Forecast:   forecast,
-		YearLocks:  yearLocks,
+		OrderTemplate: BuildOrderTemplateView(template),
+		Items:         buildOrderForecastControlItemsForTemplate(items, template),
+		Narratives:    buildOrderForecastNarrativesForTemplate(forecastRows, template),
+		Forecast:      forecast,
+		YearLocks:     yearLocks,
 	}, nil
 }
 
@@ -428,27 +445,40 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 	if err != nil {
 		return nil, fmt.Errorf("list order configs: %w", err)
 	}
+	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+	if err != nil {
+		return nil, err
+	}
+	configs = filterGenerationConfigsByTemplate(configs, template)
 	marketConfigs, err := s.marketRepo.ListByYear(ctx, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list order market configs: %w", err)
 	}
-	marketConfigMap := buildMarketEnabledMap(marketConfigs)
+	marketConfigs = filterMarketConfigsByTemplate(marketConfigs, template)
+	marketConfigMap := buildMarketEnabledMapForTemplate(marketConfigs, template)
 	var latestBatchID *int64
 	var latestBatchUploadedAt *string
-	sourceCounts := defaultOrderSourceCounts(yearNo)
+	sourceCounts := defaultOrderSourceCountsForTemplate(yearNo, template)
 	forecastControls, err := s.forecastRepo.ListByYear(ctx, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list order forecast control: %w", err)
 	}
-	forecastControlCounts := forecastControlCountMap(yearNo, forecastControls)
+	forecastControls = filterForecastControlsByTemplate(forecastControls, template)
+	forecastControlCounts := forecastControlCountMapForTemplate(yearNo, forecastControls, template)
 	allForecastControls, err := s.forecastRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list all order forecast control: %w", err)
 	}
+	allForecastControls = filterForecastControlsByTemplate(allForecastControls, template)
 	forecastRows, err := s.marketForecastRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list order market forecast: %w", err)
 	}
+	forecastRows = filterMarketForecastsByTemplate(forecastRows, template)
 	latestBatch, batchErr := s.importRepo.FindLatestSuccess(ctx)
 	if batchErr == nil {
 		latestBatchID = &latestBatch.ID
@@ -478,28 +508,25 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 		return nil, fmt.Errorf("list order states: %w", err)
 	}
 
-	items := buildControlConfigItems(yearNo, configs, forecastControlCounts, sourceCounts, poolCounts, marketConfigMap)
+	items := buildControlConfigItemsForTemplate(yearNo, configs, forecastControlCounts, sourceCounts, poolCounts, marketConfigMap, template)
 	groupCount, err := s.groupRepo.CountAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("count groups: %w", err)
 	}
-	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load game config: %w", err)
-	}
 	return &OrderControlConfigResult{
 		YearNo:                yearNo,
 		FinalYear:             gameConfig.FinalYear,
+		OrderTemplate:         BuildOrderTemplateView(template),
 		LatestBatchID:         latestBatchID,
 		LatestBatchUploadedAt: latestBatchUploadedAt,
-		Forecast:              buildMarketForecastResult(mergeForecastControlDefaults(allForecastControls), forecastRows),
+		Forecast:              buildMarketForecastResultForTemplate(mergeForecastControlDefaultsForTemplate(allForecastControls, template), forecastRows, template),
 		GenerationStatus:      resolveOrderGenerationStatus(latestPreview, confirmed, states),
 		LatestPreviewBatch:    buildOrderGenerationBatchSummary(latestPreview),
 		ConfirmedBatch:        buildOrderGenerationBatchSummary(confirmed),
 		CanUpdateConfig:       confirmed == nil && submittedInvestmentCount == 0,
 		CanGeneratePreview:    confirmed == nil,
 		CanConfirmPool:        latestPreview != nil && confirmed == nil,
-		MarketConfigs:         buildOrderMarketConfigItems(yearNo, marketConfigs),
+		MarketConfigs:         buildOrderMarketConfigItemsForTemplate(yearNo, marketConfigs, template),
 		Items:                 items,
 		Warnings:              buildOrderControlWarnings(items, int(groupCount)),
 	}, nil
@@ -517,10 +544,18 @@ func (s *AdminOrderQueryService) GetOrderPool(ctx context.Context, yearNo int, m
 	if orderType == "ALL" {
 		orderType = ""
 	}
-	if marketCode != "" && !enum.IsValidMarketCode(marketCode) {
+	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+	if err != nil {
+		return nil, err
+	}
+	if marketCode != "" && !template.IsValidMarketCode(marketCode) {
 		return nil, ErrAdminOrderConfigInvalid
 	}
-	if orderType != "" && !enum.IsValidOrderType(orderType) {
+	if orderType != "" && !template.IsValidOrderType(orderType) {
 		return nil, ErrAdminOrderConfigInvalid
 	}
 	items, err := s.poolRepo.ListByYearWithOptionalFilters(ctx, yearNo, marketCode, orderType)
@@ -533,39 +568,53 @@ func (s *AdminOrderQueryService) GetOrderPool(ctx context.Context, yearNo int, m
 	}
 	return &OrderPoolResult{
 		YearNo:        yearNo,
+		OrderTemplate: BuildOrderTemplateView(template),
 		MarketCode:    marketCode,
-		MarketName:    marketName(marketCode),
+		MarketName:    template.MarketName(marketCode),
 		OrderType:     orderType,
-		OrderTypeName: orderTypeName(orderType),
+		OrderTypeName: template.OrderTypeName(orderType),
 		List:          resultItems,
 	}, nil
 }
 
 type PlayerOrderForecastQueryService struct {
+	gameConfigRepo     *repository.GameConfigRepository
 	forecastRepo       *repository.OrderForecastControlRepository
 	marketForecastRepo *repository.OrderMarketForecastRepository
 }
 
 func NewPlayerOrderForecastQueryService(
+	gameConfigRepo *repository.GameConfigRepository,
 	forecastRepo *repository.OrderForecastControlRepository,
 	marketForecastRepo *repository.OrderMarketForecastRepository,
 ) *PlayerOrderForecastQueryService {
 	return &PlayerOrderForecastQueryService{
+		gameConfigRepo:     gameConfigRepo,
 		forecastRepo:       forecastRepo,
 		marketForecastRepo: marketForecastRepo,
 	}
 }
 
 func (s *PlayerOrderForecastQueryService) GetMarketForecast(ctx context.Context) (*OrderMarketForecastResult, error) {
+	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+	if err != nil {
+		return nil, err
+	}
 	items, err := s.forecastRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list forecast control: %w", err)
 	}
+	items = filterForecastControlsByTemplate(items, template)
 	forecastRows, err := s.marketForecastRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list market forecast: %w", err)
 	}
-	result := buildMarketForecastResult(mergeForecastControlDefaults(items), forecastRows)
+	forecastRows = filterMarketForecastsByTemplate(forecastRows, template)
+	result := buildMarketForecastResultForTemplate(mergeForecastControlDefaultsForTemplate(items, template), forecastRows, template)
 	return &result, nil
 }
 
@@ -696,9 +745,6 @@ func (s *AdminOrderCommandService) UploadExcel(ctx context.Context, cmd UploadOr
 
 func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cmd UpdateOrderForecastControlCommand) (*UpdateOrderForecastControlResult, error) {
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
-	if err := validateForecastControlCommand(cmd); err != nil {
-		return nil, err
-	}
 	now := time.Now()
 	var result *UpdateOrderForecastControlResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -712,11 +758,19 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 		if err != nil {
 			return fmt.Errorf("load game config: %w", err)
 		}
+		template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+		if err != nil {
+			return err
+		}
+		if err := validateForecastControlCommandForTemplate(cmd, template); err != nil {
+			return err
+		}
 		existingControls, err := forecastRepo.ListAll(ctx)
 		if err != nil {
 			return fmt.Errorf("list existing forecast control: %w", err)
 		}
-		changedYears := changedForecastControlYears(mergeForecastControlDefaults(existingControls), cmd.Items)
+		existingControls = filterForecastControlsByTemplate(existingControls, template)
+		changedYears := changedForecastControlYears(mergeForecastControlDefaultsForTemplate(existingControls, template), cmd.Items)
 		autoPreviewYears := make([]int, 0)
 		for yearNo := range changedYears {
 			if yearNo > gameConfig.FinalYear {
@@ -743,11 +797,12 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 			marketCode := normalizeMarketCode(reqItem.MarketCode)
 			orderType := normalizeOrderType(reqItem.OrderType)
 			items = append(items, entity.OrderForecastControl{
-				YearNo:            yearNo,
-				ForecastStageCode: forecastStageCodeForYear(yearNo),
-				MarketCode:        marketCode,
-				OrderType:         orderType,
-				OrderCount:        reqItem.OrderCount,
+				OrderTemplateVersion: template.TemplateVersion,
+				YearNo:               yearNo,
+				ForecastStageCode:    forecastStageCodeForYear(yearNo),
+				MarketCode:           marketCode,
+				OrderType:            orderType,
+				OrderCount:           reqItem.OrderCount,
 				BaseEntity: entity.BaseEntity{
 					Creator:    operatorName,
 					CreateTime: now,
@@ -764,9 +819,9 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 		if err != nil {
 			return fmt.Errorf("reload forecast control: %w", err)
 		}
-		controlRows = mergeForecastControlDefaults(controlRows)
+		controlRows = mergeForecastControlDefaultsForTemplate(filterForecastControlsByTemplate(controlRows, template), template)
 		narratives := mergeForecastNarratives(existingNarratives, cmd.Narratives)
-		forecastRows, err := buildMarketForecastEntities(controlRows, narratives, operatorName, now)
+		forecastRows, err := buildMarketForecastEntitiesForTemplate(controlRows, narratives, operatorName, now, template)
 		if err != nil {
 			return err
 		}
@@ -777,6 +832,7 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 		if err != nil {
 			return fmt.Errorf("reload market forecast: %w", err)
 		}
+		forecastRows = filterMarketForecastsByTemplate(forecastRows, template)
 		for _, yearNo := range autoPreviewYears {
 			if _, err := generateOrderPreviewInTx(ctx, tx, GenerateOrderPoolCommand{
 				YearNo:       yearNo,
@@ -813,9 +869,10 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 			return err
 		}
 		result = &UpdateOrderForecastControlResult{
-			Items:            buildOrderForecastControlItems(controlRows),
-			Narratives:       buildOrderForecastNarratives(forecastRows),
-			Forecast:         buildMarketForecastResult(controlRows, forecastRows),
+			OrderTemplate:    BuildOrderTemplateView(template),
+			Items:            buildOrderForecastControlItemsForTemplate(controlRows, template),
+			Narratives:       buildOrderForecastNarrativesForTemplate(forecastRows, template),
+			Forecast:         buildMarketForecastResultForTemplate(controlRows, forecastRows, template),
 			YearLocks:        yearLocks,
 			AutoPreviewYears: autoPreviewYears,
 			UpdatedAt:        now.Format(time.RFC3339),
@@ -830,9 +887,6 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 
 func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd UpdateOrderMarketConfigCommand) (*UpdateOrderMarketConfigResult, error) {
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
-	if err := validateMarketConfigCommand(cmd); err != nil {
-		return nil, err
-	}
 
 	var result *UpdateOrderMarketConfigResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -850,6 +904,13 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		gameConfig, err := gameConfigRepo.GetCurrent(ctx)
 		if err != nil {
 			return fmt.Errorf("load game config: %w", err)
+		}
+		template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+		if err != nil {
+			return err
+		}
+		if err := validateMarketConfigCommandForTemplate(cmd, template); err != nil {
+			return err
 		}
 		if cmd.YearNo < 1 || cmd.YearNo > gameConfig.FinalYear {
 			return ErrAdminOrderYearInvalid
@@ -878,6 +939,7 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		items := make([]entity.OrderMarketConfig, 0, len(cmd.Markets))
 		for _, market := range cmd.Markets {
 			items = append(items, entity.OrderMarketConfig{
+				OrderTemplateVersion:  template.TemplateVersion,
 				YearNo:                cmd.YearNo,
 				MarketCode:            normalizeMarketCode(market.MarketCode),
 				MarketEnabled:         market.Enabled,
@@ -908,7 +970,8 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		if err != nil {
 			return fmt.Errorf("reload market configs: %w", err)
 		}
-		marketMap := buildMarketEnabledMap(updatedMarkets)
+		updatedMarkets = filterMarketConfigsByTemplate(updatedMarkets, template)
+		marketMap := buildMarketEnabledMapForTemplate(updatedMarkets, template)
 		configs, err := configRepo.ListByYear(ctx, cmd.YearNo)
 		if err != nil {
 			return fmt.Errorf("reload order configs: %w", err)
@@ -917,8 +980,9 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		if err != nil {
 			return fmt.Errorf("list forecast control: %w", err)
 		}
-		forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
-		sourceCounts := defaultOrderSourceCounts(cmd.YearNo)
+		forecastControls = filterForecastControlsByTemplate(forecastControls, template)
+		forecastCounts := forecastControlCountMapForTemplate(cmd.YearNo, forecastControls, template)
+		sourceCounts := defaultOrderSourceCountsForTemplate(cmd.YearNo, template)
 		if _, err := generateOrderPreviewInTx(ctx, tx, GenerateOrderPoolCommand{
 			YearNo:       cmd.YearNo,
 			Overwrite:    true,
@@ -931,11 +995,12 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		if err != nil {
 			return fmt.Errorf("reload order configs after preview: %w", err)
 		}
-		poolCounts, err := countGeneratedByYearWithRepo(ctx, poolRepo, cmd.YearNo)
+		poolCounts, err := countGeneratedByYearWithRepoForTemplate(ctx, poolRepo, cmd.YearNo, template)
 		if err != nil {
 			return err
 		}
-		viewItems := buildControlConfigItems(cmd.YearNo, configs, forecastCounts, sourceCounts, poolCounts, marketMap)
+		configs = filterGenerationConfigsByTemplate(configs, template)
+		viewItems := buildControlConfigItemsForTemplate(cmd.YearNo, configs, forecastCounts, sourceCounts, poolCounts, marketMap, template)
 		groupCount, err := groupRepo.CountAll(ctx)
 		if err != nil {
 			return fmt.Errorf("count groups: %w", err)
@@ -949,7 +1014,7 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 
 		result = &UpdateOrderMarketConfigResult{
 			YearNo:    cmd.YearNo,
-			Markets:   buildOrderMarketConfigItems(cmd.YearNo, updatedMarkets),
+			Markets:   buildOrderMarketConfigItemsForTemplate(cmd.YearNo, updatedMarkets, template),
 			Items:     viewItems,
 			Warnings:  buildOrderControlWarnings(viewItems, int(groupCount)),
 			UpdatedAt: now.Format(time.RFC3339),
@@ -964,9 +1029,6 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 
 func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd UpdateOrderControlConfigCommand) (*UpdateOrderControlConfigResult, error) {
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
-	if err := validateControlConfigCommand(cmd); err != nil {
-		return nil, err
-	}
 
 	var result *UpdateOrderControlConfigResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -983,6 +1045,13 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		gameConfig, err := gameConfigRepo.GetCurrent(ctx)
 		if err != nil {
 			return fmt.Errorf("load game config: %w", err)
+		}
+		template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+		if err != nil {
+			return err
+		}
+		if err := validateControlConfigCommandForTemplate(cmd, template); err != nil {
+			return err
 		}
 		if cmd.YearNo < 1 || cmd.YearNo > gameConfig.FinalYear {
 			return ErrAdminOrderYearInvalid
@@ -1013,7 +1082,7 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 			return fmt.Errorf("list order market configs: %w", err)
 		}
 		if len(marketConfigs) == 0 {
-			if err := ensureDefaultMarketConfigs(ctx, marketRepo, cmd.YearNo, operatorName, time.Now()); err != nil {
+			if err := ensureDefaultMarketConfigsForTemplate(ctx, marketRepo, cmd.YearNo, operatorName, time.Now(), template); err != nil {
 				return fmt.Errorf("ensure default market configs: %w", err)
 			}
 			marketConfigs, err = marketRepo.ListByYear(ctx, cmd.YearNo)
@@ -1021,16 +1090,18 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 				return fmt.Errorf("reload order market configs: %w", err)
 			}
 		}
-		marketMap := buildMarketEnabledMap(marketConfigs)
+		marketConfigs = filterMarketConfigsByTemplate(marketConfigs, template)
+		marketMap := buildMarketEnabledMapForTemplate(marketConfigs, template)
 		forecastControls, err := forecastRepo.ListByYear(ctx, cmd.YearNo)
 		if err != nil {
 			return fmt.Errorf("list forecast control: %w", err)
 		}
-		forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
-		if err := validateEffectiveReleaseSequences(cmd.Items, marketMap, forecastCounts, cmd.YearNo); err != nil {
+		forecastControls = filterForecastControlsByTemplate(forecastControls, template)
+		forecastCounts := forecastControlCountMapForTemplate(cmd.YearNo, forecastControls, template)
+		if err := validateEffectiveReleaseSequencesForTemplate(cmd.Items, marketMap, forecastCounts, cmd.YearNo, template); err != nil {
 			return err
 		}
-		sourceCounts := defaultOrderSourceCounts(cmd.YearNo)
+		sourceCounts := defaultOrderSourceCountsForTemplate(cmd.YearNo, template)
 
 		now := time.Now()
 		items := make([]entity.OrderGenerationConfig, 0, len(cmd.Items))
@@ -1042,12 +1113,13 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 				orderCount = 0
 			}
 			items = append(items, entity.OrderGenerationConfig{
-				YearNo:            cmd.YearNo,
-				MarketCode:        marketCode,
-				OrderType:         orderType,
-				OrderCount:        orderCount,
-				ReleaseSequenceNo: reqItem.ReleaseSequenceNo,
-				ConfigStatus:      enum.OrderConfigStatusDraft,
+				OrderTemplateVersion: template.TemplateVersion,
+				YearNo:               cmd.YearNo,
+				MarketCode:           marketCode,
+				OrderType:            orderType,
+				OrderCount:           orderCount,
+				ReleaseSequenceNo:    reqItem.ReleaseSequenceNo,
+				ConfigStatus:         enum.OrderConfigStatusDraft,
 				BaseEntity: entity.BaseEntity{
 					Creator:    operatorName,
 					CreateTime: now,
@@ -1075,11 +1147,12 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		if err != nil {
 			return fmt.Errorf("reload order configs: %w", err)
 		}
-		poolCounts, err := countGeneratedByYearWithRepo(ctx, poolRepo, cmd.YearNo)
+		poolCounts, err := countGeneratedByYearWithRepoForTemplate(ctx, poolRepo, cmd.YearNo, template)
 		if err != nil {
 			return err
 		}
-		viewItems := buildControlConfigItems(cmd.YearNo, configs, forecastCounts, sourceCounts, poolCounts, marketMap)
+		configs = filterGenerationConfigsByTemplate(configs, template)
+		viewItems := buildControlConfigItemsForTemplate(cmd.YearNo, configs, forecastCounts, sourceCounts, poolCounts, marketMap, template)
 		groupCount, err := groupRepo.CountAll(ctx)
 		if err != nil {
 			return fmt.Errorf("count groups: %w", err)
@@ -1158,6 +1231,10 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	if cmd.YearNo < 1 || cmd.YearNo > gameConfig.FinalYear {
 		return nil, ErrAdminOrderYearInvalid
 	}
+	template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+	if err != nil {
+		return nil, err
+	}
 	started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
 	if err != nil {
 		return nil, fmt.Errorf("check order segment started: %w", err)
@@ -1182,33 +1259,37 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	if err != nil {
 		return nil, fmt.Errorf("list order configs: %w", err)
 	}
+	configs = filterGenerationConfigsByTemplate(configs, template)
 	marketConfigs, err := marketRepo.ListByYear(ctx, cmd.YearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list order market configs: %w", err)
 	}
+	marketConfigs = filterMarketConfigsByTemplate(marketConfigs, template)
 	if len(marketConfigs) == 0 {
-		if err := ensureDefaultMarketConfigs(ctx, marketRepo, cmd.YearNo, operatorName, time.Now()); err != nil {
+		if err := ensureDefaultMarketConfigsForTemplate(ctx, marketRepo, cmd.YearNo, operatorName, time.Now(), template); err != nil {
 			return nil, fmt.Errorf("ensure default market configs: %w", err)
 		}
 		marketConfigs, err = marketRepo.ListByYear(ctx, cmd.YearNo)
 		if err != nil {
 			return nil, fmt.Errorf("reload order market configs: %w", err)
 		}
+		marketConfigs = filterMarketConfigsByTemplate(marketConfigs, template)
 	}
-	marketMap := buildMarketEnabledMap(marketConfigs)
+	marketMap := buildMarketEnabledMapForTemplate(marketConfigs, template)
 	forecastControls, err := forecastRepo.ListByYear(ctx, cmd.YearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list forecast control: %w", err)
 	}
-	forecastCounts := forecastControlCountMap(cmd.YearNo, forecastControls)
+	forecastControls = filterForecastControlsByTemplate(forecastControls, template)
+	forecastCounts := forecastControlCountMapForTemplate(cmd.YearNo, forecastControls, template)
 	if len(configs) == 0 {
-		configs = buildOrderGenerationConfigsFromForecast(cmd.YearNo, forecastCounts, marketMap, operatorName, time.Now())
+		configs = buildOrderGenerationConfigsFromForecastForTemplate(cmd.YearNo, forecastCounts, marketMap, operatorName, time.Now(), template)
 		if err := configRepo.CreateBatch(ctx, configs); err != nil {
 			return nil, fmt.Errorf("create default order release configs: %w", err)
 		}
 	} else {
 		configs = applyForecastCountsToConfigs(configs, forecastCounts)
-		configs = applyMarketEnabledToConfigs(configs, marketMap)
+		configs = applyMarketEnabledToConfigsForTemplate(configs, marketMap, template)
 		if err := configRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
 			return nil, fmt.Errorf("delete old order configs before forecast snapshot: %w", err)
 		}
@@ -1229,9 +1310,10 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	}
 	seed := fmt.Sprintf("%d", now.UnixNano())
 	controlSnapshot, err := marshalJSON(map[string]any{
-		"marketConfigs":   buildOrderMarketConfigItems(cmd.YearNo, marketConfigs),
+		"orderTemplate":   BuildOrderTemplateView(template),
+		"marketConfigs":   buildOrderMarketConfigItemsForTemplate(cmd.YearNo, marketConfigs, template),
 		"configs":         configs,
-		"forecastControl": buildOrderForecastControlItems(mergeForecastControlDefaults(forecastControls)),
+		"forecastControl": buildOrderForecastControlItemsForTemplate(mergeForecastControlDefaultsForTemplate(forecastControls, template), template),
 	})
 	if err != nil {
 		return nil, err
@@ -1240,28 +1322,30 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	if err != nil {
 		return nil, fmt.Errorf("list market forecast: %w", err)
 	}
-	forecastSnapshot, err := marshalJSON(buildMarketForecastResult(mergeForecastControlDefaults(forecastControls), forecastRows))
+	forecastRows = filterMarketForecastsByTemplate(forecastRows, template)
+	forecastSnapshot, err := marshalJSON(buildMarketForecastResultForTemplate(mergeForecastControlDefaultsForTemplate(forecastControls, template), forecastRows, template))
 	if err != nil {
 		return nil, err
 	}
-	params := defaultOrderGenerationParameters()
+	params := defaultOrderGenerationParameters(template)
 	parameterSnapshot, err := marshalJSON(params)
 	if err != nil {
 		return nil, err
 	}
 	batch := &entity.OrderGenerationBatch{
-		YearNo:              cmd.YearNo,
-		BatchStatus:         enum.OrderGenerationBatchStatusPreview,
-		FormulaVersion:      orderGenerationFormulaVersion,
-		RandomSeed:          seed,
-		ControlSnapshot:     controlSnapshot,
-		ForecastSnapshot:    forecastSnapshot,
-		ParameterSnapshot:   parameterSnapshot,
-		OrderDetail:         []byte("[]"),
-		GeneratedOrderCount: 0,
-		GeneratedByID:       cmd.OperatorID,
-		GeneratedByName:     operatorName,
-		GeneratedAt:         now,
+		OrderTemplateVersion: template.TemplateVersion,
+		YearNo:               cmd.YearNo,
+		BatchStatus:          enum.OrderGenerationBatchStatusPreview,
+		FormulaVersion:       template.FormulaVersion,
+		RandomSeed:           seed,
+		ControlSnapshot:      controlSnapshot,
+		ForecastSnapshot:     forecastSnapshot,
+		ParameterSnapshot:    parameterSnapshot,
+		OrderDetail:          []byte("[]"),
+		GeneratedOrderCount:  0,
+		GeneratedByID:        cmd.OperatorID,
+		GeneratedByName:      operatorName,
+		GeneratedAt:          now,
 		BaseEntity: entity.BaseEntity{
 			Creator:    operatorName,
 			CreateTime: now,
@@ -1272,7 +1356,7 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	if err := batchRepo.Create(ctx, batch); err != nil {
 		return nil, fmt.Errorf("create order generation batch: %w", err)
 	}
-	poolItems, details, params, err := buildGeneratedOrderPoolItems(configs, batch.ID, seed, operatorName, now)
+	poolItems, details, params, err := buildGeneratedOrderPoolItems(configs, batch.ID, seed, operatorName, now, template)
 	if err != nil {
 		return nil, err
 	}
@@ -1291,7 +1375,7 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	if err := poolRepo.CreateBatch(ctx, poolItems); err != nil {
 		return nil, fmt.Errorf("create order pool: %w", err)
 	}
-	states := buildSegmentStatesFromConfigs(configs, marketMap, operatorName, now)
+	states := buildSegmentStatesFromConfigsForTemplate(configs, marketMap, operatorName, now, template)
 	if err := stateRepo.UpsertBatch(ctx, states); err != nil {
 		return nil, fmt.Errorf("create segment states: %w", err)
 	}
@@ -1299,6 +1383,7 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	targetYearNo := cmd.YearNo
 	actionPayload, err := marshalJSON(map[string]any{
 		"yearNo":         cmd.YearNo,
+		"orderTemplate":  template.TemplateVersion,
 		"batchId":        batch.ID,
 		"generatedCount": len(poolItems),
 		"segmentCount":   len(states),
@@ -1325,7 +1410,7 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 		BatchID:        batch.ID,
 		BatchStatus:    batch.BatchStatus,
 		RandomSeed:     seed,
-		FormulaVersion: orderGenerationFormulaVersion,
+		FormulaVersion: template.FormulaVersion,
 		GeneratedCount: len(poolItems),
 		SegmentCount:   len(states),
 		Warnings:       nil,
@@ -1349,6 +1434,14 @@ func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd Con
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
 		actionRepo := repository.NewAdminActionLogRepository(tx)
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
+			return err
+		}
+		gameConfig, err := gameConfigRepo.GetCurrent(ctx)
+		if err != nil {
+			return fmt.Errorf("load game config: %w", err)
+		}
+		template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+		if err != nil {
 			return err
 		}
 		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
@@ -1380,7 +1473,7 @@ func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd Con
 		if err := configRepo.UpdateStatusAndBatchByYear(ctx, cmd.YearNo, enum.OrderConfigStatusLocked, batch.ID, operatorName); err != nil {
 			return fmt.Errorf("lock order configs: %w", err)
 		}
-		if err := ensureDefaultMarketConfigs(ctx, marketRepo, cmd.YearNo, operatorName, now); err != nil {
+		if err := ensureDefaultMarketConfigsForTemplate(ctx, marketRepo, cmd.YearNo, operatorName, now, template); err != nil {
 			return fmt.Errorf("ensure default market configs: %w", err)
 		}
 		if err := marketRepo.UpdateStatusAndBatchByYear(ctx, cmd.YearNo, enum.OrderConfigStatusLocked, batch.ID, operatorName); err != nil {
@@ -1443,20 +1536,7 @@ func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd Con
 }
 
 func defaultOrderSegments() []OrderSegmentDefinition {
-	markets := adminOrderMarkets()
-	orderTypes := adminOrderTypes()
-	segments := make([]OrderSegmentDefinition, 0, len(markets)*len(orderTypes))
-	for _, market := range markets {
-		for _, orderType := range orderTypes {
-			segments = append(segments, OrderSegmentDefinition{
-				MarketCode:    market.code,
-				MarketName:    market.name,
-				OrderType:     orderType.code,
-				OrderTypeName: orderType.name,
-			})
-		}
-	}
-	return segments
+	return defaultOrderTemplate().Segments()
 }
 
 type orderCodeName struct {
@@ -1472,21 +1552,27 @@ type forecastStageDefinition struct {
 }
 
 func adminOrderMarkets() []orderCodeName {
-	return []orderCodeName{
-		{enum.MarketCodeLocal, "本地市场"},
-		{enum.MarketCodeRegional, "区域市场"},
-		{enum.MarketCodeNational, "全国市场"},
-		{enum.MarketCodeGlobal, "全球市场"},
+	return orderMarketsForTemplate(defaultOrderTemplate())
+}
+
+func orderMarketsForTemplate(template OrderTemplateDefinition) []orderCodeName {
+	items := make([]orderCodeName, 0, len(template.Markets))
+	for _, market := range template.Markets {
+		items = append(items, orderCodeName{market.Code, market.Name})
 	}
+	return items
 }
 
 func adminOrderTypes() []orderCodeName {
-	return []orderCodeName{
-		{enum.OrderTypeAgencyInspection, "代办过检"},
-		{enum.OrderTypeTwoCabinVIP, "两舱贵宾"},
-		{enum.OrderTypeBusinessVIP, "商务贵宾"},
-		{enum.OrderTypeMemberCustom, "会员定制"},
+	return orderTypesForTemplate(defaultOrderTemplate())
+}
+
+func orderTypesForTemplate(template OrderTemplateDefinition) []orderCodeName {
+	items := make([]orderCodeName, 0, len(template.OrderTypes))
+	for _, orderType := range template.OrderTypes {
+		items = append(items, orderCodeName{orderType.Code, orderType.Name})
 	}
+	return items
 }
 
 func forecastStages() []forecastStageDefinition {
@@ -1550,12 +1636,17 @@ func mergeForecastNarratives(existing map[string]string, updates []UpdateOrderFo
 }
 
 func buildControlConfigItems(yearNo int, configs []entity.OrderGenerationConfig, forecastCounts map[string]int, sourceCounts map[string]int, poolCounts map[string]int, marketConfigMap map[string]bool) []OrderControlConfigItem {
+	return buildControlConfigItemsForTemplate(yearNo, configs, forecastCounts, sourceCounts, poolCounts, marketConfigMap, defaultOrderTemplate())
+}
+
+func buildControlConfigItemsForTemplate(yearNo int, configs []entity.OrderGenerationConfig, forecastCounts map[string]int, sourceCounts map[string]int, poolCounts map[string]int, marketConfigMap map[string]bool, template OrderTemplateDefinition) []OrderControlConfigItem {
 	configMap := make(map[string]entity.OrderGenerationConfig, len(configs))
 	for _, item := range configs {
 		configMap[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item
 	}
-	items := make([]OrderControlConfigItem, 0, len(defaultOrderSegments()))
-	for index, segment := range defaultOrderSegments() {
+	segments := template.Segments()
+	items := make([]OrderControlConfigItem, 0, len(segments))
+	for index, segment := range segments {
 		key := segmentKey(yearNo, segment.MarketCode, segment.OrderType)
 		config, exists := configMap[key]
 		orderCount := forecastCounts[key]
@@ -1565,7 +1656,7 @@ func buildControlConfigItems(yearNo int, configs []entity.OrderGenerationConfig,
 			releaseSequenceNo = config.ReleaseSequenceNo
 			configStatus = config.ConfigStatus
 		}
-		marketEnabled := isMarketEnabled(marketConfigMap, segment.MarketCode)
+		marketEnabled := isMarketEnabledForTemplate(marketConfigMap, segment.MarketCode, template)
 		if !marketEnabled {
 			orderCount = 0
 		}
@@ -1622,20 +1713,30 @@ func buildOrderControlWarnings(items []OrderControlConfigItem, groupCount int) [
 			Message: fmt.Sprintf("全年订单总数 %d 少于当前小组数 %d，可能有小组拿不到订单", total, groupCount),
 		})
 	}
-	for _, segment := range defaultOrderSegments() {
-		if marketTotals[segment.MarketCode] > 0 && marketTotals[segment.MarketCode] < groupCount {
+	seenMarkets := map[string]OrderControlConfigItem{}
+	for _, item := range items {
+		if _, exists := seenMarkets[item.MarketCode]; !exists {
+			seenMarkets[item.MarketCode] = item
+		}
+	}
+	for marketCode, item := range seenMarkets {
+		if marketTotals[marketCode] > 0 && marketTotals[marketCode] < groupCount {
 			warnings = append(warnings, OrderControlWarning{
 				Level:      "INFO",
-				Message:    fmt.Sprintf("%s 订单总数少于当前小组数，管理员可按现场规则决定是否继续", segment.MarketName),
-				MarketCode: segment.MarketCode,
+				Message:    fmt.Sprintf("%s 订单总数少于当前小组数，管理员可按现场规则决定是否继续", item.MarketName),
+				MarketCode: marketCode,
 			})
-			delete(marketTotals, segment.MarketCode)
+			delete(marketTotals, marketCode)
 		}
 	}
 	return warnings
 }
 
 func validateControlConfigCommand(cmd UpdateOrderControlConfigCommand) error {
+	return validateControlConfigCommandForTemplate(cmd, defaultOrderTemplate())
+}
+
+func validateControlConfigCommandForTemplate(cmd UpdateOrderControlConfigCommand, template OrderTemplateDefinition) error {
 	if cmd.YearNo < 1 || len(cmd.Items) == 0 {
 		return ErrAdminOrderConfigInvalid
 	}
@@ -1643,7 +1744,7 @@ func validateControlConfigCommand(cmd UpdateOrderControlConfigCommand) error {
 	for _, item := range cmd.Items {
 		marketCode := strings.ToUpper(strings.TrimSpace(item.MarketCode))
 		orderType := strings.ToUpper(strings.TrimSpace(item.OrderType))
-		if !enum.IsValidMarketCode(marketCode) || !enum.IsValidOrderType(orderType) || item.ReleaseSequenceNo <= 0 {
+		if !template.IsValidMarketCode(marketCode) || !template.IsValidOrderType(orderType) || item.ReleaseSequenceNo <= 0 {
 			return ErrAdminOrderConfigInvalid
 		}
 		key := segmentKey(cmd.YearNo, marketCode, orderType)
@@ -1656,10 +1757,14 @@ func validateControlConfigCommand(cmd UpdateOrderControlConfigCommand) error {
 }
 
 func validateForecastControlCommand(cmd UpdateOrderForecastControlCommand) error {
+	return validateForecastControlCommandForTemplate(cmd, defaultOrderTemplate())
+}
+
+func validateForecastControlCommandForTemplate(cmd UpdateOrderForecastControlCommand, template OrderTemplateDefinition) error {
 	if len(cmd.Items) == 0 {
 		return ErrAdminOrderForecastControlInvalid
 	}
-	params := defaultOrderGenerationParameters()
+	params := defaultOrderGenerationParameters(template)
 	seenSegments := map[string]bool{}
 	for _, item := range cmd.Items {
 		yearNo := item.YearNo
@@ -1667,8 +1772,8 @@ func validateForecastControlCommand(cmd UpdateOrderForecastControlCommand) error
 		orderType := normalizeOrderType(item.OrderType)
 		if yearNo < forecastControlMinYear ||
 			yearNo > forecastControlMaxYear ||
-			!enum.IsValidMarketCode(marketCode) ||
-			!enum.IsValidOrderType(orderType) ||
+			!template.IsValidMarketCode(marketCode) ||
+			!template.IsValidOrderType(orderType) ||
 			item.OrderCount < 0 ||
 			item.OrderCount > params.MaxCardCount {
 			return ErrAdminOrderForecastControlInvalid
@@ -1683,7 +1788,7 @@ func validateForecastControlCommand(cmd UpdateOrderForecastControlCommand) error
 	for _, item := range cmd.Narratives {
 		stageCode := strings.ToUpper(strings.TrimSpace(item.ForecastStageCode))
 		marketCode := normalizeMarketCode(item.MarketCode)
-		if !isValidForecastStageCode(stageCode) || !enum.IsValidMarketCode(marketCode) {
+		if !isValidForecastStageCode(stageCode) || !template.IsValidMarketCode(marketCode) {
 			return ErrAdminOrderForecastControlInvalid
 		}
 		key := forecastNarrativeKey(stageCode, marketCode)
@@ -1696,11 +1801,15 @@ func validateForecastControlCommand(cmd UpdateOrderForecastControlCommand) error
 }
 
 func validateEffectiveReleaseSequences(items []UpdateOrderControlConfigItem, marketConfigMap map[string]bool, forecastCounts map[string]int, yearNo int) error {
+	return validateEffectiveReleaseSequencesForTemplate(items, marketConfigMap, forecastCounts, yearNo, defaultOrderTemplate())
+}
+
+func validateEffectiveReleaseSequencesForTemplate(items []UpdateOrderControlConfigItem, marketConfigMap map[string]bool, forecastCounts map[string]int, yearNo int, template OrderTemplateDefinition) error {
 	seenSequences := map[int]bool{}
 	for _, item := range items {
 		marketCode := strings.ToUpper(strings.TrimSpace(item.MarketCode))
 		orderType := strings.ToUpper(strings.TrimSpace(item.OrderType))
-		if !isMarketEnabled(marketConfigMap, marketCode) || forecastCounts[segmentKey(yearNo, marketCode, orderType)] <= 0 {
+		if !isMarketEnabledForTemplate(marketConfigMap, marketCode, template) || forecastCounts[segmentKey(yearNo, marketCode, orderType)] <= 0 {
 			continue
 		}
 		if item.ReleaseSequenceNo <= 0 {
@@ -1715,13 +1824,17 @@ func validateEffectiveReleaseSequences(items []UpdateOrderControlConfigItem, mar
 }
 
 func validateMarketConfigCommand(cmd UpdateOrderMarketConfigCommand) error {
+	return validateMarketConfigCommandForTemplate(cmd, defaultOrderTemplate())
+}
+
+func validateMarketConfigCommandForTemplate(cmd UpdateOrderMarketConfigCommand, template OrderTemplateDefinition) error {
 	if cmd.YearNo < 1 || len(cmd.Markets) == 0 {
 		return ErrAdminOrderConfigInvalid
 	}
 	seen := map[string]bool{}
 	for _, item := range cmd.Markets {
 		marketCode := normalizeMarketCode(item.MarketCode)
-		if !enum.IsValidMarketCode(marketCode) {
+		if !template.IsValidMarketCode(marketCode) {
 			return ErrAdminOrderConfigInvalid
 		}
 		if item.MarketInvestmentLimit != nil && (*item.MarketInvestmentLimit < 0 || !isWholeNumber(*item.MarketInvestmentLimit)) {
@@ -1833,21 +1946,26 @@ func (e *OrderSourceInsufficientError) Unwrap() error {
 }
 
 func buildSegmentStatesFromConfigs(configs []entity.OrderGenerationConfig, marketConfigMap map[string]bool, operatorName string, now time.Time) []entity.MarketBiddingState {
+	return buildSegmentStatesFromConfigsForTemplate(configs, marketConfigMap, operatorName, now, defaultOrderTemplate())
+}
+
+func buildSegmentStatesFromConfigsForTemplate(configs []entity.OrderGenerationConfig, marketConfigMap map[string]bool, operatorName string, now time.Time, template OrderTemplateDefinition) []entity.MarketBiddingState {
 	states := make([]entity.MarketBiddingState, 0, len(configs))
 	for _, config := range configs {
 		status := enum.OrderSegmentStatusWaitingInvestment
-		if !isMarketEnabled(marketConfigMap, config.MarketCode) {
+		if !isMarketEnabledForTemplate(marketConfigMap, config.MarketCode, template) {
 			status = enum.OrderSegmentStatusMarketDisabled
 		} else if config.OrderCount <= 0 {
 			status = enum.OrderSegmentStatusNoOrderConfig
 		}
 		states = append(states, entity.MarketBiddingState{
-			YearNo:            config.YearNo,
-			MarketCode:        config.MarketCode,
-			OrderType:         config.OrderType,
-			SegmentCode:       fmt.Sprintf("%s_%s", config.MarketCode, config.OrderType),
-			ReleaseSequenceNo: config.ReleaseSequenceNo,
-			SegmentStatus:     status,
+			OrderTemplateVersion: template.TemplateVersion,
+			YearNo:               config.YearNo,
+			MarketCode:           config.MarketCode,
+			OrderType:            config.OrderType,
+			SegmentCode:          fmt.Sprintf("%s_%s", config.MarketCode, config.OrderType),
+			ReleaseSequenceNo:    config.ReleaseSequenceNo,
+			SegmentStatus:        status,
 			BaseEntity: entity.BaseEntity{
 				Creator:    operatorName,
 				CreateTime: now,
@@ -1906,14 +2024,18 @@ func buildOrderSourceSummary(orders []ParsedOrderCard) []OrderSourceSummary {
 }
 
 func buildOrderMarketConfigItems(yearNo int, configs []entity.OrderMarketConfig) []OrderMarketConfigItem {
+	return buildOrderMarketConfigItemsForTemplate(yearNo, configs, defaultOrderTemplate())
+}
+
+func buildOrderMarketConfigItemsForTemplate(yearNo int, configs []entity.OrderMarketConfig, template OrderTemplateDefinition) []OrderMarketConfigItem {
 	configMap := make(map[string]entity.OrderMarketConfig, len(configs))
 	for _, item := range configs {
 		configMap[normalizeMarketCode(item.MarketCode)] = item
 	}
-	items := make([]OrderMarketConfigItem, 0, len(adminOrderMarkets()))
-	for _, market := range adminOrderMarkets() {
-		config, exists := configMap[market.code]
-		enabled := defaultMarketEnabled(market.code)
+	items := make([]OrderMarketConfigItem, 0, len(template.Markets))
+	for _, market := range template.Markets {
+		config, exists := configMap[market.Code]
+		enabled := template.DefaultMarketEnabled(market.Code)
 		status := enum.OrderConfigStatusDraft
 		var lockedBatchID *int64
 		var marketInvestmentLimit *float64
@@ -1925,8 +2047,8 @@ func buildOrderMarketConfigItems(yearNo int, configs []entity.OrderMarketConfig)
 		}
 		items = append(items, OrderMarketConfigItem{
 			YearNo:                yearNo,
-			MarketCode:            market.code,
-			MarketName:            market.name,
+			MarketCode:            market.Code,
+			MarketName:            market.Name,
 			Enabled:               enabled,
 			MarketInvestmentLimit: marketInvestmentLimit,
 			ConfigStatus:          status,
@@ -1937,15 +2059,21 @@ func buildOrderMarketConfigItems(yearNo int, configs []entity.OrderMarketConfig)
 }
 
 func defaultForecastControlEntities(operatorName string, now time.Time) []entity.OrderForecastControl {
-	items := make([]entity.OrderForecastControl, 0, forecastControlMaxYear*len(defaultOrderSegments()))
+	return defaultForecastControlEntitiesForTemplate(operatorName, now, defaultOrderTemplate())
+}
+
+func defaultForecastControlEntitiesForTemplate(operatorName string, now time.Time, template OrderTemplateDefinition) []entity.OrderForecastControl {
+	segments := template.Segments()
+	items := make([]entity.OrderForecastControl, 0, forecastControlMaxYear*len(segments))
 	for yearNo := forecastControlMinYear; yearNo <= forecastControlMaxYear; yearNo++ {
-		for _, segment := range defaultOrderSegments() {
+		for _, segment := range segments {
 			items = append(items, entity.OrderForecastControl{
-				YearNo:            yearNo,
-				ForecastStageCode: forecastStageCodeForYear(yearNo),
-				MarketCode:        segment.MarketCode,
-				OrderType:         segment.OrderType,
-				OrderCount:        0,
+				OrderTemplateVersion: template.TemplateVersion,
+				YearNo:               yearNo,
+				ForecastStageCode:    forecastStageCodeForYear(yearNo),
+				MarketCode:           segment.MarketCode,
+				OrderType:            segment.OrderType,
+				OrderCount:           0,
 				BaseEntity: entity.BaseEntity{
 					Creator:    operatorName,
 					CreateTime: now,
@@ -1959,12 +2087,19 @@ func defaultForecastControlEntities(operatorName string, now time.Time) []entity
 }
 
 func mergeForecastControlDefaults(items []entity.OrderForecastControl) []entity.OrderForecastControl {
+	return mergeForecastControlDefaultsForTemplate(items, defaultOrderTemplate())
+}
+
+func mergeForecastControlDefaultsForTemplate(items []entity.OrderForecastControl, template OrderTemplateDefinition) []entity.OrderForecastControl {
 	now := time.Now()
 	resultMap := make(map[string]entity.OrderForecastControl, len(items))
 	for _, item := range items {
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
 		resultMap[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item
 	}
-	for _, item := range defaultForecastControlEntities("system", now) {
+	for _, item := range defaultForecastControlEntitiesForTemplate("system", now, template) {
 		key := segmentKey(item.YearNo, item.MarketCode, item.OrderType)
 		if _, exists := resultMap[key]; !exists {
 			resultMap[key] = item
@@ -1979,15 +2114,19 @@ func mergeForecastControlDefaults(items []entity.OrderForecastControl) []entity.
 			return result[i].YearNo < result[j].YearNo
 		}
 		if result[i].MarketCode != result[j].MarketCode {
-			return marketSortIndex(result[i].MarketCode) < marketSortIndex(result[j].MarketCode)
+			return template.MarketSortIndex(result[i].MarketCode) < template.MarketSortIndex(result[j].MarketCode)
 		}
-		return orderTypeSortIndex(result[i].OrderType) < orderTypeSortIndex(result[j].OrderType)
+		return template.OrderTypeSortIndex(result[i].OrderType) < template.OrderTypeSortIndex(result[j].OrderType)
 	})
 	return result
 }
 
 func buildOrderForecastControlItems(items []entity.OrderForecastControl) []OrderForecastControlItem {
-	items = mergeForecastControlDefaults(items)
+	return buildOrderForecastControlItemsForTemplate(items, defaultOrderTemplate())
+}
+
+func buildOrderForecastControlItemsForTemplate(items []entity.OrderForecastControl, template OrderTemplateDefinition) []OrderForecastControlItem {
+	items = mergeForecastControlDefaultsForTemplate(items, template)
 	result := make([]OrderForecastControlItem, 0, len(items))
 	for _, item := range items {
 		stageCode := forecastStageCodeForYear(item.YearNo)
@@ -1996,9 +2135,9 @@ func buildOrderForecastControlItems(items []entity.OrderForecastControl) []Order
 			ForecastStageCode: stageCode,
 			ForecastStageName: forecastStageName(stageCode),
 			MarketCode:        item.MarketCode,
-			MarketName:        marketName(item.MarketCode),
+			MarketName:        template.MarketName(item.MarketCode),
 			OrderType:         item.OrderType,
-			OrderTypeName:     orderTypeName(item.OrderType),
+			OrderTypeName:     template.OrderTypeName(item.OrderType),
 			OrderCount:        item.OrderCount,
 		})
 	}
@@ -2006,16 +2145,20 @@ func buildOrderForecastControlItems(items []entity.OrderForecastControl) []Order
 }
 
 func buildOrderForecastNarratives(rows []entity.OrderMarketForecast) []OrderForecastNarrativeItem {
+	return buildOrderForecastNarrativesForTemplate(rows, defaultOrderTemplate())
+}
+
+func buildOrderForecastNarrativesForTemplate(rows []entity.OrderMarketForecast, template OrderTemplateDefinition) []OrderForecastNarrativeItem {
 	narrativeMap := forecastNarrativeMap(rows)
-	result := make([]OrderForecastNarrativeItem, 0, len(forecastStages())*len(adminOrderMarkets()))
+	result := make([]OrderForecastNarrativeItem, 0, len(forecastStages())*len(template.Markets))
 	for _, stage := range forecastStages() {
-		for _, market := range adminOrderMarkets() {
-			key := forecastNarrativeKey(stage.code, market.code)
+		for _, market := range template.Markets {
+			key := forecastNarrativeKey(stage.code, market.Code)
 			result = append(result, OrderForecastNarrativeItem{
 				ForecastStageCode: stage.code,
 				ForecastStageName: stage.name,
-				MarketCode:        market.code,
-				MarketName:        market.name,
+				MarketCode:        market.Code,
+				MarketName:        market.Name,
 				Content:           narrativeMap[key],
 			})
 		}
@@ -2039,12 +2182,16 @@ func changedForecastControlYears(existing []entity.OrderForecastControl, updates
 }
 
 func buildMarketForecastEntities(controlRows []entity.OrderForecastControl, narratives map[string]string, operatorName string, now time.Time) ([]entity.OrderMarketForecast, error) {
-	controlSnapshot, err := marshalJSON(buildOrderForecastControlItems(controlRows))
+	return buildMarketForecastEntitiesForTemplate(controlRows, narratives, operatorName, now, defaultOrderTemplate())
+}
+
+func buildMarketForecastEntitiesForTemplate(controlRows []entity.OrderForecastControl, narratives map[string]string, operatorName string, now time.Time, template OrderTemplateDefinition) ([]entity.OrderMarketForecast, error) {
+	controlSnapshot, err := marshalJSON(buildOrderForecastControlItemsForTemplate(controlRows, template))
 	if err != nil {
 		return nil, err
 	}
-	forecast := buildMarketForecastResult(controlRows, nil)
-	items := make([]entity.OrderMarketForecast, 0, len(forecast.Stages)*len(adminOrderMarkets()))
+	forecast := buildMarketForecastResultForTemplate(controlRows, nil, template)
+	items := make([]entity.OrderMarketForecast, 0, len(forecast.Stages)*len(template.Markets))
 	for _, stage := range forecast.Stages {
 		for _, market := range stage.Markets {
 			dataJSON, err := marshalJSON(market.Years)
@@ -2052,13 +2199,14 @@ func buildMarketForecastEntities(controlRows []entity.OrderForecastControl, narr
 				return nil, err
 			}
 			items = append(items, entity.OrderMarketForecast{
-				ForecastStageCode:   stage.ForecastStageCode,
-				MarketCode:          market.MarketCode,
-				ForecastData:        dataJSON,
-				Narrative:           narratives[forecastNarrativeKey(stage.ForecastStageCode, market.MarketCode)],
-				FormulaVersion:      orderGenerationFormulaVersion,
-				RandomSeed:          "FORECAST_DETERMINISTIC",
-				ControlSnapshotJSON: controlSnapshot,
+				OrderTemplateVersion: template.TemplateVersion,
+				ForecastStageCode:    stage.ForecastStageCode,
+				MarketCode:           market.MarketCode,
+				ForecastData:         dataJSON,
+				Narrative:            narratives[forecastNarrativeKey(stage.ForecastStageCode, market.MarketCode)],
+				FormulaVersion:       template.FormulaVersion,
+				RandomSeed:           "FORECAST_DETERMINISTIC",
+				ControlSnapshotJSON:  controlSnapshot,
 				BaseEntity: entity.BaseEntity{
 					Creator:    operatorName,
 					CreateTime: now,
@@ -2072,7 +2220,11 @@ func buildMarketForecastEntities(controlRows []entity.OrderForecastControl, narr
 }
 
 func buildMarketForecastResult(controlRows []entity.OrderForecastControl, forecastRows []entity.OrderMarketForecast) OrderMarketForecastResult {
-	controlRows = mergeForecastControlDefaults(controlRows)
+	return buildMarketForecastResultForTemplate(controlRows, forecastRows, defaultOrderTemplate())
+}
+
+func buildMarketForecastResultForTemplate(controlRows []entity.OrderForecastControl, forecastRows []entity.OrderMarketForecast, template OrderTemplateDefinition) OrderMarketForecastResult {
+	controlRows = mergeForecastControlDefaultsForTemplate(controlRows, template)
 	controlMap := forecastControlCountMapAll(controlRows)
 	narrativeMap := forecastNarrativeMap(forecastRows)
 	stages := make([]OrderMarketForecastStage, 0, len(forecastStages()))
@@ -2082,26 +2234,26 @@ func buildMarketForecastResult(controlRows []entity.OrderForecastControl, foreca
 			ForecastStageName: stage.name,
 			YearRange:         stage.yearRange,
 			Years:             append([]int(nil), stage.years...),
-			Markets:           make([]OrderMarketForecastMarket, 0, len(adminOrderMarkets())),
+			Markets:           make([]OrderMarketForecastMarket, 0, len(template.Markets)),
 		}
-		for _, market := range adminOrderMarkets() {
+		for _, market := range template.Markets {
 			marketView := OrderMarketForecastMarket{
-				MarketCode: market.code,
-				MarketName: market.name,
-				Narrative:  narrativeMap[forecastNarrativeKey(stage.code, market.code)],
+				MarketCode: market.Code,
+				MarketName: market.Name,
+				Narrative:  narrativeMap[forecastNarrativeKey(stage.code, market.Code)],
 				Years:      make([]OrderMarketForecastYear, 0, len(stage.years)),
 			}
 			for _, yearNo := range stage.years {
 				yearView := OrderMarketForecastYear{
 					YearNo:   yearNo,
-					Products: make([]OrderMarketForecastProduct, 0, len(adminOrderTypes())),
+					Products: make([]OrderMarketForecastProduct, 0, len(template.OrderTypes)),
 				}
-				for _, orderType := range adminOrderTypes() {
-					count := controlMap[segmentKey(yearNo, market.code, orderType.code)]
-					amount := forecastAmountForProduct(yearNo, market.code, orderType.code, count)
+				for _, orderType := range template.OrderTypes {
+					count := controlMap[segmentKey(yearNo, market.Code, orderType.Code)]
+					amount := forecastAmountForProductForTemplate(yearNo, market.Code, orderType.Code, count, template)
 					yearView.Products = append(yearView.Products, OrderMarketForecastProduct{
-						OrderType:      orderType.code,
-						OrderTypeName:  orderType.name,
+						OrderType:      orderType.Code,
+						OrderTypeName:  orderType.Name,
 						OrderCount:     count,
 						ForecastAmount: amount,
 					})
@@ -2115,16 +2267,35 @@ func buildMarketForecastResult(controlRows []entity.OrderForecastControl, foreca
 		stages = append(stages, stageView)
 	}
 	return OrderMarketForecastResult{
-		FormulaVersion: orderGenerationFormulaVersion,
+		FormulaVersion: template.FormulaVersion,
+		OrderTemplate:  BuildOrderTemplateView(template),
 		Stages:         stages,
 	}
 }
 
 func forecastAmountForProduct(yearNo int, marketCode string, orderType string, orderCount int) float64 {
+	return forecastAmountForProductForTemplate(yearNo, marketCode, orderType, orderCount, defaultOrderTemplate())
+}
+
+func forecastAmountForProductForTemplate(yearNo int, marketCode string, orderType string, orderCount int, template OrderTemplateDefinition) float64 {
 	if orderCount <= 0 {
 		return 0
 	}
-	params := defaultOrderGenerationParameters()
+	params := defaultOrderGenerationParameters(template)
+	if template.TemplateVersion == OrderTemplateVersionAirportV1 {
+		loadFactor := 70.0
+		flightCount := 10000.0
+		routeFactor := 1.0
+		if normalizeMarketCode(marketCode) == MarketCodeInternational {
+			routeFactor = 1.7
+		}
+		runwayFactor := 1.0
+		if normalizeOrderType(orderType) == OrderTypeWideBody {
+			runwayFactor = 2.4
+		}
+		unitPrice := loadFactor / 200 * 0.012 * routeFactor * runwayFactor
+		return roundIntegerMoney(float64(orderCount) * math.Round(unitPrice*flightCount))
+	}
 	avgPrice := params.AveragePrices[marketCode][orderType]
 	avgQuantity := float64(params.MinQuantity+params.MaxQuantity) / 2
 	return roundIntegerMoney(float64(orderCount) * avgPrice * avgQuantity)
@@ -2135,12 +2306,17 @@ func roundIntegerMoney(value float64) float64 {
 }
 
 func forecastControlCountMap(yearNo int, controls []entity.OrderForecastControl) map[string]int {
-	result := make(map[string]int, len(defaultOrderSegments()))
-	for _, segment := range defaultOrderSegments() {
+	return forecastControlCountMapForTemplate(yearNo, controls, defaultOrderTemplate())
+}
+
+func forecastControlCountMapForTemplate(yearNo int, controls []entity.OrderForecastControl, template OrderTemplateDefinition) map[string]int {
+	segments := template.Segments()
+	result := make(map[string]int, len(segments))
+	for _, segment := range segments {
 		result[segmentKey(yearNo, segment.MarketCode, segment.OrderType)] = 0
 	}
 	for _, item := range controls {
-		if item.YearNo == yearNo {
+		if item.YearNo == yearNo && template.IsValidMarketCode(item.MarketCode) && template.IsValidOrderType(item.OrderType) {
 			result[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item.OrderCount
 		}
 	}
@@ -2156,19 +2332,25 @@ func forecastControlCountMapAll(controls []entity.OrderForecastControl) map[stri
 }
 
 func buildOrderGenerationConfigsFromForecast(yearNo int, forecastCounts map[string]int, marketConfigMap map[string]bool, operatorName string, now time.Time) []entity.OrderGenerationConfig {
-	items := make([]entity.OrderGenerationConfig, 0, len(defaultOrderSegments()))
-	for index, segment := range defaultOrderSegments() {
+	return buildOrderGenerationConfigsFromForecastForTemplate(yearNo, forecastCounts, marketConfigMap, operatorName, now, defaultOrderTemplate())
+}
+
+func buildOrderGenerationConfigsFromForecastForTemplate(yearNo int, forecastCounts map[string]int, marketConfigMap map[string]bool, operatorName string, now time.Time, template OrderTemplateDefinition) []entity.OrderGenerationConfig {
+	segments := template.Segments()
+	items := make([]entity.OrderGenerationConfig, 0, len(segments))
+	for index, segment := range segments {
 		count := forecastCounts[segmentKey(yearNo, segment.MarketCode, segment.OrderType)]
-		if !isMarketEnabled(marketConfigMap, segment.MarketCode) {
+		if !isMarketEnabledForTemplate(marketConfigMap, segment.MarketCode, template) {
 			count = 0
 		}
 		items = append(items, entity.OrderGenerationConfig{
-			YearNo:            yearNo,
-			MarketCode:        segment.MarketCode,
-			OrderType:         segment.OrderType,
-			OrderCount:        count,
-			ReleaseSequenceNo: index + 1,
-			ConfigStatus:      enum.OrderConfigStatusDraft,
+			OrderTemplateVersion: template.TemplateVersion,
+			YearNo:               yearNo,
+			MarketCode:           segment.MarketCode,
+			OrderType:            segment.OrderType,
+			OrderCount:           count,
+			ReleaseSequenceNo:    index + 1,
+			ConfigStatus:         enum.OrderConfigStatusDraft,
 			BaseEntity: entity.BaseEntity{
 				Creator:    operatorName,
 				CreateTime: now,
@@ -2190,7 +2372,11 @@ func applyForecastCountsToConfigs(configs []entity.OrderGenerationConfig, foreca
 }
 
 func buildMarketEnabledMap(configs []entity.OrderMarketConfig) map[string]bool {
-	snapshotMap := buildMarketConfigSnapshotMap(configs)
+	return buildMarketEnabledMapForTemplate(configs, defaultOrderTemplate())
+}
+
+func buildMarketEnabledMapForTemplate(configs []entity.OrderMarketConfig, template OrderTemplateDefinition) map[string]bool {
+	snapshotMap := buildMarketConfigSnapshotMapForTemplate(configs, template)
 	result := make(map[string]bool, len(snapshotMap))
 	for marketCode, item := range snapshotMap {
 		result[marketCode] = item.Enabled
@@ -2204,15 +2390,22 @@ type orderMarketConfigSnapshot struct {
 }
 
 func buildMarketConfigSnapshotMap(configs []entity.OrderMarketConfig) map[string]orderMarketConfigSnapshot {
-	result := make(map[string]orderMarketConfigSnapshot, len(adminOrderMarkets()))
-	for _, market := range adminOrderMarkets() {
-		result[market.code] = orderMarketConfigSnapshot{
-			Enabled:         defaultMarketEnabled(market.code),
+	return buildMarketConfigSnapshotMapForTemplate(configs, defaultOrderTemplate())
+}
+
+func buildMarketConfigSnapshotMapForTemplate(configs []entity.OrderMarketConfig, template OrderTemplateDefinition) map[string]orderMarketConfigSnapshot {
+	result := make(map[string]orderMarketConfigSnapshot, len(template.Markets))
+	for _, market := range template.Markets {
+		result[market.Code] = orderMarketConfigSnapshot{
+			Enabled:         template.DefaultMarketEnabled(market.Code),
 			InvestmentLimit: nil,
 		}
 	}
 	for _, item := range configs {
 		marketCode := normalizeMarketCode(item.MarketCode)
+		if !template.IsValidMarketCode(marketCode) {
+			continue
+		}
 		result[marketCode] = orderMarketConfigSnapshot{
 			Enabled:         item.MarketEnabled,
 			InvestmentLimit: normalizeMarketInvestmentLimit(item.MarketInvestmentLimit),
@@ -2222,38 +2415,52 @@ func buildMarketConfigSnapshotMap(configs []entity.OrderMarketConfig) map[string
 }
 
 func defaultMarketEnabled(marketCode string) bool {
-	return normalizeMarketCode(marketCode) == enum.MarketCodeLocal
+	return defaultOrderTemplate().DefaultMarketEnabled(marketCode)
 }
 
 func isMarketEnabled(marketConfigMap map[string]bool, marketCode string) bool {
+	return isMarketEnabledForTemplate(marketConfigMap, marketCode, defaultOrderTemplate())
+}
+
+func isMarketEnabledForTemplate(marketConfigMap map[string]bool, marketCode string, template OrderTemplateDefinition) bool {
 	marketCode = normalizeMarketCode(marketCode)
 	if marketConfigMap == nil {
-		return defaultMarketEnabled(marketCode)
+		return template.DefaultMarketEnabled(marketCode)
 	}
 	enabled, exists := marketConfigMap[marketCode]
 	if !exists {
-		return defaultMarketEnabled(marketCode)
+		return template.DefaultMarketEnabled(marketCode)
 	}
 	return enabled
 }
 
 func applyMarketEnabledToConfigs(configs []entity.OrderGenerationConfig, marketConfigMap map[string]bool) []entity.OrderGenerationConfig {
+	return applyMarketEnabledToConfigsForTemplate(configs, marketConfigMap, defaultOrderTemplate())
+}
+
+func applyMarketEnabledToConfigsForTemplate(configs []entity.OrderGenerationConfig, marketConfigMap map[string]bool, template OrderTemplateDefinition) []entity.OrderGenerationConfig {
 	result := make([]entity.OrderGenerationConfig, 0, len(configs))
 	for _, item := range configs {
-		if !isMarketEnabled(marketConfigMap, item.MarketCode) {
+		if !isMarketEnabledForTemplate(marketConfigMap, item.MarketCode, template) {
 			item.OrderCount = 0
 		}
+		item.OrderTemplateVersion = template.TemplateVersion
 		result = append(result, item)
 	}
 	return result
 }
 
 func ensureDefaultMarketConfigs(ctx context.Context, repo *repository.OrderMarketConfigRepository, yearNo int, operatorName string, now time.Time) error {
+	return ensureDefaultMarketConfigsForTemplate(ctx, repo, yearNo, operatorName, now, defaultOrderTemplate())
+}
+
+func ensureDefaultMarketConfigsForTemplate(ctx context.Context, repo *repository.OrderMarketConfigRepository, yearNo int, operatorName string, now time.Time, template OrderTemplateDefinition) error {
 	existing, err := repo.ListByYear(ctx, yearNo)
 	if err != nil {
 		return err
 	}
-	if len(existing) >= len(adminOrderMarkets()) {
+	existing = filterMarketConfigsByTemplate(existing, template)
+	if len(existing) >= len(template.Markets) {
 		return nil
 	}
 	existingMap := make(map[string]bool, len(existing))
@@ -2261,14 +2468,15 @@ func ensureDefaultMarketConfigs(ctx context.Context, repo *repository.OrderMarke
 		existingMap[normalizeMarketCode(item.MarketCode)] = true
 	}
 	items := make([]entity.OrderMarketConfig, 0)
-	for _, market := range adminOrderMarkets() {
-		if existingMap[market.code] {
+	for _, market := range template.Markets {
+		if existingMap[market.Code] {
 			continue
 		}
 		items = append(items, entity.OrderMarketConfig{
+			OrderTemplateVersion:  template.TemplateVersion,
 			YearNo:                yearNo,
-			MarketCode:            market.code,
-			MarketEnabled:         defaultMarketEnabled(market.code),
+			MarketCode:            market.Code,
+			MarketEnabled:         template.DefaultMarketEnabled(market.Code),
 			MarketInvestmentLimit: nil,
 			ConfigStatus:          enum.OrderConfigStatusDraft,
 			BaseEntity: entity.BaseEntity{
@@ -2312,21 +2520,38 @@ func summarizeParsedPayload(raw []byte) map[string]int {
 }
 
 func defaultOrderSourceCounts(yearNo int) map[string]int {
-	params := defaultOrderGenerationParameters()
-	counts := make(map[string]int, len(defaultOrderSegments()))
-	for _, segment := range defaultOrderSegments() {
+	return defaultOrderSourceCountsForTemplate(yearNo, defaultOrderTemplate())
+}
+
+func defaultOrderSourceCountsForTemplate(yearNo int, template OrderTemplateDefinition) map[string]int {
+	params := defaultOrderGenerationParameters(template)
+	segments := template.Segments()
+	counts := make(map[string]int, len(segments))
+	for _, segment := range segments {
 		counts[segmentKey(yearNo, segment.MarketCode, segment.OrderType)] = params.MaxCardCount
 	}
 	return counts
 }
 
 func (s *AdminOrderQueryService) countGeneratedByYear(ctx context.Context, yearNo int) (map[string]int, error) {
-	return countGeneratedByYearWithRepo(ctx, s.poolRepo, yearNo)
+	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	template, err := ResolveOrderTemplateByGameConfig(*gameConfig)
+	if err != nil {
+		return nil, err
+	}
+	return countGeneratedByYearWithRepoForTemplate(ctx, s.poolRepo, yearNo, template)
 }
 
 func countGeneratedByYearWithRepo(ctx context.Context, repo *repository.OrderPoolRepository, yearNo int) (map[string]int, error) {
+	return countGeneratedByYearWithRepoForTemplate(ctx, repo, yearNo, defaultOrderTemplate())
+}
+
+func countGeneratedByYearWithRepoForTemplate(ctx context.Context, repo *repository.OrderPoolRepository, yearNo int, template OrderTemplateDefinition) (map[string]int, error) {
 	counts := make(map[string]int)
-	for _, segment := range defaultOrderSegments() {
+	for _, segment := range template.Segments() {
 		count, err := repo.CountBySegment(ctx, yearNo, segment.MarketCode, segment.OrderType)
 		if err != nil {
 			return nil, fmt.Errorf("count generated order pool: %w", err)
@@ -2337,6 +2562,10 @@ func countGeneratedByYearWithRepo(ctx context.Context, repo *repository.OrderPoo
 }
 
 func buildOrderPoolItem(item entity.OrderPool) OrderPoolItem {
+	payload := map[string]any(nil)
+	if len(item.OrderPayloadJSON) > 0 {
+		_ = json.Unmarshal(item.OrderPayloadJSON, &payload)
+	}
 	return OrderPoolItem{
 		OrderID:         item.ID,
 		BusinessOrderNo: formatBusinessOrderNo(item),
@@ -2354,6 +2583,7 @@ func buildOrderPoolItem(item entity.OrderPool) OrderPoolItem {
 		SelectedGroupID: item.SelectedGroupID,
 		SourceSheetName: item.SourceSheetName,
 		SourceCell:      item.SourceCell,
+		OrderPayload:    payload,
 	}
 }
 
@@ -2368,6 +2598,71 @@ func formatBusinessOrderNo(item entity.OrderPool) string {
 		return fmt.Sprintf("CARD-%02d", item.CardSequenceNo)
 	}
 	return fmt.Sprintf("ORDER-%d", item.ID)
+}
+
+func orderTemplateVersionMatches(value string, template OrderTemplateDefinition) bool {
+	normalized := strings.ToUpper(strings.TrimSpace(value))
+	return normalized == "" || normalized == template.TemplateVersion || (normalized == OrderTemplateVersionVIPServiceV1 && template.TemplateVersion == OrderTemplateVersionVIPServiceV1)
+}
+
+func filterForecastControlsByTemplate(items []entity.OrderForecastControl, template OrderTemplateDefinition) []entity.OrderForecastControl {
+	result := make([]entity.OrderForecastControl, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
+}
+
+func filterMarketForecastsByTemplate(items []entity.OrderMarketForecast, template OrderTemplateDefinition) []entity.OrderMarketForecast {
+	result := make([]entity.OrderMarketForecast, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
+}
+
+func filterGenerationConfigsByTemplate(items []entity.OrderGenerationConfig, template OrderTemplateDefinition) []entity.OrderGenerationConfig {
+	result := make([]entity.OrderGenerationConfig, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
+}
+
+func filterMarketConfigsByTemplate(items []entity.OrderMarketConfig, template OrderTemplateDefinition) []entity.OrderMarketConfig {
+	result := make([]entity.OrderMarketConfig, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
 }
 
 func buildOrderGenerationBatchSummary(item *entity.OrderGenerationBatch) *OrderGenerationBatchSummary {

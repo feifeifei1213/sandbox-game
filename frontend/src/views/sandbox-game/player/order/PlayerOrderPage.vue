@@ -111,7 +111,7 @@
             <div class="panel-head">
               <div>
                 <strong>年度市场投入</strong>
-                <span>开标前一次性提交 16 项投入，0 可以提交，提交后不能修改。</span>
+                <span>开标前一次性提交 {{ orderSegmentCount }} 项投入，0 可以提交，提交后不能修改。</span>
               </div>
               <button
                 type="button"
@@ -119,7 +119,7 @@
                 :disabled="!currentView.canSubmitInvestment || submittingInvestment"
                 @click="handleSubmitInvestments"
               >
-                {{ currentView.investmentSubmitted ? '已提交' : submittingInvestment ? '提交中...' : '提交 16 项投入' }}
+                {{ currentView.investmentSubmitted ? '已提交' : submittingInvestment ? '提交中...' : `提交 ${orderSegmentCount} 项投入` }}
               </button>
             </div>
             <div class="investment-grid">
@@ -174,7 +174,7 @@
                 </div>
               </div>
               <div class="investment-box">
-                <p class="hint">{{ selectedMarket.investmentSubmitted ? `该市场 4 个标段投入合计 ${formatAmount(selectedMarket.marketInvestment)}` : '等待年度 16 项投入提交。' }}</p>
+                <p class="hint">{{ selectedMarket.investmentSubmitted ? `该市场 ${selectedMarket.segments.length} 个标段投入合计 ${formatAmount(selectedMarket.marketInvestment)}` : `等待年度 ${orderSegmentCount} 项投入提交。` }}</p>
               </div>
 
               <div class="sequence-box">
@@ -245,10 +245,10 @@
                     <button
                       type="button"
                       class="btn primary"
-                      :disabled="deliveringOrders"
+                      :disabled="deliveringOrders || !deliveryEnabled"
                       @click="handleDeliverOrder(visibleSegment)"
                     >
-                      {{ deliveringOrders ? '交付中...' : '交付订单' }}
+                      {{ deliveryEnabled ? (deliveringOrders ? '交付中...' : '交付订单') : '暂不支持交付' }}
                     </button>
                   </div>
                   <em v-else-if="visibleSegment.selectedOrder.deliveredStageCode" class="delivery-note">
@@ -267,10 +267,7 @@
                       <span>可选</span>
                     </div>
                     <dl>
-                      <div><dt>金额</dt><dd>{{ formatIntegerAmount(order.orderAmount) }}</dd></div>
-                      <div><dt>数量</dt><dd>{{ formatQuantity(order.orderQuantity) }}</dd></div>
-                      <div><dt>单价</dt><dd>{{ formatUnitPrice(order.unitPrice) }}</dd></div>
-                      <div><dt>账期</dt><dd>{{ order.accountTerm }} 季度</dd></div>
+                      <div v-for="field in orderDisplayFields" :key="field.code"><dt>{{ field.name }}</dt><dd>{{ formatOrderField(order, field) }}</dd></div>
                     </dl>
                     <button
                       type="button"
@@ -291,10 +288,7 @@
                       <span>已锁定</span>
                     </div>
                     <dl>
-                      <div><dt>金额</dt><dd>{{ formatIntegerAmount(order.orderAmount) }}</dd></div>
-                      <div><dt>数量</dt><dd>{{ formatQuantity(order.orderQuantity) }}</dd></div>
-                      <div><dt>单价</dt><dd>{{ formatUnitPrice(order.unitPrice) }}</dd></div>
-                      <div><dt>账期</dt><dd>{{ order.accountTerm }} 季度</dd></div>
+                      <div v-for="field in orderDisplayFields" :key="field.code"><dt>{{ field.name }}</dt><dd>{{ formatOrderField(order, field) }}</dd></div>
                     </dl>
                     <button type="button" class="btn full" disabled>不可选择</button>
                   </article>
@@ -318,7 +312,7 @@
               <div class="panel-head">
                 <div>
                   <strong>本组待交付订单</strong>
-                  <span>同一季度可勾选多个完整订单一次交付。</span>
+                  <span>{{ deliveryEnabled ? '同一季度可勾选多个完整订单一次交付。' : '当前订单模板暂不支持交付，已选订单仅用于订单流程联调。' }}</span>
                 </div>
               </div>
               <section v-if="pendingDeliveryOrders.length === 0" class="empty-state nested">
@@ -336,10 +330,10 @@
                   <button
                     type="button"
                     class="btn primary"
-                    :disabled="selectedDeliveryOrderIds.length === 0 || deliveringOrders"
+                    :disabled="selectedDeliveryOrderIds.length === 0 || deliveringOrders || !deliveryEnabled"
                     @click="handleBulkDeliverOrders"
                   >
-                    {{ deliveringOrders ? '交付中...' : `交付 ${selectedDeliveryOrderIds.length} 单` }}
+                    {{ deliveryEnabled ? (deliveringOrders ? '交付中...' : `交付 ${selectedDeliveryOrderIds.length} 单`) : '暂不支持交付' }}
                   </button>
                 </div>
                 <div class="delivery-list">
@@ -377,8 +371,16 @@ import YearTabs from '@/components/sandbox-game/common/YearTabs.vue'
 import PageModeSwitch from '@/components/sandbox-game/player/PageModeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDictionaryStore } from '@/stores/dictionary'
-import { investmentKey, PLAYER_ORDER_MARKETS, PLAYER_ORDER_TYPES, usePlayerOrderStore } from '@/stores/player-order'
-import type { OrderDeliveryStageCode, OrderMarketCode, OrderMarketForecastMarket, OrderTypeCode, PlayerOrderPoolItem, PlayerOrderSegmentView } from '@/types/sandbox-game-order'
+import { investmentKey, usePlayerOrderStore } from '@/stores/player-order'
+import type {
+  OrderDeliveryStageCode,
+  OrderMarketCode,
+  OrderMarketForecastMarket,
+  OrderTemplateField,
+  OrderTypeCode,
+  PlayerOrderPoolItem,
+  PlayerOrderSegmentView,
+} from '@/types/sandbox-game-order'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const route = useRoute()
@@ -404,6 +406,11 @@ const {
   markets,
   selectedMarket,
   currentSegment,
+  orderTemplate,
+  orderMarketOptions,
+  orderTypeOptions: templateOrderTypeOptions,
+  orderSegmentCount,
+  deliveryEnabled,
 } = storeToRefs(store)
 const { currentUser } = storeToRefs(authStore)
 
@@ -413,17 +420,21 @@ const deliveryStageDraft = ref<Record<number, OrderDeliveryStageCode>>({})
 const bulkDeliveryStage = ref<OrderDeliveryStageCode>('Q1')
 const selectedDeliveryOrderIds = ref<number[]>([])
 const marketOptions = computed(() =>
-  PLAYER_ORDER_MARKETS.map((item) => ({
+  orderMarketOptions.value.map((item) => ({
     ...item,
     name: dictionaryStore.marketName(item.code, item.name),
   })),
 )
 const orderTypeOptions = computed(() =>
-  PLAYER_ORDER_TYPES.map((item) => ({
+  templateOrderTypeOptions.value.map((item) => ({
     ...item,
     name: dictionaryStore.orderTypeName(item.code, item.name),
   })),
 )
+const orderDisplayFields = computed(() => {
+  const fields = orderTemplate.value.fields?.length ? orderTemplate.value.fields : []
+  return [...fields].sort((a, b) => a.order - b.order)
+})
 
 const visibleSegment = computed(() => currentSegment.value ?? selectedMarket.value?.segments[0] ?? null)
 const activeSegmentTitle = computed(() => {
@@ -650,7 +661,44 @@ function formatQuantity(value: number) {
 }
 
 function formatUnitPrice(value: number) {
-  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+}
+
+function formatOrderField(order: PlayerOrderPoolItem, field: OrderTemplateField) {
+  const value = resolveOrderFieldValue(order, field.code)
+  if (value === null || value === undefined || value === '') {
+    return '--'
+  }
+  if (field.valueType === 'money') {
+    if (field.code === 'unitPrice') {
+      return formatUnitPrice(Number(value))
+    }
+    return `${formatIntegerAmount(Number(value))}${field.unit ? field.unit : ''}`
+  }
+  if (field.valueType === 'percent') {
+    return `${formatQuantity(Number(value))}${field.unit || '%'}`
+  }
+  if (field.valueType === 'number') {
+    const unit = field.unit ? ` ${field.unit}` : ''
+    return `${formatQuantity(Number(value))}${unit}`
+  }
+  return String(value)
+}
+
+function resolveOrderFieldValue(order: PlayerOrderPoolItem, code: string) {
+  if (code === 'orderAmount') {
+    return order.orderAmount
+  }
+  if (code === 'orderQuantity' || code === 'flightCount') {
+    return order.orderPayload?.[code] ?? order.orderQuantity
+  }
+  if (code === 'unitPrice') {
+    return order.unitPrice
+  }
+  if (code === 'accountTerm') {
+    return order.accountTerm
+  }
+  return order.orderPayload?.[code]
 }
 
 function stageMarketAmount(market: OrderMarketForecastMarket) {

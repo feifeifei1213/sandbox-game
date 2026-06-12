@@ -252,8 +252,10 @@ func abortOrderError(c *gin.Context, err error, fallbackMessage string) {
 		errors.Is(err, service.ErrOrderAdminSkipReasonRequired),
 		errors.Is(err, service.ErrOrderDeliveryStageInvalid),
 		errors.Is(err, service.ErrOrderDeliveryOrderInvalid),
+		errors.Is(err, service.ErrOrderDeliveryDisabled),
 		errors.Is(err, service.ErrOrderDeliveryRevenueMismatch),
-		errors.Is(err, service.ErrOrderPrerequisiteIncomplete):
+		errors.Is(err, service.ErrOrderPrerequisiteIncomplete),
+		errors.Is(err, service.ErrOrderTemplateUnsupported):
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusUnprocessableEntity, enum.UnprocessableEntityCode, resolveOrderErrorMessage(err), err))
 	default:
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusInternalServerError, enum.InternalServerErrorCode, fallbackMessage, err))
@@ -283,7 +285,7 @@ func resolveOrderErrorMessage(err error) string {
 	case errors.Is(err, service.ErrOrderInvestmentAlreadySubmitted):
 		return "本年市场投入已提交，不能修改"
 	case errors.Is(err, service.ErrOrderInvestmentInvalid):
-		return "市场投入必须一次提交完整 16 项且不能为负数"
+		return "市场投入必须一次提交当前订单模板的完整标段且不能为负数"
 	case errors.Is(err, service.ErrOrderInvestmentNotInteger), errors.Is(err, service.ErrOrderInvestmentLimitExceeded):
 		return err.Error()
 	case errors.Is(err, service.ErrOrderMarketDisabledInvestment):
@@ -310,8 +312,12 @@ func resolveOrderErrorMessage(err error) string {
 		return "只能交付本组本年已选且未交付订单"
 	case errors.Is(err, service.ErrOrderDeliveryRevenueMismatch):
 		return "本季度销售收入必须等于交付订单金额合计"
+	case errors.Is(err, service.ErrOrderDeliveryDisabled):
+		return "当前订单模板暂不支持交付"
 	case errors.Is(err, service.ErrOrderPrerequisiteIncomplete):
 		return "本年订单选择尚未完成"
+	case errors.Is(err, service.ErrOrderTemplateUnsupported):
+		return "当前订单模板暂不支持"
 	default:
 		return "订单流程处理失败"
 	}

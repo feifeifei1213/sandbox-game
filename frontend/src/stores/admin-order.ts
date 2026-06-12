@@ -31,8 +31,9 @@ import type {
   OrderPoolResult,
   UploadOrderExcelResult,
 } from '@/types/sandbox-game-admin'
-import type { AdminMarketSelectionStatus } from '@/types/sandbox-game-order'
+import type { AdminMarketSelectionStatus, OrderTemplateMeta } from '@/types/sandbox-game-order'
 import { hasFractionInput } from '@/utils/manual-integer'
+import { DEFAULT_PLAYER_ORDER_TEMPLATE } from '@/stores/player-order'
 
 type MessageType = 'success' | 'error' | 'info'
 
@@ -101,6 +102,17 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const forecastYearLocks = computed(() => forecastControl.value?.yearLocks ?? [])
   const enabledMarketCount = computed(() => editableMarketConfigs.value.filter((item) => item.enabled).length)
   const currentSegment = computed(() => marketSelectionStatus.value?.currentSegment ?? null)
+  const orderTemplate = computed<OrderTemplateMeta>(() =>
+    config.value?.orderTemplate
+      ?? forecastControl.value?.orderTemplate
+      ?? orderPool.value?.orderTemplate
+      ?? marketSelectionStatus.value?.orderTemplate
+      ?? DEFAULT_PLAYER_ORDER_TEMPLATE,
+  )
+  const marketOptions = computed(() => orderTemplate.value.markets ?? DEFAULT_PLAYER_ORDER_TEMPLATE.markets)
+  const orderTypeOptions = computed(() => orderTemplate.value.orderTypes ?? DEFAULT_PLAYER_ORDER_TEMPLATE.orderTypes)
+  const maxCardCount = computed(() => orderTemplate.value.maxCardCount || DEFAULT_PLAYER_ORDER_TEMPLATE.maxCardCount)
+  const segmentCount = computed(() => orderTemplate.value.segmentCount || marketOptions.value.length * orderTypeOptions.value.length)
 
   async function bootstrap(yearNo: number) {
     selectedYearNo.value = Math.max(yearNo, 1)
@@ -180,9 +192,10 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       applyConfig({
         yearNo: result.yearNo,
         finalYear: config.value?.finalYear ?? selectedYearNo.value,
+        orderTemplate: result.items.length > 0 ? orderTemplate.value : config.value?.orderTemplate ?? orderTemplate.value,
         latestBatchId: config.value?.latestBatchId ?? null,
         latestBatchUploadedAt: config.value?.latestBatchUploadedAt ?? null,
-        forecast: forecastControl.value?.forecast ?? config.value?.forecast ?? { formulaVersion: '', stages: [] },
+        forecast: forecastControl.value?.forecast ?? config.value?.forecast ?? { formulaVersion: orderTemplate.value.formulaVersion, orderTemplate: orderTemplate.value, stages: [] },
         generationStatus: config.value?.generationStatus ?? 'NOT_GENERATED',
         latestPreviewBatch: config.value?.latestPreviewBatch ?? null,
         confirmedBatch: config.value?.confirmedBatch ?? null,
@@ -271,9 +284,10 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       applyConfig({
         yearNo: result.yearNo,
         finalYear: config.value?.finalYear ?? selectedYearNo.value,
+        orderTemplate: config.value?.orderTemplate ?? orderTemplate.value,
         latestBatchId: config.value?.latestBatchId ?? null,
         latestBatchUploadedAt: config.value?.latestBatchUploadedAt ?? null,
-        forecast: forecastControl.value?.forecast ?? config.value?.forecast ?? { formulaVersion: '', stages: [] },
+        forecast: forecastControl.value?.forecast ?? config.value?.forecast ?? { formulaVersion: orderTemplate.value.formulaVersion, orderTemplate: orderTemplate.value, stages: [] },
         generationStatus: config.value?.generationStatus ?? 'NOT_GENERATED',
         latestPreviewBatch: config.value?.latestPreviewBatch ?? null,
         confirmedBatch: config.value?.confirmedBatch ?? null,
@@ -426,7 +440,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
       pageMessage.value = {
         type: 'success',
-        text: `${dictionaryStore.marketName(controlForm.marketCode, marketName(controlForm.marketCode))}投入已开放。`,
+        text: `${dictionaryStore.marketName(controlForm.marketCode, templateMarketName(controlForm.marketCode))}投入已开放。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '开放市场投入失败')
@@ -447,7 +461,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       await Promise.all([loadConfig({ silent: true }), loadSelectionStatus({ silent: true })])
       pageMessage.value = {
         type: 'success',
-        text: `${dictionaryStore.marketName(controlForm.marketCode, marketName(controlForm.marketCode))}投入已关闭，选单顺序已生成或市场已跳过。`,
+        text: `${dictionaryStore.marketName(controlForm.marketCode, templateMarketName(controlForm.marketCode))}投入已关闭，选单顺序已生成或市场已跳过。`,
       }
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '关闭市场投入失败')
@@ -515,18 +529,20 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
 
   function applyConfig(result: OrderControlConfigResult) {
     config.value = result
-    editableMarketConfigs.value = (result.marketConfigs ?? defaultMarketConfigs(result.yearNo, dictionaryStore.marketName)).map((item) => ({ ...item }))
+    editableMarketConfigs.value = (result.marketConfigs ?? defaultMarketConfigs(result.yearNo, result.orderTemplate ?? orderTemplate.value, dictionaryStore.marketName)).map((item) => ({ ...item }))
     const marketEnabledMap = new Map(editableMarketConfigs.value.map((item) => [item.marketCode, item.enabled]))
     editableItems.value = result.items.map((item) => ({
       ...item,
-      marketEnabled: item.marketEnabled ?? marketEnabledMap.get(item.marketCode) ?? item.marketCode === 'LOCAL',
+      marketEnabled: item.marketEnabled ?? marketEnabledMap.get(item.marketCode) ?? (result.orderTemplate ?? orderTemplate.value).markets.find((market) => market.code === item.marketCode)?.defaultEnabled ?? false,
     }))
+    ensureControlMarketIsValid()
   }
 
   function applyForecastControl(result: OrderForecastControlResult) {
     forecastControl.value = result
     editableForecastItems.value = (result.items ?? []).map((item) => ({ ...item }))
     editableForecastNarratives.value = (result.narratives ?? []).map((item) => ({ ...item }))
+    ensureControlMarketIsValid()
   }
 
   function setYear(yearNo: number) {
@@ -535,6 +551,18 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
 
   function setControlMarket(marketCode: OrderMarketCode) {
     controlForm.marketCode = marketCode
+  }
+
+  function ensureControlMarketIsValid() {
+    const markets = orderTemplate.value.markets ?? DEFAULT_PLAYER_ORDER_TEMPLATE.markets
+    if (markets.some((item) => item.code === controlForm.marketCode)) {
+      return
+    }
+    controlForm.marketCode = markets[0]?.code ?? 'LOCAL'
+  }
+
+  function templateMarketName(code: OrderMarketCode) {
+    return orderTemplate.value.markets.find((item) => item.code === code)?.name ?? MARKET_OPTIONS.find((item) => item.code === code)?.name ?? code
   }
 
   return {
@@ -572,6 +600,11 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     hasLockedConfig,
     enabledMarketCount,
     currentSegment,
+    orderTemplate,
+    marketOptions,
+    orderTypeOptions,
+    maxCardCount,
+    segmentCount,
     bootstrap,
     loadForecastControl,
     loadConfig,
@@ -597,12 +630,12 @@ function marketName(code: OrderMarketCode) {
   return MARKET_OPTIONS.find((item) => item.code === code)?.name ?? code
 }
 
-function defaultMarketConfigs(yearNo: number, resolveMarketName: (code: string, fallback: string) => string): OrderMarketConfigItem[] {
-  return MARKET_OPTIONS.map((item) => ({
+function defaultMarketConfigs(yearNo: number, template: OrderTemplateMeta, resolveMarketName: (code: string, fallback: string) => string): OrderMarketConfigItem[] {
+  return (template.markets ?? DEFAULT_PLAYER_ORDER_TEMPLATE.markets).map((item) => ({
     yearNo,
     marketCode: item.code,
     marketName: resolveMarketName(item.code, item.name),
-    enabled: item.code === 'LOCAL',
+    enabled: item.defaultEnabled,
     marketInvestmentLimit: null,
     configStatus: 'DRAFT',
     lockedBatchId: null,

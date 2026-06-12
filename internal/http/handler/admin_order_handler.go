@@ -604,7 +604,8 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 		errors.Is(err, service.ErrAdminOrderForecastControlInvalid),
 		errors.Is(err, service.ErrAdminOrderReleaseSequenceDuplicated),
 		errors.Is(err, service.ErrAdminOrderSourceInsufficient),
-		errors.Is(err, service.ErrAdminOrderInvestmentIncomplete):
+		errors.Is(err, service.ErrAdminOrderInvestmentIncomplete),
+		errors.Is(err, service.ErrOrderTemplateUnsupported):
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusUnprocessableEntity,
 			enum.UnprocessableEntityCode,
@@ -653,11 +654,13 @@ func resolveAdminOrderErrorMessage(err error) string {
 		if err.Error() != service.ErrAdminOrderInvestmentIncomplete.Error() {
 			return err.Error()
 		}
-		return "仍有未破产小组没有提交完整 16 项市场投入"
+		return "仍有未破产小组没有提交完整市场投入"
 	case errors.Is(err, service.ErrAdminOrderSequenceAlreadyGenerated):
 		return "该年份已生成选单顺序，不能重复生成"
 	case errors.Is(err, service.ErrAdminOrderSourceInsufficient):
 		return err.Error()
+	case errors.Is(err, service.ErrOrderTemplateUnsupported):
+		return "当前订单模板暂不支持"
 	default:
 		return "订单管理处理失败"
 	}

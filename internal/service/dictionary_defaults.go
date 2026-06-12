@@ -25,14 +25,22 @@ type DictionaryDefinition struct {
 func BuiltInDictionaryDefinitions(editionCode string) []DictionaryDefinition {
 	edition := ResolveGameEdition(editionCode)
 	items := make([]DictionaryDefinition, 0, 80)
-	items = append(items, builtInCommonOrderDictionaryDefinitions()...)
+	items = append(items, builtInOrderDictionaryDefinitions(edition.EditionCode)...)
 	items = append(items, builtInOperatingDictionaryDefinitions(edition.EditionCode)...)
 	items = append(items, builtInReportDictionaryDefinitions(edition.EditionCode)...)
 	items = append(items, builtInBaselineDictionaryDefinitions(edition.EditionCode)...)
 	return items
 }
 
-func builtInCommonOrderDictionaryDefinitions() []DictionaryDefinition {
+func builtInOrderDictionaryDefinitions(editionCode string) []DictionaryDefinition {
+	if editionCode == GameEditionAirportV1 {
+		return []DictionaryDefinition{
+			dictDef("market.DOMESTIC", DictionaryCategoryMarket, "国内市场", 10, "DOMESTIC"),
+			dictDef("market.INTERNATIONAL", DictionaryCategoryMarket, "国际市场", 20, "INTERNATIONAL"),
+			dictDef("orderType.NARROW_BODY", DictionaryCategoryOrderType, "窄体", 100, "NARROW_BODY"),
+			dictDef("orderType.WIDE_BODY", DictionaryCategoryOrderType, "宽体", 110, "WIDE_BODY"),
+		}
+	}
 	return []DictionaryDefinition{
 		dictDef("market.LOCAL", DictionaryCategoryMarket, "本地市场", 10, "LOCAL"),
 		dictDef("market.REGIONAL", DictionaryCategoryMarket, "区域市场", 20, "REGIONAL"),

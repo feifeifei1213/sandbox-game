@@ -11,15 +11,19 @@ const (
 	GameEditionVIPServiceV1Name          = "贵宾服务版 V1"
 	GameEditionProductionV1              = "PRODUCTION_V1"
 	GameEditionProductionV1Name          = "生产制造版 V1"
+	GameEditionAirportV1                 = "AIRPORT_V1"
+	GameEditionAirportV1Name             = "机场沙盘版 V1"
 	FormulaVersionCommonV1               = "COMMON_FORMULA_V1"
 	ProcessRuleVersionCommonV1           = "COMMON_PROCESS_V1"
 	TemplateVersionVIPServiceV1          = "VIP_SERVICE_V1"
 	OperatingTemplateVersionVIPServiceV1 = "VIP_OPERATING_TEMPLATE_V1"
 	ReportTemplateVersionVIPServiceV1    = "VIP_REPORT_TEMPLATE_V1"
-	OrderTemplateVersionVIPServiceV1     = "VIP_ORDER_TEMPLATE_V1"
 	TemplateVersionProductionV1          = "PRODUCTION_V1"
 	OperatingTemplateVersionProductionV1 = "PRODUCTION_OPERATING_TEMPLATE_V1"
 	ReportTemplateVersionProductionV1    = "PRODUCTION_REPORT_TEMPLATE_V1"
+	TemplateVersionAirportV1             = "AIRPORT_V1"
+	OperatingTemplateVersionPending      = "PENDING_OPERATING_TEMPLATE"
+	ReportTemplateVersionPending         = "PENDING_REPORT_TEMPLATE"
 )
 
 type GameEdition struct {
@@ -61,6 +65,19 @@ var builtInGameEditions = []GameEdition{
 		OperatingTemplateVersion: OperatingTemplateVersionProductionV1,
 		ReportTemplateVersion:    ReportTemplateVersionProductionV1,
 		OrderTemplateVersion:     OrderTemplateVersionVIPServiceV1,
+		ProcessRuleVersion:       ProcessRuleVersionCommonV1,
+	},
+	{
+		EditionCode:              GameEditionAirportV1,
+		EditionName:              GameEditionAirportV1Name,
+		Description:              "机场沙盘版订单模板，经营页和财报页模板待接入，当前用于订单模块独立联调。",
+		DefaultEdition:           false,
+		RuleVersion:              FormulaVersionCommonV1,
+		FormulaVersion:           FormulaVersionCommonV1,
+		TemplateVersion:          TemplateVersionAirportV1,
+		OperatingTemplateVersion: OperatingTemplateVersionPending,
+		ReportTemplateVersion:    ReportTemplateVersionPending,
+		OrderTemplateVersion:     OrderTemplateVersionAirportV1,
 		ProcessRuleVersion:       ProcessRuleVersionCommonV1,
 	},
 }

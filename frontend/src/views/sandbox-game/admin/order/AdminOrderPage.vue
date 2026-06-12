@@ -101,7 +101,7 @@
                       :value="getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0"
                       type="number"
                       min="0"
-                      max="15"
+                      :max="maxCardCount"
                       step="1"
                       class="compact-input"
                       :class="{ invalid: hasFractionInput(getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0) }"
@@ -168,7 +168,7 @@
       <div class="panel-head">
         <div>
           <strong>市场开启与投入上限</strong>
-          <span>本地市场默认开启；未开启市场不生成订单、不进入抢单，玩家端自动按 0 提交。</span>
+          <span>默认开启状态由当前订单模板决定；未开启市场不生成订单、不进入抢单，玩家端自动按 0 提交。</span>
         </div>
         <button type="button" class="btn primary" :disabled="savingMarketConfig || !config?.canUpdateConfig" @click="handleSaveMarketConfig">
           {{ savingMarketConfig ? '保存中...' : '保存市场' }}
@@ -297,7 +297,7 @@
       <div class="panel-head">
         <div>
           <strong>市场竞标控制</strong>
-          <span>玩家提交完整 16 项投入后，管理员生成全部标段选单顺序，再按释放顺序逐个释放。</span>
+          <span>玩家提交完整 {{ segmentCount }} 项投入后，管理员生成全部标段选单顺序，再按释放顺序逐个释放。</span>
         </div>
         <button type="button" class="btn" :disabled="loadingSelectionStatus" @click="handleLoadSelectionStatus">
           {{ loadingSelectionStatus ? '加载中...' : '刷新状态' }}
@@ -473,6 +473,7 @@
               <th>数量</th>
               <th>单价</th>
               <th>账期</th>
+              <th v-for="field in extraPoolFields" :key="field.code">{{ field.name }}</th>
               <th>状态</th>
               <th>选中组</th>
               <th>来源</th>
@@ -480,7 +481,7 @@
           </thead>
           <tbody>
             <tr v-if="!orderPool || orderPool.list.length === 0">
-              <td colspan="10" class="empty-row">当前筛选下没有订单池记录。</td>
+              <td :colspan="10 + extraPoolFields.length" class="empty-row">当前筛选下没有订单池记录。</td>
             </tr>
             <tr v-for="item in orderPool?.list ?? []" :key="item.orderId">
               <td>{{ item.businessOrderNo || `#${item.orderId}` }}</td>
@@ -490,6 +491,7 @@
               <td class="number-cell">{{ formatQuantity(item.orderQuantity) }}</td>
               <td class="number-cell">{{ formatUnitPrice(item.unitPrice) }}</td>
               <td>{{ item.accountTerm }}季度</td>
+              <td v-for="field in extraPoolFields" :key="field.code">{{ formatOrderField(item, field) }}</td>
               <td>{{ formatPoolStatus(item.poolStatus) }}</td>
               <td>{{ item.selectedGroupId ? `组ID ${item.selectedGroupId}` : '--' }}</td>
               <td>{{ item.sourceSheetName }} {{ item.sourceCell }}</td>
@@ -507,10 +509,10 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
-import { MARKET_OPTIONS, ORDER_TYPE_OPTIONS, useAdminOrderStore } from '@/stores/admin-order'
+import { useAdminOrderStore } from '@/stores/admin-order'
 import { useDictionaryStore } from '@/stores/dictionary'
-import type { OrderPoolStatus } from '@/types/sandbox-game-admin'
-import type { AdminOrderSegmentStatus, OrderMarketForecastMarket } from '@/types/sandbox-game-order'
+import type { OrderPoolItem, OrderPoolStatus } from '@/types/sandbox-game-admin'
+import type { AdminOrderSegmentStatus, OrderMarketForecastMarket, OrderTemplateField } from '@/types/sandbox-game-order'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
@@ -546,19 +548,28 @@ const {
   totalOrderCount,
   totalGeneratedCount,
   enabledMarketCount,
+  marketOptions: templateMarketOptions,
+  orderTypeOptions: templateOrderTypeOptions,
+  maxCardCount,
+  segmentCount,
 } = storeToRefs(store)
 
 const marketOptions = computed(() =>
-  MARKET_OPTIONS.map((item) => ({
+  templateMarketOptions.value.map((item) => ({
     ...item,
     name: dictionaryStore.marketName(item.code, item.name),
   })),
 )
 const orderTypeOptions = computed(() =>
-  ORDER_TYPE_OPTIONS.map((item) => ({
+  templateOrderTypeOptions.value.map((item) => ({
     ...item,
     name: dictionaryStore.orderTypeName(item.code, item.name),
   })),
+)
+const extraPoolFields = computed(() =>
+  (config.value?.orderTemplate.fields ?? orderPool.value?.orderTemplate.fields ?? [])
+    .filter((field) => !['orderAmount', 'orderQuantity', 'unitPrice', 'accountTerm'].includes(field.code))
+    .sort((a, b) => a.order - b.order),
 )
 const selectedSequenceSegmentKey = ref('')
 const activeOrderTab = ref<'forecast' | 'market' | 'sequence' | 'pool' | 'bidding'>('market')
@@ -776,7 +787,7 @@ function forecastYearLockReason(yearNo: number) {
 function handleForecastCountInput(yearNo: number, marketCode: string, orderType: string, event: Event) {
   const input = event.target as HTMLInputElement
   const raw = Number(input.value)
-  const value = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 15) : 0
+  const value = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), maxCardCount.value) : 0
   const item = getForecastItem(yearNo, marketCode, orderType)
   if (item) {
     item.orderCount = value
@@ -929,7 +940,44 @@ function formatQuantity(value: number) {
 }
 
 function formatUnitPrice(value: number) {
-  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+}
+
+function formatOrderField(order: OrderPoolItem, field: OrderTemplateField) {
+  const value = resolveOrderFieldValue(order, field.code)
+  if (value === null || value === undefined || value === '') {
+    return '--'
+  }
+  if (field.valueType === 'money') {
+    if (field.code === 'unitPrice') {
+      return formatUnitPrice(Number(value))
+    }
+    return `${formatIntegerAmount(Number(value))}${field.unit ? field.unit : ''}`
+  }
+  if (field.valueType === 'percent') {
+    return `${formatQuantity(Number(value))}${field.unit || '%'}`
+  }
+  if (field.valueType === 'number') {
+    const unit = field.unit ? ` ${field.unit}` : ''
+    return `${formatQuantity(Number(value))}${unit}`
+  }
+  return String(value)
+}
+
+function resolveOrderFieldValue(order: OrderPoolItem, code: string) {
+  if (code === 'orderAmount') {
+    return order.orderAmount
+  }
+  if (code === 'orderQuantity' || code === 'flightCount') {
+    return order.orderPayload?.[code] ?? order.orderQuantity
+  }
+  if (code === 'unitPrice') {
+    return order.unitPrice
+  }
+  if (code === 'accountTerm') {
+    return order.accountTerm
+  }
+  return order.orderPayload?.[code]
 }
 
 function stageMarketAmount(market: OrderMarketForecastMarket) {

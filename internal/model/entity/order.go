@@ -21,15 +21,16 @@ func (OrderImportBatch) TableName() string {
 }
 
 type OrderGenerationConfig struct {
-	ID                int64  `gorm:"column:id;primaryKey"`
-	YearNo            int    `gorm:"column:year_no"`
-	MarketCode        string `gorm:"column:market_code"`
-	OrderType         string `gorm:"column:order_type"`
-	OrderCount        int    `gorm:"column:order_count"`
-	ReleaseSequenceNo int    `gorm:"column:release_sequence_no"`
-	GenerationBatchID *int64 `gorm:"column:generation_batch_id"`
-	SourceBatchID     *int64 `gorm:"column:source_batch_id"`
-	ConfigStatus      string `gorm:"column:config_status"`
+	ID                   int64  `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion string `gorm:"column:order_template_version"`
+	YearNo               int    `gorm:"column:year_no"`
+	MarketCode           string `gorm:"column:market_code"`
+	OrderType            string `gorm:"column:order_type"`
+	OrderCount           int    `gorm:"column:order_count"`
+	ReleaseSequenceNo    int    `gorm:"column:release_sequence_no"`
+	GenerationBatchID    *int64 `gorm:"column:generation_batch_id"`
+	SourceBatchID        *int64 `gorm:"column:source_batch_id"`
+	ConfigStatus         string `gorm:"column:config_status"`
 	BaseEntity
 }
 
@@ -38,12 +39,13 @@ func (OrderGenerationConfig) TableName() string {
 }
 
 type OrderForecastControl struct {
-	ID                int64  `gorm:"column:id;primaryKey"`
-	YearNo            int    `gorm:"column:year_no"`
-	ForecastStageCode string `gorm:"column:forecast_stage_code"`
-	MarketCode        string `gorm:"column:market_code"`
-	OrderType         string `gorm:"column:order_type"`
-	OrderCount        int    `gorm:"column:order_count"`
+	ID                   int64  `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion string `gorm:"column:order_template_version"`
+	YearNo               int    `gorm:"column:year_no"`
+	ForecastStageCode    string `gorm:"column:forecast_stage_code"`
+	MarketCode           string `gorm:"column:market_code"`
+	OrderType            string `gorm:"column:order_type"`
+	OrderCount           int    `gorm:"column:order_count"`
 	BaseEntity
 }
 
@@ -52,14 +54,15 @@ func (OrderForecastControl) TableName() string {
 }
 
 type OrderMarketForecast struct {
-	ID                  int64  `gorm:"column:id;primaryKey"`
-	ForecastStageCode   string `gorm:"column:forecast_stage_code"`
-	MarketCode          string `gorm:"column:market_code"`
-	ForecastData        []byte `gorm:"column:forecast_data_json"`
-	Narrative           string `gorm:"column:narrative"`
-	FormulaVersion      string `gorm:"column:formula_version"`
-	RandomSeed          string `gorm:"column:random_seed"`
-	ControlSnapshotJSON []byte `gorm:"column:control_snapshot_json"`
+	ID                   int64  `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion string `gorm:"column:order_template_version"`
+	ForecastStageCode    string `gorm:"column:forecast_stage_code"`
+	MarketCode           string `gorm:"column:market_code"`
+	ForecastData         []byte `gorm:"column:forecast_data_json"`
+	Narrative            string `gorm:"column:narrative"`
+	FormulaVersion       string `gorm:"column:formula_version"`
+	RandomSeed           string `gorm:"column:random_seed"`
+	ControlSnapshotJSON  []byte `gorm:"column:control_snapshot_json"`
 	BaseEntity
 }
 
@@ -69,6 +72,7 @@ func (OrderMarketForecast) TableName() string {
 
 type OrderMarketConfig struct {
 	ID                    int64    `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion  string   `gorm:"column:order_template_version"`
 	YearNo                int      `gorm:"column:year_no"`
 	MarketCode            string   `gorm:"column:market_code"`
 	MarketEnabled         bool     `gorm:"column:market_enabled"`
@@ -83,22 +87,23 @@ func (OrderMarketConfig) TableName() string {
 }
 
 type OrderGenerationBatch struct {
-	ID                  int64      `gorm:"column:id;primaryKey"`
-	YearNo              int        `gorm:"column:year_no"`
-	BatchStatus         string     `gorm:"column:batch_status"`
-	FormulaVersion      string     `gorm:"column:formula_version"`
-	RandomSeed          string     `gorm:"column:random_seed"`
-	ControlSnapshot     []byte     `gorm:"column:control_snapshot_json"`
-	ForecastSnapshot    []byte     `gorm:"column:forecast_snapshot_json"`
-	ParameterSnapshot   []byte     `gorm:"column:parameter_snapshot_json"`
-	OrderDetail         []byte     `gorm:"column:order_detail_json"`
-	GeneratedOrderCount int        `gorm:"column:generated_order_count"`
-	GeneratedByID       int64      `gorm:"column:generated_by_id"`
-	GeneratedByName     string     `gorm:"column:generated_by_name"`
-	GeneratedAt         time.Time  `gorm:"column:generated_at"`
-	ConfirmedByID       *int64     `gorm:"column:confirmed_by_id"`
-	ConfirmedByName     *string    `gorm:"column:confirmed_by_name"`
-	ConfirmedAt         *time.Time `gorm:"column:confirmed_at"`
+	ID                   int64      `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion string     `gorm:"column:order_template_version"`
+	YearNo               int        `gorm:"column:year_no"`
+	BatchStatus          string     `gorm:"column:batch_status"`
+	FormulaVersion       string     `gorm:"column:formula_version"`
+	RandomSeed           string     `gorm:"column:random_seed"`
+	ControlSnapshot      []byte     `gorm:"column:control_snapshot_json"`
+	ForecastSnapshot     []byte     `gorm:"column:forecast_snapshot_json"`
+	ParameterSnapshot    []byte     `gorm:"column:parameter_snapshot_json"`
+	OrderDetail          []byte     `gorm:"column:order_detail_json"`
+	GeneratedOrderCount  int        `gorm:"column:generated_order_count"`
+	GeneratedByID        int64      `gorm:"column:generated_by_id"`
+	GeneratedByName      string     `gorm:"column:generated_by_name"`
+	GeneratedAt          time.Time  `gorm:"column:generated_at"`
+	ConfirmedByID        *int64     `gorm:"column:confirmed_by_id"`
+	ConfirmedByName      *string    `gorm:"column:confirmed_by_name"`
+	ConfirmedAt          *time.Time `gorm:"column:confirmed_at"`
 	BaseEntity
 }
 
@@ -107,26 +112,28 @@ func (OrderGenerationBatch) TableName() string {
 }
 
 type OrderPool struct {
-	ID                int64      `gorm:"column:id;primaryKey"`
-	YearNo            int        `gorm:"column:year_no"`
-	MarketCode        string     `gorm:"column:market_code"`
-	OrderType         string     `gorm:"column:order_type"`
-	SegmentCode       string     `gorm:"column:segment_code"`
-	CardSequenceNo    int        `gorm:"column:card_sequence_no"`
-	BusinessOrderNo   string     `gorm:"column:business_order_no"`
-	OrderAmount       float64    `gorm:"column:order_amount"`
-	OrderQuantity     float64    `gorm:"column:order_quantity"`
-	UnitPrice         float64    `gorm:"column:unit_price"`
-	AccountTerm       int        `gorm:"column:account_term"`
-	PoolStatus        string     `gorm:"column:pool_status"`
-	SelectedGroupID   *int64     `gorm:"column:selected_group_id"`
-	SelectedAt        *time.Time `gorm:"column:selected_at"`
-	GenerationBatchID *int64     `gorm:"column:generation_batch_id"`
-	SourceBatchID     *int64     `gorm:"column:source_batch_id"`
-	SourceSheetName   string     `gorm:"column:source_sheet_name"`
-	SourceCell        string     `gorm:"column:source_cell"`
-	SourceRowIndex    *int       `gorm:"column:source_row_index"`
-	SourceRowKey      string     `gorm:"column:source_row_key"`
+	ID                   int64      `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion string     `gorm:"column:order_template_version"`
+	YearNo               int        `gorm:"column:year_no"`
+	MarketCode           string     `gorm:"column:market_code"`
+	OrderType            string     `gorm:"column:order_type"`
+	SegmentCode          string     `gorm:"column:segment_code"`
+	CardSequenceNo       int        `gorm:"column:card_sequence_no"`
+	BusinessOrderNo      string     `gorm:"column:business_order_no"`
+	OrderAmount          float64    `gorm:"column:order_amount"`
+	OrderQuantity        float64    `gorm:"column:order_quantity"`
+	UnitPrice            float64    `gorm:"column:unit_price"`
+	AccountTerm          int        `gorm:"column:account_term"`
+	PoolStatus           string     `gorm:"column:pool_status"`
+	SelectedGroupID      *int64     `gorm:"column:selected_group_id"`
+	SelectedAt           *time.Time `gorm:"column:selected_at"`
+	GenerationBatchID    *int64     `gorm:"column:generation_batch_id"`
+	SourceBatchID        *int64     `gorm:"column:source_batch_id"`
+	SourceSheetName      string     `gorm:"column:source_sheet_name"`
+	SourceCell           string     `gorm:"column:source_cell"`
+	SourceRowIndex       *int       `gorm:"column:source_row_index"`
+	SourceRowKey         string     `gorm:"column:source_row_key"`
+	OrderPayloadJSON     []byte     `gorm:"column:order_payload_json"`
 	BaseEntity
 }
 
@@ -135,21 +142,22 @@ func (OrderPool) TableName() string {
 }
 
 type MarketBiddingState struct {
-	ID                int64      `gorm:"column:id;primaryKey"`
-	YearNo            int        `gorm:"column:year_no"`
-	MarketCode        string     `gorm:"column:market_code"`
-	OrderType         string     `gorm:"column:order_type"`
-	SegmentCode       string     `gorm:"column:segment_code"`
-	ReleaseSequenceNo int        `gorm:"column:release_sequence_no"`
-	SegmentStatus     string     `gorm:"column:segment_status"`
-	LeaderGroupID     *int64     `gorm:"column:leader_group_id"`
-	LeaderRule        []byte     `gorm:"column:leader_rule_json"`
-	RandomSeed        *string    `gorm:"column:random_seed"`
-	CurrentGroupID    *int64     `gorm:"column:current_group_id"`
-	OpenedAt          *time.Time `gorm:"column:opened_at"`
-	ClosedAt          *time.Time `gorm:"column:closed_at"`
-	ReleasedAt        *time.Time `gorm:"column:released_at"`
-	CompletedAt       *time.Time `gorm:"column:completed_at"`
+	ID                   int64      `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion string     `gorm:"column:order_template_version"`
+	YearNo               int        `gorm:"column:year_no"`
+	MarketCode           string     `gorm:"column:market_code"`
+	OrderType            string     `gorm:"column:order_type"`
+	SegmentCode          string     `gorm:"column:segment_code"`
+	ReleaseSequenceNo    int        `gorm:"column:release_sequence_no"`
+	SegmentStatus        string     `gorm:"column:segment_status"`
+	LeaderGroupID        *int64     `gorm:"column:leader_group_id"`
+	LeaderRule           []byte     `gorm:"column:leader_rule_json"`
+	RandomSeed           *string    `gorm:"column:random_seed"`
+	CurrentGroupID       *int64     `gorm:"column:current_group_id"`
+	OpenedAt             *time.Time `gorm:"column:opened_at"`
+	ClosedAt             *time.Time `gorm:"column:closed_at"`
+	ReleasedAt           *time.Time `gorm:"column:released_at"`
+	CompletedAt          *time.Time `gorm:"column:completed_at"`
 	BaseEntity
 }
 
@@ -158,14 +166,15 @@ func (MarketBiddingState) TableName() string {
 }
 
 type GroupMarketBid struct {
-	ID               int64     `gorm:"column:id;primaryKey"`
-	GroupID          int64     `gorm:"column:group_id"`
-	YearNo           int       `gorm:"column:year_no"`
-	MarketCode       string    `gorm:"column:market_code"`
-	OrderType        string    `gorm:"column:order_type"`
-	MarketInvestment float64   `gorm:"column:market_investment"`
-	BidStatus        string    `gorm:"column:bid_status"`
-	SubmittedAt      time.Time `gorm:"column:submitted_at"`
+	ID                   int64     `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion string    `gorm:"column:order_template_version"`
+	GroupID              int64     `gorm:"column:group_id"`
+	YearNo               int       `gorm:"column:year_no"`
+	MarketCode           string    `gorm:"column:market_code"`
+	OrderType            string    `gorm:"column:order_type"`
+	MarketInvestment     float64   `gorm:"column:market_investment"`
+	BidStatus            string    `gorm:"column:bid_status"`
+	SubmittedAt          time.Time `gorm:"column:submitted_at"`
 	BaseEntity
 }
 
@@ -175,6 +184,7 @@ func (GroupMarketBid) TableName() string {
 
 type MarketSelectionOrder struct {
 	ID                        int64      `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion      string     `gorm:"column:order_template_version"`
 	YearNo                    int        `gorm:"column:year_no"`
 	MarketCode                string     `gorm:"column:market_code"`
 	OrderType                 string     `gorm:"column:order_type"`
@@ -199,6 +209,7 @@ func (MarketSelectionOrder) TableName() string {
 
 type GroupOrderSelection struct {
 	ID                      int64      `gorm:"column:id;primaryKey"`
+	OrderTemplateVersion    string     `gorm:"column:order_template_version"`
 	GroupID                 int64      `gorm:"column:group_id"`
 	YearNo                  int        `gorm:"column:year_no"`
 	MarketCode              string     `gorm:"column:market_code"`

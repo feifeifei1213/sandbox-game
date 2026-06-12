@@ -360,6 +360,10 @@ func marketName(code string) string {
 		return "全国市场"
 	case enum.MarketCodeGlobal:
 		return "全球市场"
+	case MarketCodeDomestic:
+		return "国内市场"
+	case MarketCodeInternational:
+		return "国际市场"
 	default:
 		return code
 	}
@@ -375,6 +379,10 @@ func orderTypeName(code string) string {
 		return "商务贵宾"
 	case enum.OrderTypeMemberCustom:
 		return "会员定制"
+	case OrderTypeNarrowBody:
+		return "窄体"
+	case OrderTypeWideBody:
+		return "宽体"
 	default:
 		return code
 	}

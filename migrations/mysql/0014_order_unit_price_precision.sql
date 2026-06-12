@@ -1,0 +1,2 @@
+ALTER TABLE sg_order_pool
+    MODIFY COLUMN unit_price DECIMAL(18,6) NOT NULL DEFAULT 0 COMMENT '单价';

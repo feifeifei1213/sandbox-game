@@ -56,18 +56,24 @@ var (
 	ErrOrderDeliveryStageInvalid        = errors.New("order delivery stage invalid")
 	ErrOrderDeliveryOrderInvalid        = errors.New("order delivery order invalid")
 	ErrOrderDeliveryRevenueMismatch     = errors.New("order delivery revenue mismatch")
+	ErrOrderDeliveryDisabled            = errors.New("order delivery disabled")
 	ErrOrderPrerequisiteIncomplete      = errors.New("order prerequisite incomplete")
 )
 
 type MissingMarketInvestmentError struct {
-	GroupNames []string
+	GroupNames           []string
+	RequiredSegmentCount int
 }
 
 func (e *MissingMarketInvestmentError) Error() string {
 	if len(e.GroupNames) == 0 {
 		return ErrAdminOrderInvestmentIncomplete.Error()
 	}
-	return fmt.Sprintf("仍有小组未提交完整 16 项市场投入：%s", strings.Join(e.GroupNames, "、"))
+	required := e.RequiredSegmentCount
+	if required <= 0 {
+		required = requiredOrderInvestmentSegmentCount
+	}
+	return fmt.Sprintf("仍有小组未提交完整 %d 项市场投入：%s", required, strings.Join(e.GroupNames, "、"))
 }
 
 func (e *MissingMarketInvestmentError) Unwrap() error {
@@ -159,6 +165,7 @@ func NewAdminOrderControlCommandService(db *gorm.DB) *AdminOrderControlCommandSe
 type PlayerOrderYearView struct {
 	GroupID                int64                   `json:"groupId"`
 	YearNo                 int                     `json:"yearNo"`
+	OrderTemplate          OrderTemplateView       `json:"orderTemplate"`
 	OrderRequired          bool                    `json:"orderRequired"`
 	InvestmentSubmitted    bool                    `json:"investmentSubmitted"`
 	CanSubmitInvestment    bool                    `json:"canSubmitInvestment"`
@@ -212,16 +219,17 @@ type PlayerOrderSequenceView struct {
 }
 
 type PlayerOrderPoolItem struct {
-	OrderID            int64   `json:"orderId"`
-	BusinessOrderNo    string  `json:"businessOrderNo"`
-	CardSequenceNo     int     `json:"cardSequenceNo"`
-	OrderAmount        float64 `json:"orderAmount"`
-	OrderQuantity      float64 `json:"orderQuantity"`
-	UnitPrice          float64 `json:"unitPrice"`
-	AccountTerm        int     `json:"accountTerm"`
-	PoolStatus         string  `json:"poolStatus"`
-	DeliveryStatus     string  `json:"deliveryStatus,omitempty"`
-	DeliveredStageCode *string `json:"deliveredStageCode,omitempty"`
+	OrderID            int64          `json:"orderId"`
+	BusinessOrderNo    string         `json:"businessOrderNo"`
+	CardSequenceNo     int            `json:"cardSequenceNo"`
+	OrderAmount        float64        `json:"orderAmount"`
+	OrderQuantity      float64        `json:"orderQuantity"`
+	UnitPrice          float64        `json:"unitPrice"`
+	AccountTerm        int            `json:"accountTerm"`
+	PoolStatus         string         `json:"poolStatus"`
+	DeliveryStatus     string         `json:"deliveryStatus,omitempty"`
+	DeliveredStageCode *string        `json:"deliveredStageCode,omitempty"`
+	OrderPayload       map[string]any `json:"orderPayload,omitempty"`
 }
 
 type SubmitMarketInvestmentCommand struct {
@@ -347,6 +355,7 @@ type AdminOrderControlResult struct {
 
 type AdminMarketSelectionStatus struct {
 	YearNo          int                       `json:"yearNo"`
+	OrderTemplate   OrderTemplateView         `json:"orderTemplate"`
 	MarketCode      string                    `json:"marketCode"`
 	MarketName      string                    `json:"marketName"`
 	MarketBidStatus string                    `json:"marketBidStatus"`
@@ -392,13 +401,19 @@ type AdminSelectionOrderView struct {
 
 func (s *PlayerOrderQueryService) GetYearView(ctx context.Context, groupID int64, yearNo int) (*PlayerOrderYearView, error) {
 	if yearNo == 0 {
+		template := defaultOrderTemplate()
 		return &PlayerOrderYearView{
 			GroupID:                groupID,
 			YearNo:                 yearNo,
+			OrderTemplate:          BuildOrderTemplateView(template),
 			OrderRequired:          false,
 			Markets:                nil,
 			PollingIntervalSeconds: orderPollingIntervalSeconds,
 		}, nil
+	}
+	template, err := resolveCurrentOrderTemplate(ctx, s.gameConfigRepo)
+	if err != nil {
+		return nil, err
 	}
 	if err := validateFormalOrderYear(ctx, s.gameConfigRepo, yearNo); err != nil {
 		return nil, err
@@ -416,6 +431,7 @@ func (s *PlayerOrderQueryService) GetYearView(ctx context.Context, groupID int64
 			return &PlayerOrderYearView{
 				GroupID:                groupID,
 				YearNo:                 yearNo,
+				OrderTemplate:          BuildOrderTemplateView(template),
 				OrderRequired:          true,
 				InvestmentSubmitted:    false,
 				CanSubmitInvestment:    false,
@@ -430,10 +446,12 @@ func (s *PlayerOrderQueryService) GetYearView(ctx context.Context, groupID int64
 	if err != nil {
 		return nil, fmt.Errorf("list order segment states: %w", err)
 	}
+	states = filterMarketBiddingStatesByTemplate(states, template)
 	bids, err := s.bidRepo.ListByGroupYear(ctx, groupID, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list self market investments: %w", err)
 	}
+	bids = filterGroupMarketBidsByTemplate(bids, template)
 	selfBids := map[string]entity.GroupMarketBid{}
 	for _, bid := range bids {
 		selfBids[segmentKey(bid.YearNo, bid.MarketCode, bid.OrderType)] = bid
@@ -442,10 +460,12 @@ func (s *PlayerOrderQueryService) GetYearView(ctx context.Context, groupID int64
 	if err != nil {
 		return nil, fmt.Errorf("list selection order: %w", err)
 	}
+	sequences = filterMarketSelectionOrdersByTemplate(sequences, template)
 	selected, err := s.selectionRepo.ListByGroupYear(ctx, groupID, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list group order selections: %w", err)
 	}
+	selected = filterGroupOrderSelectionsByTemplate(selected, template)
 	groups, err := s.groupRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list groups: %w", err)
@@ -454,15 +474,12 @@ func (s *PlayerOrderQueryService) GetYearView(ctx context.Context, groupID int64
 	if err != nil {
 		return nil, fmt.Errorf("list order market configs: %w", err)
 	}
+	marketConfigs = filterMarketConfigsByTemplate(marketConfigs, template)
 
-	return buildPlayerOrderYearView(groupID, yearNo, states, selfBids, sequences, selected, groups, marketConfigs, true, s.poolRepo, ctx)
+	return buildPlayerOrderYearView(groupID, yearNo, states, selfBids, sequences, selected, groups, marketConfigs, true, s.poolRepo, ctx, template)
 }
 
 func (s *PlayerOrderCommandService) SubmitMarketInvestment(ctx context.Context, cmd SubmitMarketInvestmentCommand) (*SubmitMarketInvestmentResult, error) {
-	normalizedInvestments, err := normalizeMarketInvestmentInputs(cmd.Investments)
-	if err != nil {
-		return nil, err
-	}
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	now := time.Now()
 	var result *SubmitMarketInvestmentResult
@@ -475,6 +492,14 @@ func (s *PlayerOrderCommandService) SubmitMarketInvestment(ctx context.Context, 
 		bidRepo := repository.NewGroupMarketBidRepository(tx)
 
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
+			return err
+		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		normalizedInvestments, err := normalizeMarketInvestmentInputsForTemplate(cmd.Investments, template)
+		if err != nil {
 			return err
 		}
 		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err != nil {
@@ -508,22 +533,24 @@ func (s *PlayerOrderCommandService) SubmitMarketInvestment(ctx context.Context, 
 		if err != nil {
 			return fmt.Errorf("list order market configs: %w", err)
 		}
-		if err := validateDisabledMarketInvestmentsAreZero(normalizedInvestments, buildMarketEnabledMap(marketConfigs)); err != nil {
+		marketConfigs = filterMarketConfigsByTemplate(marketConfigs, template)
+		if err := validateDisabledMarketInvestmentsAreZeroForTemplate(normalizedInvestments, buildMarketEnabledMapForTemplate(marketConfigs, template), template); err != nil {
 			return err
 		}
-		if err := validateMarketInvestmentLimits(normalizedInvestments, buildMarketConfigSnapshotMap(marketConfigs)); err != nil {
+		if err := validateMarketInvestmentLimitsForTemplate(normalizedInvestments, buildMarketConfigSnapshotMapForTemplate(marketConfigs, template), template); err != nil {
 			return err
 		}
 		items := make([]entity.GroupMarketBid, 0, len(normalizedInvestments))
 		for _, investment := range normalizedInvestments {
 			items = append(items, entity.GroupMarketBid{
-				GroupID:          cmd.GroupID,
-				YearNo:           cmd.YearNo,
-				MarketCode:       investment.MarketCode,
-				OrderType:        investment.OrderType,
-				MarketInvestment: investment.MarketInvestment,
-				BidStatus:        enum.OrderBidStatusSubmitted,
-				SubmittedAt:      now,
+				OrderTemplateVersion: template.TemplateVersion,
+				GroupID:              cmd.GroupID,
+				YearNo:               cmd.YearNo,
+				MarketCode:           investment.MarketCode,
+				OrderType:            investment.OrderType,
+				MarketInvestment:     investment.MarketInvestment,
+				BidStatus:            enum.OrderBidStatusSubmitted,
+				SubmittedAt:          now,
 				BaseEntity: entity.BaseEntity{
 					Creator:    operatorName,
 					CreateTime: now,
@@ -551,12 +578,6 @@ func (s *PlayerOrderCommandService) SubmitMarketInvestment(ctx context.Context, 
 func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectOrderCommand) (*SelectOrderResult, error) {
 	marketCode := normalizeMarketCode(cmd.MarketCode)
 	orderType := normalizeOrderType(cmd.OrderType)
-	if !enum.IsValidMarketCode(marketCode) {
-		return nil, ErrOrderMarketInvalid
-	}
-	if !enum.IsValidOrderType(orderType) {
-		return nil, ErrOrderTypeInvalid
-	}
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	now := time.Now()
 	var result *SelectOrderResult
@@ -570,6 +591,16 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
+		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		if !template.IsValidMarketCode(marketCode) {
+			return ErrOrderMarketInvalid
+		}
+		if !template.IsValidOrderType(orderType) {
+			return ErrOrderTypeInvalid
 		}
 		if err := validateSelectableGroup(ctx, groupRepo, cmd.GroupID); err != nil {
 			return err
@@ -603,19 +634,23 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 		if order.YearNo != cmd.YearNo || order.MarketCode != marketCode || order.OrderType != orderType || order.PoolStatus != enum.OrderPoolStatusAvailable {
 			return ErrOrderCannotSelect
 		}
+		if !orderTemplateVersionMatches(order.OrderTemplateVersion, template) {
+			return ErrOrderCannotSelect
+		}
 		if err := poolRepo.MarkSelected(ctx, order.ID, cmd.GroupID, operatorName, now); err != nil {
 			return fmt.Errorf("mark order selected: %w", err)
 		}
 		if err := selectionRepo.Create(ctx, &entity.GroupOrderSelection{
-			GroupID:           cmd.GroupID,
-			YearNo:            cmd.YearNo,
-			MarketCode:        marketCode,
-			OrderType:         orderType,
-			OrderID:           order.ID,
-			SelectionStatus:   enum.OrderSelectionStatusSelected,
-			DeliveryStatus:    enum.OrderDeliveryStatusSelected,
-			DeliveryEffective: true,
-			SelectedAt:        now,
+			OrderTemplateVersion: template.TemplateVersion,
+			GroupID:              cmd.GroupID,
+			YearNo:               cmd.YearNo,
+			MarketCode:           marketCode,
+			OrderType:            orderType,
+			OrderID:              order.ID,
+			SelectionStatus:      enum.OrderSelectionStatusSelected,
+			DeliveryStatus:       enum.OrderDeliveryStatusSelected,
+			DeliveryEffective:    true,
+			SelectedAt:           now,
 			BaseEntity: entity.BaseEntity{
 				Creator:    operatorName,
 				CreateTime: now,
@@ -650,12 +685,6 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 func (s *PlayerOrderCommandService) PassSegment(ctx context.Context, cmd PassOrderSegmentCommand) (*PassOrderSegmentResult, error) {
 	marketCode := normalizeMarketCode(cmd.MarketCode)
 	orderType := normalizeOrderType(cmd.OrderType)
-	if !enum.IsValidMarketCode(marketCode) {
-		return nil, ErrOrderMarketInvalid
-	}
-	if !enum.IsValidOrderType(orderType) {
-		return nil, ErrOrderTypeInvalid
-	}
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	now := time.Now()
 	var result *PassOrderSegmentResult
@@ -668,6 +697,16 @@ func (s *PlayerOrderCommandService) PassSegment(ctx context.Context, cmd PassOrd
 
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
+		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		if !template.IsValidMarketCode(marketCode) {
+			return ErrOrderMarketInvalid
+		}
+		if !template.IsValidOrderType(orderType) {
+			return ErrOrderTypeInvalid
 		}
 		if err := validateSelectableGroup(ctx, groupRepo, cmd.GroupID); err != nil {
 			return err
@@ -730,6 +769,13 @@ func (s *PlayerOrderCommandService) DeliverOrders(ctx context.Context, cmd Deliv
 
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
+		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		if !template.DeliveryEnabled {
+			return ErrOrderDeliveryDisabled
 		}
 		if err := validateSelectableGroup(ctx, groupRepo, cmd.GroupID); err != nil {
 			return err
@@ -805,16 +851,21 @@ func (s *PlayerOrderCommandService) DeliverOrders(ctx context.Context, cmd Deliv
 
 func (s *AdminOrderControlQueryService) GetMarketSelectionStatus(ctx context.Context, yearNo int, marketCode string) (*AdminMarketSelectionStatus, error) {
 	marketCode = normalizeMarketCode(marketCode)
-	if !enum.IsValidMarketCode(marketCode) {
-		return nil, ErrOrderMarketInvalid
-	}
 	if err := validateFormalOrderYear(ctx, s.gameConfigRepo, yearNo); err != nil {
 		return nil, err
+	}
+	template, err := resolveCurrentOrderTemplate(ctx, s.gameConfigRepo)
+	if err != nil {
+		return nil, err
+	}
+	if !template.IsValidMarketCode(marketCode) {
+		return nil, ErrOrderMarketInvalid
 	}
 	states, err := s.stateRepo.ListByYearAndMarket(ctx, yearNo, marketCode)
 	if err != nil {
 		return nil, fmt.Errorf("list market segment states: %w", err)
 	}
+	states = filterMarketBiddingStatesByTemplate(states, template)
 	groups, err := s.groupRepo.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list groups: %w", err)
@@ -823,6 +874,7 @@ func (s *AdminOrderControlQueryService) GetMarketSelectionStatus(ctx context.Con
 	if err != nil {
 		return nil, fmt.Errorf("list market bids: %w", err)
 	}
+	bids = filterGroupMarketBidsByTemplate(bids, template)
 	bidMap := make(map[int64][]entity.GroupMarketBid, len(bids))
 	for _, bid := range bids {
 		bidMap[bid.GroupID] = append(bidMap[bid.GroupID], bid)
@@ -839,7 +891,7 @@ func (s *AdminOrderControlQueryService) GetMarketSelectionStatus(ctx context.Con
 			GroupNo:          group.GroupNo,
 			GroupName:        group.GroupName,
 			MarketInvestment: investmentTotal,
-			Submitted:        len(groupBids) >= 4,
+			Submitted:        len(groupBids) >= len(template.OrderTypes),
 			BusinessStatus:   group.BusinessStatus,
 		})
 	}
@@ -863,8 +915,9 @@ func (s *AdminOrderControlQueryService) GetMarketSelectionStatus(ctx context.Con
 	}
 	return &AdminMarketSelectionStatus{
 		YearNo:          yearNo,
+		OrderTemplate:   BuildOrderTemplateView(template),
 		MarketCode:      marketCode,
-		MarketName:      marketName(marketCode),
+		MarketName:      template.MarketName(marketCode),
 		MarketBidStatus: resolveMarketBidStatus(states),
 		LeaderGroupID:   leaderGroupID,
 		Bids:            bidViews,
@@ -875,9 +928,6 @@ func (s *AdminOrderControlQueryService) GetMarketSelectionStatus(ctx context.Con
 
 func (s *AdminOrderControlCommandService) OpenMarketBidding(ctx context.Context, cmd OpenMarketBiddingCommand) (*AdminOrderControlResult, error) {
 	marketCode := normalizeMarketCode(cmd.MarketCode)
-	if !enum.IsValidMarketCode(marketCode) {
-		return nil, ErrOrderMarketInvalid
-	}
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	now := time.Now()
 	var result *AdminOrderControlResult
@@ -888,10 +938,18 @@ func (s *AdminOrderControlCommandService) OpenMarketBidding(ctx context.Context,
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
 		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		if !template.IsValidMarketCode(marketCode) {
+			return ErrOrderMarketInvalid
+		}
 		states, err := stateRepo.ListByYearAndMarket(ctx, cmd.YearNo, marketCode)
 		if err != nil {
 			return fmt.Errorf("list market states: %w", err)
 		}
+		states = filterMarketBiddingStatesByTemplate(states, template)
 		if len(states) == 0 {
 			return ErrOrderPoolNotGenerated
 		}
@@ -917,7 +975,7 @@ func (s *AdminOrderControlCommandService) OpenMarketBidding(ctx context.Context,
 		result = &AdminOrderControlResult{
 			YearNo:        cmd.YearNo,
 			MarketCode:    marketCode,
-			MarketName:    marketName(marketCode),
+			MarketName:    template.MarketName(marketCode),
 			AffectedCount: affected,
 			OperatedAt:    now.Format(time.RFC3339),
 			OperatedBy:    operatorName,
@@ -931,9 +989,6 @@ func (s *AdminOrderControlCommandService) OpenMarketBidding(ctx context.Context,
 
 func (s *AdminOrderControlCommandService) CloseMarketBidding(ctx context.Context, cmd CloseMarketBiddingCommand) (*AdminOrderControlResult, error) {
 	marketCode := normalizeMarketCode(cmd.MarketCode)
-	if !enum.IsValidMarketCode(marketCode) {
-		return nil, ErrOrderMarketInvalid
-	}
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	now := time.Now()
 	var result *AdminOrderControlResult
@@ -948,10 +1003,18 @@ func (s *AdminOrderControlCommandService) CloseMarketBidding(ctx context.Context
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
 		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		if !template.IsValidMarketCode(marketCode) {
+			return ErrOrderMarketInvalid
+		}
 		states, err := stateRepo.ListByYearAndMarket(ctx, cmd.YearNo, marketCode)
 		if err != nil {
 			return fmt.Errorf("list market states: %w", err)
 		}
+		states = filterMarketBiddingStatesByTemplate(states, template)
 		if !hasSegmentStatus(states, enum.OrderSegmentStatusBidOpen) {
 			return ErrOrderMarketNotOpen
 		}
@@ -963,6 +1026,7 @@ func (s *AdminOrderControlCommandService) CloseMarketBidding(ctx context.Context
 		if err != nil {
 			return fmt.Errorf("list bids: %w", err)
 		}
+		bids = filterGroupMarketBidsByTemplate(bids, template)
 		previousAmounts, err := poolRepo.SumSelectedAmountByYearMarket(ctx, cmd.YearNo-1, marketCode)
 		if err != nil {
 			return fmt.Errorf("sum previous market amount: %w", err)
@@ -1003,7 +1067,7 @@ func (s *AdminOrderControlCommandService) CloseMarketBidding(ctx context.Context
 		result = &AdminOrderControlResult{
 			YearNo:        cmd.YearNo,
 			MarketCode:    marketCode,
-			MarketName:    marketName(marketCode),
+			MarketName:    template.MarketName(marketCode),
 			AffectedCount: affected,
 			OperatedAt:    now.Format(time.RFC3339),
 			OperatedBy:    operatorName,
@@ -1031,6 +1095,10 @@ func (s *AdminOrderControlCommandService) GenerateSelectionSequence(ctx context.
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
 		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
 		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err != nil {
 			if repository.IsRecordNotFound(err) {
 				return ErrAdminOrderPoolNotConfirmed
@@ -1041,13 +1109,14 @@ func (s *AdminOrderControlCommandService) GenerateSelectionSequence(ctx context.
 		if err != nil {
 			return fmt.Errorf("list order states: %w", err)
 		}
+		states = filterMarketBiddingStatesByTemplate(states, template)
 		if len(states) == 0 {
 			return ErrOrderPoolNotGenerated
 		}
 		if hasAnySegmentStatus(states, []string{enum.OrderSegmentStatusSequenceReady, enum.OrderSegmentStatusSelecting, enum.OrderSegmentStatusCompleted}) {
 			return ErrAdminOrderSequenceAlreadyGenerated
 		}
-		if err := ensureAllActiveGroupsSubmittedInvestments(ctx, groupRepo, bidRepo, cmd.YearNo); err != nil {
+		if err := ensureAllActiveGroupsSubmittedInvestmentsForTemplate(ctx, groupRepo, bidRepo, cmd.YearNo, template); err != nil {
 			return err
 		}
 		groups, err := groupRepo.ListAll(ctx)
@@ -1083,6 +1152,7 @@ func (s *AdminOrderControlCommandService) GenerateSelectionSequence(ctx context.
 			if err != nil {
 				return fmt.Errorf("list segment bids: %w", err)
 			}
+			bids = filterGroupMarketBidsByTemplate(bids, template)
 			previousAmounts, exists := previousAmountCache[item.MarketCode]
 			if !exists {
 				previousAmounts, err = poolRepo.SumSelectedAmountByYearMarket(ctx, cmd.YearNo-1, item.MarketCode)
@@ -1150,6 +1220,10 @@ func (s *AdminOrderControlCommandService) ReleaseNextSegment(ctx context.Context
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
 		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
 		if _, err := stateRepo.GetCurrentSelecting(ctx, cmd.YearNo); err == nil {
 			return ErrOrderSegmentReleaseBlocked
 		} else if !repository.IsRecordNotFound(err) {
@@ -1161,6 +1235,9 @@ func (s *AdminOrderControlCommandService) ReleaseNextSegment(ctx context.Context
 				return ErrOrderSegmentNotReady
 			}
 			return fmt.Errorf("load next releasable segment: %w", err)
+		}
+		if !orderTemplateVersionMatches(next.OrderTemplateVersion, template) {
+			return ErrOrderSegmentNotReady
 		}
 		blocked, err := stateRepo.ExistsSelectingBefore(ctx, cmd.YearNo, next.ReleaseSequenceNo)
 		if err != nil {
@@ -1224,12 +1301,6 @@ func (s *AdminOrderControlCommandService) AdminSkipCurrentGroup(ctx context.Cont
 	marketCode := normalizeMarketCode(cmd.MarketCode)
 	orderType := normalizeOrderType(cmd.OrderType)
 	reason := strings.TrimSpace(cmd.Reason)
-	if !enum.IsValidMarketCode(marketCode) {
-		return nil, ErrOrderMarketInvalid
-	}
-	if !enum.IsValidOrderType(orderType) {
-		return nil, ErrOrderTypeInvalid
-	}
 	if cmd.GroupID <= 0 || reason == "" {
 		return nil, ErrOrderAdminSkipReasonRequired
 	}
@@ -1245,9 +1316,22 @@ func (s *AdminOrderControlCommandService) AdminSkipCurrentGroup(ctx context.Cont
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
 		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		if !template.IsValidMarketCode(marketCode) {
+			return ErrOrderMarketInvalid
+		}
+		if !template.IsValidOrderType(orderType) {
+			return ErrOrderTypeInvalid
+		}
 		segment, err := stateRepo.GetBySegmentForUpdate(ctx, cmd.YearNo, marketCode, orderType)
 		if err != nil {
 			return fmt.Errorf("load segment: %w", err)
+		}
+		if !orderTemplateVersionMatches(segment.OrderTemplateVersion, template) {
+			return ErrOrderSegmentNotSelecting
 		}
 		if segment.SegmentStatus != enum.OrderSegmentStatusSelecting {
 			return ErrOrderSegmentNotSelecting
@@ -1400,6 +1484,7 @@ func buildSelectionOrderItems(states []entity.MarketBiddingState, participants [
 		for index, participant := range participants {
 			rankBasis, _ := marshalJSON(participant)
 			items = append(items, entity.MarketSelectionOrder{
+				OrderTemplateVersion:      state.OrderTemplateVersion,
 				YearNo:                    state.YearNo,
 				MarketCode:                state.MarketCode,
 				OrderType:                 state.OrderType,
@@ -1460,15 +1545,20 @@ func createSegmentCompletedSnapshot(ctx context.Context, tx *gorm.DB, segment en
 }
 
 func normalizeMarketInvestmentInputs(inputs []MarketInvestmentInput) ([]MarketInvestmentInput, error) {
-	if len(inputs) != requiredOrderInvestmentSegmentCount {
+	return normalizeMarketInvestmentInputsForTemplate(inputs, defaultOrderTemplate())
+}
+
+func normalizeMarketInvestmentInputsForTemplate(inputs []MarketInvestmentInput, template OrderTemplateDefinition) ([]MarketInvestmentInput, error) {
+	segments := template.Segments()
+	if len(inputs) != len(segments) {
 		return nil, ErrOrderInvestmentInvalid
 	}
-	seen := make(map[string]bool, requiredOrderInvestmentSegmentCount)
-	result := make([]MarketInvestmentInput, 0, requiredOrderInvestmentSegmentCount)
+	seen := make(map[string]bool, len(segments))
+	result := make([]MarketInvestmentInput, 0, len(segments))
 	for _, input := range inputs {
 		marketCode := normalizeMarketCode(input.MarketCode)
 		orderType := normalizeOrderType(input.OrderType)
-		if !enum.IsValidMarketCode(marketCode) || !enum.IsValidOrderType(orderType) || input.MarketInvestment < 0 {
+		if !template.IsValidMarketCode(marketCode) || !template.IsValidOrderType(orderType) || input.MarketInvestment < 0 {
 			return nil, ErrOrderInvestmentInvalid
 		}
 		if !isWholeNumber(input.MarketInvestment) {
@@ -1489,19 +1579,21 @@ func normalizeMarketInvestmentInputs(inputs []MarketInvestmentInput) ([]MarketIn
 			MarketInvestment: math.Trunc(input.MarketInvestment),
 		})
 	}
-	for _, market := range defaultOrderMarkets() {
-		for _, orderType := range defaultOrderTypes() {
-			if !seen[segmentKey(0, market.code, orderType.code)] {
-				return nil, ErrOrderInvestmentInvalid
-			}
+	for _, segment := range segments {
+		if !seen[segmentKey(0, segment.MarketCode, segment.OrderType)] {
+			return nil, ErrOrderInvestmentInvalid
 		}
 	}
 	return result, nil
 }
 
 func validateDisabledMarketInvestmentsAreZero(inputs []MarketInvestmentInput, marketConfigMap map[string]bool) error {
+	return validateDisabledMarketInvestmentsAreZeroForTemplate(inputs, marketConfigMap, defaultOrderTemplate())
+}
+
+func validateDisabledMarketInvestmentsAreZeroForTemplate(inputs []MarketInvestmentInput, marketConfigMap map[string]bool, template OrderTemplateDefinition) error {
 	for _, input := range inputs {
-		if !isMarketEnabled(marketConfigMap, input.MarketCode) && input.MarketInvestment != 0 {
+		if !isMarketEnabledForTemplate(marketConfigMap, input.MarketCode, template) && input.MarketInvestment != 0 {
 			return ErrOrderMarketDisabledInvestment
 		}
 	}
@@ -1523,13 +1615,18 @@ func (e *OrderInvestmentIntegerError) Unwrap() error {
 }
 
 type OrderInvestmentLimitExceededError struct {
-	MarketCode string
-	Actual     float64
-	Limit      float64
+	MarketCode   string
+	SegmentCount int
+	Actual       float64
+	Limit        float64
 }
 
 func (e *OrderInvestmentLimitExceededError) Error() string {
-	return fmt.Sprintf("%s 4项市场投入合计 %sM，超过上限 %sM", marketName(e.MarketCode), formatValidationAmount(e.Actual), formatValidationAmount(e.Limit))
+	segmentCount := e.SegmentCount
+	if segmentCount <= 0 {
+		segmentCount = len(defaultOrderTemplate().OrderTypes)
+	}
+	return fmt.Sprintf("%s %d项市场投入合计 %sM，超过上限 %sM", marketName(e.MarketCode), segmentCount, formatValidationAmount(e.Actual), formatValidationAmount(e.Limit))
 }
 
 func (e *OrderInvestmentLimitExceededError) Unwrap() error {
@@ -1537,21 +1634,26 @@ func (e *OrderInvestmentLimitExceededError) Unwrap() error {
 }
 
 func validateMarketInvestmentLimits(inputs []MarketInvestmentInput, marketConfigMap map[string]orderMarketConfigSnapshot) error {
-	totals := make(map[string]float64, len(defaultOrderMarkets()))
+	return validateMarketInvestmentLimitsForTemplate(inputs, marketConfigMap, defaultOrderTemplate())
+}
+
+func validateMarketInvestmentLimitsForTemplate(inputs []MarketInvestmentInput, marketConfigMap map[string]orderMarketConfigSnapshot, template OrderTemplateDefinition) error {
+	totals := make(map[string]float64, len(template.Markets))
 	for _, input := range inputs {
 		totals[normalizeMarketCode(input.MarketCode)] += input.MarketInvestment
 	}
-	for _, market := range defaultOrderMarkets() {
-		config := marketConfigMap[market.code]
+	for _, market := range template.Markets {
+		config := marketConfigMap[market.Code]
 		if !config.Enabled || config.InvestmentLimit == nil {
 			continue
 		}
-		total := totals[market.code]
+		total := totals[market.Code]
 		if total-*config.InvestmentLimit > 0.000001 {
 			return &OrderInvestmentLimitExceededError{
-				MarketCode: market.code,
-				Actual:     total,
-				Limit:      *config.InvestmentLimit,
+				MarketCode:   market.Code,
+				SegmentCount: len(template.OrderTypes),
+				Actual:       total,
+				Limit:        *config.InvestmentLimit,
 			}
 		}
 	}
@@ -1566,6 +1668,10 @@ func formatValidationAmount(value float64) string {
 }
 
 func ensureAllActiveGroupsSubmittedInvestments(ctx context.Context, groupRepo *repository.GroupRepository, bidRepo *repository.GroupMarketBidRepository, yearNo int) error {
+	return ensureAllActiveGroupsSubmittedInvestmentsForTemplate(ctx, groupRepo, bidRepo, yearNo, defaultOrderTemplate())
+}
+
+func ensureAllActiveGroupsSubmittedInvestmentsForTemplate(ctx context.Context, groupRepo *repository.GroupRepository, bidRepo *repository.GroupMarketBidRepository, yearNo int, template OrderTemplateDefinition) error {
 	groups, err := groupRepo.ListAll(ctx)
 	if err != nil {
 		return fmt.Errorf("list groups: %w", err)
@@ -1574,17 +1680,22 @@ func ensureAllActiveGroupsSubmittedInvestments(ctx context.Context, groupRepo *r
 	if err != nil {
 		return fmt.Errorf("count submitted investments: %w", err)
 	}
+	bids, err := bidRepo.ListByYear(ctx, yearNo)
+	if err == nil && len(bids) > 0 {
+		counts = countSubmittedSegmentsByTemplate(bids, template)
+	}
 	missingGroups := make([]string, 0)
+	requiredSegmentCount := len(template.Segments())
 	for _, group := range groups {
 		if group.BusinessStatus == enum.BusinessStatusBankrupt {
 			continue
 		}
-		if counts[group.ID] < requiredOrderInvestmentSegmentCount {
+		if counts[group.ID] < requiredSegmentCount {
 			missingGroups = append(missingGroups, group.GroupName)
 		}
 	}
 	if len(missingGroups) > 0 {
-		return &MissingMarketInvestmentError{GroupNames: missingGroups}
+		return &MissingMarketInvestmentError{GroupNames: missingGroups, RequiredSegmentCount: requiredSegmentCount}
 	}
 	return nil
 }
@@ -1604,11 +1715,27 @@ func hasPositiveSegmentInvestment(groups []entity.Group, bids []entity.GroupMark
 	return false
 }
 
-func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketBiddingState, bids map[string]entity.GroupMarketBid, sequences []entity.MarketSelectionOrder, selected []entity.GroupOrderSelection, groups []entity.Group, marketConfigs []entity.OrderMarketConfig, poolConfirmed bool, poolRepo *repository.OrderPoolRepository, ctx context.Context) (*PlayerOrderYearView, error) {
+func countSubmittedSegmentsByTemplate(bids []entity.GroupMarketBid, template OrderTemplateDefinition) map[int64]int {
+	groupSegments := make(map[int64]map[string]bool)
+	for _, bid := range filterGroupMarketBidsByTemplate(bids, template) {
+		if groupSegments[bid.GroupID] == nil {
+			groupSegments[bid.GroupID] = map[string]bool{}
+		}
+		groupSegments[bid.GroupID][segmentKey(0, bid.MarketCode, bid.OrderType)] = true
+	}
+	result := make(map[int64]int, len(groupSegments))
+	for groupID, segments := range groupSegments {
+		result[groupID] = len(segments)
+	}
+	return result
+}
+
+func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketBiddingState, bids map[string]entity.GroupMarketBid, sequences []entity.MarketSelectionOrder, selected []entity.GroupOrderSelection, groups []entity.Group, marketConfigs []entity.OrderMarketConfig, poolConfirmed bool, poolRepo *repository.OrderPoolRepository, ctx context.Context, template OrderTemplateDefinition) (*PlayerOrderYearView, error) {
 	groupNames := buildGroupNameMap(groups)
-	investmentSubmitted := len(bids) >= requiredOrderInvestmentSegmentCount
+	requiredSegmentCount := len(template.Segments())
+	investmentSubmitted := len(bids) >= requiredSegmentCount
 	canSubmitInvestment := poolConfirmed && !investmentSubmitted
-	marketConfigMap := buildMarketConfigSnapshotMap(marketConfigs)
+	marketConfigMap := buildMarketConfigSnapshotMapForTemplate(marketConfigs, template)
 	sequenceMap := make(map[string][]entity.MarketSelectionOrder)
 	selfSequence := make(map[string]entity.MarketSelectionOrder)
 	for _, sequence := range sequences {
@@ -1626,17 +1753,17 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 	for _, state := range states {
 		stateMap[state.MarketCode] = append(stateMap[state.MarketCode], state)
 	}
-	markets := make([]PlayerOrderMarketView, 0, 4)
-	for _, market := range defaultOrderMarkets() {
+	markets := make([]PlayerOrderMarketView, 0, len(template.Markets))
+	for _, market := range template.Markets {
 		segments := make([]PlayerOrderSegmentView, 0)
 		canSelectMarket := false
 		var selfMarketSequenceNo *int
 		isMarketLeader := false
 		marketInvestment := 0.0
 		marketSubmittedCount := 0
-		marketConfig := marketConfigMap[market.code]
+		marketConfig := marketConfigMap[market.Code]
 		marketEnabled := marketConfig.Enabled
-		for _, state := range stateMap[market.code] {
+		for _, state := range stateMap[market.Code] {
 			key := segmentKey(state.YearNo, state.MarketCode, state.OrderType)
 			bid, bidSubmitted := bids[key]
 			if bidSubmitted {
@@ -1653,7 +1780,8 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 			if err != nil {
 				return nil, err
 			}
-			segment := buildPlayerSegmentView(groupID, state, bid, bidSubmitted, marketConfig.InvestmentLimit, sequenceMap[key], selfSeq, hasSelfSeq, selectedMap[key], pools, groupNames)
+			pools = filterOrderPoolsByTemplate(pools, template)
+			segment := buildPlayerSegmentView(groupID, state, bid, bidSubmitted, marketConfig.InvestmentLimit, sequenceMap[key], selfSeq, hasSelfSeq, selectedMap[key], pools, groupNames, template)
 			canSelectMarket = canSelectMarket || segment.CanSelectOrder
 			segments = append(segments, segment)
 		}
@@ -1661,10 +1789,10 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 			return segments[i].ReleaseSequenceNo < segments[j].ReleaseSequenceNo
 		})
 		markets = append(markets, PlayerOrderMarketView{
-			MarketCode:            market.code,
-			MarketName:            market.name,
-			MarketBidStatus:       resolveMarketBidStatus(stateMap[market.code]),
-			InvestmentSubmitted:   marketSubmittedCount >= len(defaultOrderTypes()),
+			MarketCode:            market.Code,
+			MarketName:            market.Name,
+			MarketBidStatus:       resolveMarketBidStatus(stateMap[market.Code]),
+			InvestmentSubmitted:   marketSubmittedCount >= len(template.OrderTypes),
 			MarketInvestment:      marketInvestment,
 			MarketInvestmentLimit: marketConfig.InvestmentLimit,
 			CanSubmitInvestment:   canSubmitInvestment,
@@ -1678,6 +1806,7 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 	return &PlayerOrderYearView{
 		GroupID:                groupID,
 		YearNo:                 yearNo,
+		OrderTemplate:          BuildOrderTemplateView(template),
 		OrderRequired:          true,
 		InvestmentSubmitted:    investmentSubmitted,
 		CanSubmitInvestment:    canSubmitInvestment,
@@ -1698,11 +1827,15 @@ func allMarketStatesDisabled(states []entity.MarketBiddingState) bool {
 	return true
 }
 
-func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid entity.GroupMarketBid, bidSubmitted bool, marketInvestmentLimit *float64, sequences []entity.MarketSelectionOrder, selfSequence entity.MarketSelectionOrder, hasSelfSequence bool, selected entity.GroupOrderSelection, pools []entity.OrderPool, groupNames map[int64]string) PlayerOrderSegmentView {
+func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid entity.GroupMarketBid, bidSubmitted bool, marketInvestmentLimit *float64, sequences []entity.MarketSelectionOrder, selfSequence entity.MarketSelectionOrder, hasSelfSequence bool, selected entity.GroupOrderSelection, pools []entity.OrderPool, groupNames map[int64]string, template OrderTemplateDefinition) PlayerOrderSegmentView {
 	available := make([]PlayerOrderPoolItem, 0)
 	locked := make([]PlayerOrderPoolItem, 0)
 	var selectedOrder *PlayerOrderPoolItem
 	for _, pool := range pools {
+		payload := map[string]any(nil)
+		if len(pool.OrderPayloadJSON) > 0 {
+			_ = json.Unmarshal(pool.OrderPayloadJSON, &payload)
+		}
 		item := PlayerOrderPoolItem{
 			OrderID:         pool.ID,
 			BusinessOrderNo: formatBusinessOrderNo(pool),
@@ -1712,6 +1845,7 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 			UnitPrice:       pool.UnitPrice,
 			AccountTerm:     pool.AccountTerm,
 			PoolStatus:      pool.PoolStatus,
+			OrderPayload:    payload,
 		}
 		if pool.PoolStatus == enum.OrderPoolStatusAvailable {
 			available = append(available, item)
@@ -1743,9 +1877,9 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 	canAct := state.SegmentStatus == enum.OrderSegmentStatusSelecting && state.CurrentGroupID != nil && *state.CurrentGroupID == groupID && hasSelfSequence && selfSequence.SelectionStatus == enum.OrderSelectionStatusCurrent
 	return PlayerOrderSegmentView{
 		MarketCode:            state.MarketCode,
-		MarketName:            marketName(state.MarketCode),
+		MarketName:            template.MarketName(state.MarketCode),
 		OrderType:             state.OrderType,
-		OrderTypeName:         orderTypeName(state.OrderType),
+		OrderTypeName:         template.OrderTypeName(state.OrderType),
 		MarketEnabled:         state.SegmentStatus != enum.OrderSegmentStatusMarketDisabled,
 		MarketInvestmentLimit: marketInvestmentLimit,
 		MarketInvestment:      bid.MarketInvestment,
@@ -1848,6 +1982,14 @@ func validateFormalOrderYear(ctx context.Context, repo *repository.GameConfigRep
 		return ErrOrderYearInvalid
 	}
 	return nil
+}
+
+func resolveCurrentOrderTemplate(ctx context.Context, repo *repository.GameConfigRepository) (OrderTemplateDefinition, error) {
+	config, err := repo.GetCurrent(ctx)
+	if err != nil {
+		return OrderTemplateDefinition{}, fmt.Errorf("load game config: %w", err)
+	}
+	return ResolveOrderTemplateByGameConfig(*config)
 }
 
 func validateSelectableGroup(ctx context.Context, repo *repository.GroupRepository, groupID int64) error {
@@ -1997,6 +2139,81 @@ func defaultOrderTypes() []struct {
 		{enum.OrderTypeBusinessVIP, "商务贵宾"},
 		{enum.OrderTypeMemberCustom, "会员定制"},
 	}
+}
+
+func filterOrderPoolsByTemplate(items []entity.OrderPool, template OrderTemplateDefinition) []entity.OrderPool {
+	result := make([]entity.OrderPool, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
+}
+
+func filterMarketBiddingStatesByTemplate(items []entity.MarketBiddingState, template OrderTemplateDefinition) []entity.MarketBiddingState {
+	result := make([]entity.MarketBiddingState, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
+}
+
+func filterGroupMarketBidsByTemplate(items []entity.GroupMarketBid, template OrderTemplateDefinition) []entity.GroupMarketBid {
+	result := make([]entity.GroupMarketBid, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
+}
+
+func filterMarketSelectionOrdersByTemplate(items []entity.MarketSelectionOrder, template OrderTemplateDefinition) []entity.MarketSelectionOrder {
+	result := make([]entity.MarketSelectionOrder, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
+}
+
+func filterGroupOrderSelectionsByTemplate(items []entity.GroupOrderSelection, template OrderTemplateDefinition) []entity.GroupOrderSelection {
+	result := make([]entity.GroupOrderSelection, 0, len(items))
+	for _, item := range items {
+		if !orderTemplateVersionMatches(item.OrderTemplateVersion, template) {
+			continue
+		}
+		if !template.IsValidMarketCode(item.MarketCode) || !template.IsValidOrderType(item.OrderType) {
+			continue
+		}
+		item.OrderTemplateVersion = template.TemplateVersion
+		result = append(result, item)
+	}
+	return result
 }
 
 func buildGroupNameMap(groups []entity.Group) map[int64]string {

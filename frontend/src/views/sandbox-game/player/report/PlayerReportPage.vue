@@ -59,6 +59,11 @@
 
           <section v-if="!previewMode && (loading || yearViewLoading)" class="loading-card">正在加载财报页数据...</section>
 
+          <section v-else-if="airportPendingMode" class="loading-card pending-template-card">
+            <strong>机场沙盘版财报页待接入</strong>
+            <span>当前仅支持订单模块联调，财报字段和公式将在机场版财报 Excel 给到后接入。</span>
+          </section>
+
           <ReportSheet
             v-else-if="activeView"
             :model-value="activeDraftManualPayload"
@@ -74,6 +79,7 @@
         </main>
 
         <ReportSidebar
+          v-if="!airportPendingMode"
           class="side-panel"
           :view="activeView"
           :year-label="`${activeSelectedYear} 年财报`"
@@ -91,6 +97,10 @@
           @save="handleSave"
           @submit="handleSubmit"
         />
+        <section v-else class="side-panel pending-side">
+          <strong>财报页未开放</strong>
+          <span>机场版经营页和财报页未接入前，不允许填写或提交财报。</span>
+        </section>
       </div>
     </div>
   </div>
@@ -329,6 +339,10 @@ const activeSaving = computed(() => (previewMode.value ? previewSaving.value : s
 const activeSubmitting = computed(() => (previewMode.value ? previewSubmitting.value : submitting.value))
 const activeReportLabels = computed(() =>
   applyDictionaryToReportLabels(resolveReportLabels(activeConfig.value?.editionCode), dictionaryStore.displayName),
+)
+const airportPendingMode = computed(() =>
+  !previewMode.value
+  && (activeConfig.value?.editionCode === 'AIRPORT_V1' || activeConfig.value?.reportTemplateVersion === 'PENDING_REPORT_TEMPLATE'),
 )
 
 onMounted(async () => {
@@ -678,9 +692,33 @@ async function handleLogout() {
   color: var(--muted);
 }
 
+.pending-template-card {
+  display: grid;
+  gap: 8px;
+}
+
+.pending-template-card strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
 .side-panel {
   position: sticky;
   top: 18px;
+}
+
+.pending-side {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.pending-side span {
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 @media (max-width: 1360px) {

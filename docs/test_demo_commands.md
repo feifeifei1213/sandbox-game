@@ -187,7 +187,65 @@ go run ./cmd/dbtool -config configs/local.yaml -action seed-rollback-scenario -c
 - 关键快照不是手工伪造，而是由经营提交、财报提交、订单池确认、标段完成、开放下一年等真实业务动作触发。
 - 该命令会清空 `configs/local.yaml` 指向的数据库，只能用于测试库。
 
-## 5. 多账号同时测试建议
+## 5. 状态四：机场订单模块测试停点
+
+用途：
+
+- 测试 `机场沙盘版 V1` 的订单模块独立联调。
+- 从管理员端手工配置国内 / 国际、窄体 / 宽体的订单数量、市场开启、标段顺序、订单池和开标流程。
+- 不测试机场经营页和财报页；当前这两个页面只显示待接入占位。
+
+### 5.1 停在 1 年订单配置前
+
+执行命令：
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-airport-order-scenario -confirm-reset
+```
+
+执行后状态：
+
+- 初始化 `3` 个小组。
+- 当前比赛版本为 `AIRPORT_V1`。
+- 自动提交一份测试用初始基线，用于通过正式年度开放规则。
+- `0年` 已完成，并已开放 `1年`。
+- `1年` 订单数量、市场开启、释放顺序、订单池均未配置。
+- 国内市场默认开启，国际市场默认关闭，但管理员仍可手动调整。
+
+### 5.2 停在 2 年订单配置前，带 1 年市场龙头历史
+
+执行命令：
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-airport-order-leader-scenario -confirm-reset
+```
+
+执行后状态：
+
+- 初始化 `3` 个小组。
+- 当前比赛版本为 `AIRPORT_V1`。
+- 自动提交一份测试用初始基线，用于通过正式年度开放规则。
+- 写入 `1年` 国内 / 国际市场已选订单历史。
+- 当前开放年份为 `2年`。
+- `2年` 订单数量、市场开启、释放顺序、订单池均未配置。
+
+机场版推荐测试顺序：
+
+1. 管理员进入订单管理，确认数量控制台只显示国内市场 / 国际市场 × 窄体 / 宽体。
+2. 配置 `1年` 或 `2年` 各标段订单数量，数量范围为 `0~28`。
+3. 配置市场开启状态，验证国内默认开启、国际默认关闭。
+4. 保存标段释放顺序，生成并确认订单池。
+5. 玩家端提交市场投入，确认只需提交 `4` 项。
+6. 管理员生成选单顺序并释放标段。
+7. 玩家按顺序选择或放弃订单，验证已选订单对后续小组置灰。
+8. 机场订单交付按钮应置灰或提示暂不支持交付。
+9. 玩家进入经营页 / 财报页，应看到机场版待接入占位。
+
+## 6. 多账号同时测试建议
 
 同一个浏览器的多个标签页会共用登录态，不能同时登录多个账号。
 
@@ -209,17 +267,19 @@ Chrome 无痕窗口：group03
 
 关键是每个账号使用独立浏览器环境。
 
-## 6. 三个停点的区别
+## 7. 停点区别
 
 | 命令 | 停点 | 适合测试 |
 |---|---|---|
 | `reset-competition` | 赛前未初始化，只能管理员登录 | 选择经营版本、小组数量初始化 |
 | `seed-order-scenario -confirm-reset` | 已到 `2年`，但订单配置未开始 | 订单数量、市场开启、订单池生成、开标抢单 |
 | `seed-rollback-scenario -confirm-reset` | 已有非零经营 / 财报 / 订单 / 快照历史 | 回退重提、快照恢复、待重提阻断、订单交付失效 |
+| `seed-airport-order-scenario -confirm-reset` | 机场版 `1年` 订单配置前 | 机场版订单数量、市场开启、订单池生成、开标抢单 |
+| `seed-airport-order-leader-scenario -confirm-reset` | 机场版 `2年` 订单配置前，带 `1年` 订单历史 | 机场版国内 / 国际市场龙头和排序 |
 
-## 7. 最简命令汇总
+## 8. 最简命令汇总
 
-### 7.1 启动后端
+### 8.1 启动后端
 
 ```powershell
 cd 'E:\project\sand box game'
@@ -227,14 +287,14 @@ $env:GOCACHE=(Resolve-Path .go-build-cache).Path
 go run .\cmd\server\main.go -config .\configs\local.yaml
 ```
 
-### 7.2 启动前端
+### 8.2 启动前端
 
 ```powershell
 cd 'E:\project\sand box game\frontend'
 npm run dev
 ```
 
-### 7.3 回到最开始：选择经营版本
+### 8.3 回到最开始：选择经营版本
 
 ```powershell
 cd 'E:\project\sand box game'
@@ -242,7 +302,7 @@ $env:GOCACHE=(Resolve-Path .go-build-cache).Path
 go run ./cmd/dbtool -config configs/local.yaml -action reset-competition
 ```
 
-### 7.4 跳到订单开标测试
+### 8.4 跳到订单开标测试
 
 ```powershell
 cd 'E:\project\sand box game'
@@ -250,7 +310,7 @@ $env:GOCACHE=(Resolve-Path .go-build-cache).Path
 go run ./cmd/dbtool -config configs/local.yaml -action seed-order-scenario -confirm-reset
 ```
 
-### 7.5 跳到回退与修正测试
+### 8.5 跳到回退与修正测试
 
 ```powershell
 cd 'E:\project\sand box game'
@@ -258,7 +318,23 @@ $env:GOCACHE=(Resolve-Path .go-build-cache).Path
 go run ./cmd/dbtool -config configs/local.yaml -action seed-rollback-scenario -confirm-reset
 ```
 
-### 7.6 登录地址和账号
+### 8.6 跳到机场订单模块测试
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-airport-order-scenario -confirm-reset
+```
+
+### 8.7 跳到机场订单龙头测试
+
+```powershell
+cd 'E:\project\sand box game'
+$env:GOCACHE=(Resolve-Path .go-build-cache).Path
+go run ./cmd/dbtool -config configs/local.yaml -action seed-airport-order-leader-scenario -confirm-reset
+```
+
+### 8.8 登录地址和账号
 
 ```text
 本机地址：http://127.0.0.1:5173/sandbox-game/login

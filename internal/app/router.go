@@ -130,6 +130,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		groupOrderSelectionRepo,
 	)
 	playerOrderForecastQueryService := service.NewPlayerOrderForecastQueryService(
+		gameConfigRepo,
 		orderForecastRepo,
 		orderMarketForecastRepo,
 	)

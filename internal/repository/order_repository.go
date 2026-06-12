@@ -835,6 +835,16 @@ func (r *GroupMarketBidRepository) ListByYearMarket(ctx context.Context, yearNo 
 	return items, nil
 }
 
+func (r *GroupMarketBidRepository) ListByYear(ctx context.Context, yearNo int) ([]entity.GroupMarketBid, error) {
+	var items []entity.GroupMarketBid
+	if err := r.db.WithContext(ctx).
+		Where("year_no = ?", yearNo).
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *GroupMarketBidRepository) ListByYearSegment(ctx context.Context, yearNo int, marketCode string, orderType string) ([]entity.GroupMarketBid, error) {
 	var items []entity.GroupMarketBid
 	if err := r.db.WithContext(ctx).

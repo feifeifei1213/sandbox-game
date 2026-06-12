@@ -16,6 +16,7 @@ import type {
   OrderDeliveryStageCode,
   OrderMarketCode,
   OrderMarketForecastResult,
+  OrderTemplateMeta,
   OrderTypeCode,
   PlayerOrderMarketView,
   PlayerOrderSegmentView,
@@ -29,19 +30,36 @@ export interface PageMessage {
   text: string
 }
 
-export const PLAYER_ORDER_MARKETS: Array<{ code: OrderMarketCode; name: string }> = [
-  { code: 'LOCAL', name: '本地市场' },
-  { code: 'REGIONAL', name: '区域市场' },
-  { code: 'NATIONAL', name: '全国市场' },
-  { code: 'GLOBAL', name: '全球市场' },
+export const DEFAULT_PLAYER_ORDER_MARKETS: Array<{ code: OrderMarketCode; name: string; defaultEnabled: boolean; sortOrder: number }> = [
+  { code: 'LOCAL', name: '本地市场', defaultEnabled: true, sortOrder: 1 },
+  { code: 'REGIONAL', name: '区域市场', defaultEnabled: false, sortOrder: 2 },
+  { code: 'NATIONAL', name: '全国市场', defaultEnabled: false, sortOrder: 3 },
+  { code: 'GLOBAL', name: '全球市场', defaultEnabled: false, sortOrder: 4 },
 ]
 
-export const PLAYER_ORDER_TYPES: Array<{ code: OrderTypeCode; name: string }> = [
-  { code: 'AGENCY_INSPECTION', name: '代办过检' },
-  { code: 'TWO_CABIN_VIP', name: '两舱贵宾' },
-  { code: 'BUSINESS_VIP', name: '商务贵宾' },
-  { code: 'MEMBER_CUSTOM', name: '会员定制' },
+export const DEFAULT_PLAYER_ORDER_TYPES: Array<{ code: OrderTypeCode; name: string; sortOrder: number }> = [
+  { code: 'AGENCY_INSPECTION', name: '代办过检', sortOrder: 1 },
+  { code: 'TWO_CABIN_VIP', name: '两舱贵宾', sortOrder: 2 },
+  { code: 'BUSINESS_VIP', name: '商务贵宾', sortOrder: 3 },
+  { code: 'MEMBER_CUSTOM', name: '会员定制', sortOrder: 4 },
 ]
+
+export const DEFAULT_PLAYER_ORDER_TEMPLATE: OrderTemplateMeta = {
+  templateVersion: 'VIP_ORDER_TEMPLATE_V1',
+  templateName: '贵宾服务订单模板 V1',
+  formulaVersion: 'ORDER_GEN_SERVICE_V1',
+  segmentCount: DEFAULT_PLAYER_ORDER_MARKETS.length * DEFAULT_PLAYER_ORDER_TYPES.length,
+  maxCardCount: 15,
+  deliveryEnabled: true,
+  markets: DEFAULT_PLAYER_ORDER_MARKETS,
+  orderTypes: DEFAULT_PLAYER_ORDER_TYPES,
+  fields: [
+    { code: 'orderAmount', name: '金额', valueType: 'money', unit: 'M', order: 10 },
+    { code: 'orderQuantity', name: '数量', valueType: 'number', order: 20 },
+    { code: 'unitPrice', name: '单价', valueType: 'money', order: 30 },
+    { code: 'accountTerm', name: '账期', valueType: 'number', unit: '季度', order: 40 },
+  ],
+}
 
 export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   const dictionaryStore = useDictionaryStore()
@@ -74,6 +92,11 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     markets.value.flatMap((market) => market.segments).filter((segment) => segment.segmentStatus === 'SELECTING'),
   )
   const currentTab = computed(() => yearTabs.value.find((item) => item.yearNo === selectedYear.value) ?? null)
+  const orderTemplate = computed(() => currentView.value?.orderTemplate ?? marketForecast.value?.orderTemplate ?? DEFAULT_PLAYER_ORDER_TEMPLATE)
+  const orderMarketOptions = computed(() => orderTemplate.value.markets ?? DEFAULT_PLAYER_ORDER_MARKETS)
+  const orderTypeOptions = computed(() => orderTemplate.value.orderTypes ?? DEFAULT_PLAYER_ORDER_TYPES)
+  const orderSegmentCount = computed(() => orderTemplate.value.segmentCount || orderMarketOptions.value.length * orderTypeOptions.value.length)
+  const deliveryEnabled = computed(() => orderTemplate.value.deliveryEnabled !== false)
 
   async function bootstrap(preferredYear?: number) {
     loading.value = true
@@ -146,7 +169,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
       })
       pageMessage.value = {
         type: 'success',
-        text: '16 项市场投入已提交。',
+        text: `${orderSegmentCount.value} 项市场投入已提交。`,
       }
       investmentErrors.value = {}
       await loadYearView(selectedYear.value, { silent: true })
@@ -211,6 +234,13 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   }
 
   async function deliverOrders(orderIds: number[], stageCode: OrderDeliveryStageCode) {
+    if (!deliveryEnabled.value) {
+      pageMessage.value = {
+        type: 'info',
+        text: '当前订单模板暂不支持交付。',
+      }
+      return
+    }
     const uniqueOrderIds = Array.from(new Set(orderIds.filter((item) => Number.isFinite(item) && item > 0)))
     if (uniqueOrderIds.length === 0) {
       return
@@ -266,6 +296,11 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     currentSegment,
     selectableSegments,
     currentTab,
+    orderTemplate,
+    orderMarketOptions,
+    orderTypeOptions,
+    orderSegmentCount,
+    deliveryEnabled,
     bootstrap,
     refreshTabs,
     loadYearView,
@@ -322,31 +357,24 @@ export function investmentKey(marketCode: OrderMarketCode, orderType: OrderTypeC
   return `${marketCode}|${orderType}`
 }
 
-function createEmptyInvestmentDraft() {
-  const result: Record<string, number | null> = {}
-  for (const market of PLAYER_ORDER_MARKETS) {
-    for (const orderType of PLAYER_ORDER_TYPES) {
-      result[investmentKey(market.code, orderType.code)] = null
-    }
-  }
-  return result
+function createEmptyInvestmentDraft(): Record<string, number | null> {
+  return {}
 }
 
 function buildInvestmentPayload(draft: Record<string, number | null>, view: PlayerOrderYearView | null) {
-  const marketEnabledMap = new Map((view?.markets ?? []).map((market) => [market.marketCode, market.marketEnabled]))
-  return PLAYER_ORDER_MARKETS.flatMap((market) =>
-    PLAYER_ORDER_TYPES.map((orderType) => {
-      const raw = Number(draft[investmentKey(market.code, orderType.code)] ?? 0)
-      if (marketEnabledMap.get(market.code) === false) {
+  return (view?.markets ?? []).flatMap((market) =>
+    market.segments.map((segment) => {
+      const raw = Number(draft[investmentKey(segment.marketCode, segment.orderType)] ?? 0)
+      if (!market.marketEnabled || !segment.marketEnabled) {
         return {
-          marketCode: market.code,
-          orderType: orderType.code,
+          marketCode: segment.marketCode,
+          orderType: segment.orderType,
           marketInvestment: 0,
         }
       }
       return {
-        marketCode: market.code,
-        orderType: orderType.code,
+        marketCode: segment.marketCode,
+        orderType: segment.orderType,
         marketInvestment: Number.isFinite(raw) ? raw : 0,
       }
     }),
@@ -364,23 +392,23 @@ function validateInvestmentDraft(
   }
   for (const market of view.markets) {
     let marketTotal = 0
-    for (const orderType of PLAYER_ORDER_TYPES) {
-      const key = investmentKey(market.marketCode, orderType.code)
-      const rawValue = market.marketEnabled ? draft[key] : 0
+    for (const segment of market.segments) {
+      const key = investmentKey(segment.marketCode, segment.orderType)
+      const rawValue = market.marketEnabled && segment.marketEnabled ? draft[key] : 0
       const value = Number(rawValue ?? 0)
       if (!Number.isFinite(value) || value < 0) {
-        errors[key] = `${market.marketName} ${resolveOrderTypeName(orderType.code, orderType.name)} 投入必须为非负整数`
+        errors[key] = `${market.marketName} ${resolveOrderTypeName(segment.orderType, segment.orderTypeName)} 投入必须为非负整数`
         continue
       }
       if (!Number.isInteger(value)) {
-        errors[key] = `${market.marketName} ${resolveOrderTypeName(orderType.code, orderType.name)} 投入必须为整数`
+        errors[key] = `${market.marketName} ${resolveOrderTypeName(segment.orderType, segment.orderTypeName)} 投入必须为整数`
         continue
       }
       marketTotal += value
     }
     if (market.marketEnabled && market.marketInvestmentLimit !== null && market.marketInvestmentLimit !== undefined && marketTotal > market.marketInvestmentLimit) {
-      for (const orderType of PLAYER_ORDER_TYPES) {
-        errors[investmentKey(market.marketCode, orderType.code)] = `${market.marketName} 4项投入合计不能超过 ${market.marketInvestmentLimit}M`
+      for (const segment of market.segments) {
+        errors[investmentKey(segment.marketCode, segment.orderType)] = `${market.marketName} ${market.segments.length}项投入合计不能超过 ${market.marketInvestmentLimit}M`
       }
     }
   }

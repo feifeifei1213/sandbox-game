@@ -6,7 +6,14 @@ export type SnapshotScope = 'GROUP' | 'GLOBAL'
 export type SnapshotType = 'AUTO' | 'MANUAL' | 'SAFETY'
 export type NoticeTargetScope = 'ALL' | 'GROUP'
 export type AdjustmentType = 'REWARD' | 'PENALTY'
-import type { OrderForecastStageCode, OrderMarketCode, OrderMarketForecastResult, OrderPoolStatus, OrderTypeCode } from '@/types/sandbox-game-order'
+import type {
+  OrderForecastStageCode,
+  OrderMarketCode,
+  OrderMarketForecastResult,
+  OrderPoolStatus,
+  OrderTemplateMeta,
+  OrderTypeCode,
+} from '@/types/sandbox-game-order'
 
 export type { OrderMarketCode, OrderPoolStatus }
 export type AdminOrderType = OrderTypeCode
@@ -497,6 +504,7 @@ export interface OrderForecastYearLock {
 }
 
 export interface OrderForecastControlResult {
+  orderTemplate: OrderTemplateMeta
   items: OrderForecastControlItem[]
   narratives: OrderForecastNarrativeItem[]
   forecast: OrderMarketForecastResult
@@ -560,6 +568,7 @@ export interface OrderGenerationBatchSummary {
 export interface OrderControlConfigResult {
   yearNo: number
   finalYear: number
+  orderTemplate: OrderTemplateMeta
   latestBatchId: number | null
   latestBatchUploadedAt: string | null
   forecast: OrderMarketForecastResult
@@ -680,10 +689,12 @@ export interface OrderPoolItem {
   selectedGroupId: number | null
   sourceSheetName: string
   sourceCell: string
+  orderPayload?: Record<string, unknown>
 }
 
 export interface OrderPoolResult {
   yearNo: number
+  orderTemplate: OrderTemplateMeta
   marketCode: OrderMarketCode | ''
   marketName: string
   orderType: AdminOrderType | ''

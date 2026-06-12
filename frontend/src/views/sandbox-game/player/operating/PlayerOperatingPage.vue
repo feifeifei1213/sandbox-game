@@ -55,6 +55,11 @@
 
           <section v-if="!previewMode && (loading || yearViewLoading)" class="loading-card">正在加载经营页数据...</section>
 
+          <section v-else-if="airportPendingMode" class="loading-card pending-template-card">
+            <strong>机场沙盘版经营页待接入</strong>
+            <span>当前仅支持订单模块联调，经营页字段和公式将在机场版经营 Excel 给到后接入。</span>
+          </section>
+
           <OperatingSheet
             v-else-if="activeView"
             :model-value="activeDraftPayload"
@@ -73,6 +78,7 @@
         </main>
 
         <OperatingSidebar
+          v-if="!airportPendingMode"
           class="side-panel"
           :view="activeView"
           :year-label="`${activeSelectedYear} 年经营`"
@@ -82,6 +88,10 @@
           @save="handleSave"
           @submit="handleSubmit"
         />
+        <section v-else class="side-panel pending-side">
+          <strong>经营页未开放</strong>
+          <span>请先在订单页联调机场订单配置、市场投入、开标和选单流程。</span>
+        </section>
       </div>
     </div>
   </div>
@@ -210,6 +220,10 @@ const activeSubmitting = computed(() => (previewMode.value ? previewSubmitting.v
 const activeReportEnabled = computed(() => (previewMode.value ? true : reportEnabled.value))
 const activeOperatingLabels = computed(() =>
   applyDictionaryToOperatingLabels(resolveOperatingLabels(activeConfig.value?.editionCode), dictionaryStore.displayName),
+)
+const airportPendingMode = computed(() =>
+  !previewMode.value
+  && (activeConfig.value?.editionCode === 'AIRPORT_V1' || activeConfig.value?.operatingTemplateVersion === 'PENDING_OPERATING_TEMPLATE'),
 )
 
 onMounted(async () => {
@@ -745,9 +759,33 @@ function buildPreviewDerivedValues(yearNo: number) {
   color: var(--muted);
 }
 
+.pending-template-card {
+  display: grid;
+  gap: 8px;
+}
+
+.pending-template-card strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
 .side-panel {
   position: sticky;
   top: 18px;
+}
+
+.pending-side {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.pending-side span {
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 @media (max-width: 1360px) {

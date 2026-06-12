@@ -18,12 +18,14 @@ import (
 )
 
 const (
-	actionInitSingle           = "init-single"
-	actionResetSingle          = "reset-single"
-	actionInitCompetition      = "init-competition"
-	actionResetCompetition     = "reset-competition"
-	actionSeedOrderScenario    = "seed-order-scenario"
-	actionSeedRollbackScenario = "seed-rollback-scenario"
+	actionInitSingle                     = "init-single"
+	actionResetSingle                    = "reset-single"
+	actionInitCompetition                = "init-competition"
+	actionResetCompetition               = "reset-competition"
+	actionSeedOrderScenario              = "seed-order-scenario"
+	actionSeedRollbackScenario           = "seed-rollback-scenario"
+	actionSeedAirportOrderScenario       = "seed-airport-order-scenario"
+	actionSeedAirportOrderLeaderScenario = "seed-airport-order-leader-scenario"
 )
 
 func main() {
@@ -32,7 +34,7 @@ func main() {
 	var confirmReset bool
 
 	flag.StringVar(&configPath, "config", "configs/local-single.yaml", "配置文件路径")
-	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single/init-competition/reset-competition/seed-order-scenario/seed-rollback-scenario")
+	flag.StringVar(&action, "action", actionInitSingle, "执行动作：init-single/reset-single/init-competition/reset-competition/seed-order-scenario/seed-rollback-scenario/seed-airport-order-scenario/seed-airport-order-leader-scenario")
 	flag.BoolVar(&confirmReset, "confirm-reset", false, "确认允许重置当前配置指向的数据库，仅测试造数动作需要")
 	flag.Parse()
 
@@ -86,7 +88,7 @@ func run(configPath string, action string, confirmReset bool) error {
 		if err := recreateDatabase(adminDB, targetDBName); err != nil {
 			return err
 		}
-	case actionSeedOrderScenario, actionSeedRollbackScenario:
+	case actionSeedOrderScenario, actionSeedRollbackScenario, actionSeedAirportOrderScenario, actionSeedAirportOrderLeaderScenario:
 		if !confirmReset {
 			return fmt.Errorf("%s 会重置当前配置指向的数据库 %q；确认在测试库执行时请追加 --confirm-reset", action, targetDBName)
 		}
@@ -123,7 +125,7 @@ func run(configPath string, action string, confirmReset bool) error {
 		}
 	}
 
-	if action == actionSeedOrderScenario || action == actionSeedRollbackScenario {
+	if action == actionSeedOrderScenario || action == actionSeedRollbackScenario || action == actionSeedAirportOrderScenario || action == actionSeedAirportOrderLeaderScenario {
 		gormDB, err := gorm.Open(mysql.Open(cfg.MySQL.DSN), &gorm.Config{})
 		if err != nil {
 			return fmt.Errorf("open target mysql with gorm: %w", err)
@@ -140,6 +142,14 @@ func run(configPath string, action string, confirmReset bool) error {
 			}
 		case actionSeedRollbackScenario:
 			if err := seedRollbackScenario(context.Background(), gormDB); err != nil {
+				return err
+			}
+		case actionSeedAirportOrderScenario:
+			if err := seedAirportOrderScenario(context.Background(), gormDB, false); err != nil {
+				return err
+			}
+		case actionSeedAirportOrderLeaderScenario:
+			if err := seedAirportOrderScenario(context.Background(), gormDB, true); err != nil {
 				return err
 			}
 		}
@@ -161,12 +171,14 @@ func resolveMigrationFiles(projectRoot string, action string) ([]string, error) 
 		filepath.Join(projectRoot, "migrations", "mysql", "0010_order_market_investment_limit.sql"),
 		filepath.Join(projectRoot, "migrations", "mysql", "0011_rollback_snapshot.sql"),
 		filepath.Join(projectRoot, "migrations", "mysql", "0012_dictionary.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0013_order_template_airport.sql"),
+		filepath.Join(projectRoot, "migrations", "mysql", "0014_order_unit_price_precision.sql"),
 	}
 
 	switch action {
 	case actionInitSingle, actionResetSingle:
 		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0002_seed_single_group.sql")), nil
-	case actionInitCompetition, actionResetCompetition, actionSeedOrderScenario, actionSeedRollbackScenario:
+	case actionInitCompetition, actionResetCompetition, actionSeedOrderScenario, actionSeedRollbackScenario, actionSeedAirportOrderScenario, actionSeedAirportOrderLeaderScenario:
 		return append(commonFiles, filepath.Join(projectRoot, "migrations", "mysql", "0004_seed_competition_admin.sql")), nil
 	default:
 		return nil, fmt.Errorf("unsupported migration action: %s", action)
