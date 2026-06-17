@@ -292,6 +292,13 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	if err != nil {
 		return nil, err
 	}
+	historyMaxStageVersion, err := s.operatingRepo.MaxStageSubmitVersion(ctx, cmd.GroupID, cmd.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("load max stage submit version: %w", err)
+	}
+	if nextState.LatestStageSubmitVersion <= historyMaxStageVersion {
+		nextState.LatestStageSubmitVersion = historyMaxStageVersion + 1
+	}
 
 	bankruptTriggered := calculationResult.PeriodEndCash < 0
 	bankruptReason := ""
@@ -362,8 +369,8 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 			YearNo:        cmd.YearNo,
 			StageCode:     cmd.StageCode,
 			SnapshotType:  enum.SnapshotTypeAuto,
-			TriggerCode:   enum.SnapshotTriggerStageSubmitted,
-			Description:   "经营阶段提交后自动快照",
+			TriggerCode:   stageSubmitSnapshotTrigger(yearState.RollbackPending),
+			Description:   stageSubmitSnapshotDescription(yearState.RollbackPending),
 			OperatorID:    cmd.SubmitterID,
 			OperatorName:  cmd.OperatorName,
 			OperateTime:   submitTime,
@@ -390,6 +397,20 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 		PeriodEndCash:            calculationResult.PeriodEndCash,
 		SubmittedAt:              submitTime,
 	}, nil
+}
+
+func stageSubmitSnapshotTrigger(rollbackPending bool) string {
+	if rollbackPending {
+		return enum.SnapshotTriggerRollbackStageRetry
+	}
+	return enum.SnapshotTriggerStageSubmitted
+}
+
+func stageSubmitSnapshotDescription(rollbackPending bool) string {
+	if rollbackPending {
+		return "回退后重新提交经营阶段自动快照"
+	}
+	return "经营阶段提交后自动快照"
 }
 
 var sqlTxOptionsReadCommitted = &sql.TxOptions{}

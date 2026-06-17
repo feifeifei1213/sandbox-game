@@ -12,12 +12,14 @@ const (
 )
 
 const (
-	SnapshotTriggerStageSubmitted     = "STAGE_SUBMITTED"
-	SnapshotTriggerReportSubmitted    = "REPORT_SUBMITTED"
-	SnapshotTriggerOrderPoolConfirmed = "ORDER_POOL_CONFIRMED"
-	SnapshotTriggerSegmentCompleted   = "SEGMENT_COMPLETED"
-	SnapshotTriggerOpenNextYear       = "OPEN_NEXT_YEAR"
-	SnapshotTriggerBeforeRollback     = "BEFORE_ROLLBACK"
+	SnapshotTriggerStageSubmitted      = "STAGE_SUBMITTED"
+	SnapshotTriggerReportSubmitted     = "REPORT_SUBMITTED"
+	SnapshotTriggerRollbackStageRetry  = "ROLLBACK_STAGE_RESUBMITTED"
+	SnapshotTriggerRollbackReportRetry = "ROLLBACK_REPORT_RESUBMITTED"
+	SnapshotTriggerOrderPoolConfirmed  = "ORDER_POOL_CONFIRMED"
+	SnapshotTriggerSegmentCompleted    = "SEGMENT_COMPLETED"
+	SnapshotTriggerOpenNextYear        = "OPEN_NEXT_YEAR"
+	SnapshotTriggerBeforeRollback      = "BEFORE_ROLLBACK"
 )
 
 const (

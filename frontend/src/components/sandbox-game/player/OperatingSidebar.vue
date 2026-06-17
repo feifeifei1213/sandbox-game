@@ -35,6 +35,7 @@
     <section v-if="view?.hasInvalidDraft" class="panel warning-panel">
       <h3>失效草稿</h3>
       <p v-if="invalidScopeText">以下区域保留旧值，但当前不计入正式结果：{{ invalidScopeText }}</p>
+      <p v-if="view?.rollbackPending && !view?.carryForward">当前年份缺少新的上年有效财报，旧经营数据只能查看，暂不能重新计算或提交。</p>
       <p v-if="view?.hasRetainedReportDraft">本年财报保留了上次已失效的填写结果，经营重新完成后还需要重新提交财报。</p>
       <p class="hint warning-hint">重新提交后，新的正式结果会覆盖当前失效草稿。</p>
     </section>

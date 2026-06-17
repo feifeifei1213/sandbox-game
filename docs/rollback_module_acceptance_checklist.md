@@ -8,6 +8,8 @@
 - 标段完成后，生成 `GLOBAL + AUTO + SEGMENT_COMPLETED` 快照。
 - 管理员开放下一年后，生成 `GLOBAL + AUTO + OPEN_NEXT_YEAR` 快照。
 - 管理员执行退回重提或恢复快照前，生成 `GROUP + SAFETY + BEFORE_ROLLBACK` 安全快照。
+- 回退待重提状态下，玩家重新提交经营阶段后，生成 `GROUP + AUTO + ROLLBACK_STAGE_RESUBMITTED` 快照，并在管理员端显示为回退补提经营。
+- 回退待重提状态下，玩家重新提交财报后，生成 `GROUP + AUTO + ROLLBACK_REPORT_RESUBMITTED` 快照，并在管理员端显示为回退补提财报。
 
 ## 2. 退回重提
 

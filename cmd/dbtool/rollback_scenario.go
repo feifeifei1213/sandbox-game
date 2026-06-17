@@ -25,10 +25,12 @@ const (
 )
 
 type seededRollbackScenario struct {
-	GroupIDs       []int64
-	SnapshotCount  int64
-	SelectionCount int64
-	DeliveredCount int64
+	GroupIDs            []int64
+	SnapshotCount       int64
+	GroupSnapshotCount  int64
+	GlobalSnapshotCount int64
+	SelectionCount      int64
+	DeliveredCount      int64
 }
 
 func seedRollbackScenario(ctx context.Context, db *gorm.DB) error {
@@ -67,7 +69,7 @@ func seedRollbackScenario(ctx context.Context, db *gorm.DB) error {
 		return fmt.Errorf("rollback scenario expects 3 groups, got %d", len(groupIDs))
 	}
 
-	if err := seedRollbackCompletedHistoricalYear(ctx, db, groupIDs, 0); err != nil {
+	if err := seedRollbackCompletedHistoricalYear(ctx, db, groupIDs, 0, operatingService, reportService); err != nil {
 		return err
 	}
 	if _, err := controlService.OpenNextYear(ctx, service.OpenNextYearCommand{
@@ -77,10 +79,13 @@ func seedRollbackScenario(ctx context.Context, db *gorm.DB) error {
 	}); err != nil {
 		return fmt.Errorf("open rollback scenario year 1: %w", err)
 	}
-	if err := seedRollbackCompletedHistoricalYear(ctx, db, groupIDs, 1); err != nil {
+	if err := seedRollbackHistoricalOrderPrerequisite(ctx, adminOrderService, 1); err != nil {
 		return err
 	}
 	if err := seedRollbackPreviousSelectedOrders(ctx, db, groupIDs, time.Now()); err != nil {
+		return err
+	}
+	if err := seedRollbackCompletedHistoricalYear(ctx, db, groupIDs, 1, operatingService, reportService); err != nil {
 		return err
 	}
 	if _, err := controlService.OpenNextYear(ctx, service.OpenNextYearCommand{
@@ -96,11 +101,24 @@ func seedRollbackScenario(ctx context.Context, db *gorm.DB) error {
 	if err := seedRollbackYearTwoOperations(ctx, db, groupIDs, playerOrderService, operatingService, reportService); err != nil {
 		return err
 	}
+	if err := ensureRollbackScenarioSnapshotCoverage(ctx, db, groupIDs, []int{0, 1, 2}); err != nil {
+		return err
+	}
 
 	var seeded seededRollbackScenario
 	seeded.GroupIDs = groupIDs
 	if err := db.WithContext(ctx).Model(&entity.StateSnapshot{}).Count(&seeded.SnapshotCount).Error; err != nil {
 		return fmt.Errorf("count rollback scenario snapshots: %w", err)
+	}
+	if err := db.WithContext(ctx).Model(&entity.StateSnapshot{}).
+		Where("snapshot_scope = ?", enum.SnapshotScopeGroup).
+		Count(&seeded.GroupSnapshotCount).Error; err != nil {
+		return fmt.Errorf("count rollback scenario group snapshots: %w", err)
+	}
+	if err := db.WithContext(ctx).Model(&entity.StateSnapshot{}).
+		Where("snapshot_scope = ?", enum.SnapshotScopeGlobal).
+		Count(&seeded.GlobalSnapshotCount).Error; err != nil {
+		return fmt.Errorf("count rollback scenario global snapshots: %w", err)
 	}
 	if err := db.WithContext(ctx).Model(&entity.GroupOrderSelection{}).Count(&seeded.SelectionCount).Error; err != nil {
 		return fmt.Errorf("count rollback scenario selections: %w", err)
@@ -113,121 +131,112 @@ func seedRollbackScenario(ctx context.Context, db *gorm.DB) error {
 	}
 
 	fmt.Printf(
-		"rollback scenario seeded: groups=%d groupIDs=%v snapshots=%d selections=%d delivered=%d stop=2年已完成、尚未开放3年，可测试退回重提/恢复快照/年度阻断\n",
+		"rollback scenario seeded: groups=%d groupIDs=%v snapshots=%d groupSnapshots=%d globalSnapshots=%d selections=%d delivered=%d stop=2年已完成、尚未开放3年，可测试0年/1年/2年跨年恢复、失效草稿保留、退回重提/年度阻断\n",
 		len(seeded.GroupIDs),
 		seeded.GroupIDs,
 		seeded.SnapshotCount,
+		seeded.GroupSnapshotCount,
+		seeded.GlobalSnapshotCount,
 		seeded.SelectionCount,
 		seeded.DeliveredCount,
 	)
 	return nil
 }
 
-func seedRollbackCompletedHistoricalYear(ctx context.Context, db *gorm.DB, groupIDs []int64, yearNo int) error {
-	now := time.Now()
+func seedRollbackCompletedHistoricalYear(
+	ctx context.Context,
+	db *gorm.DB,
+	groupIDs []int64,
+	yearNo int,
+	operatingService *service.PlayerOperatingCommandService,
+	reportService *service.PlayerReportCommandService,
+) error {
 	for index, groupID := range groupIDs {
-		if err := upsertRollbackCompletedYear(ctx, db, groupID, yearNo, index, now); err != nil {
+		baseCost := float64(6 + yearNo*2 + index*2)
+		if err := submitRollbackFullOperatingYear(ctx, operatingService, groupID, yearNo, index, baseCost, 0); err != nil {
 			return err
+		}
+		reportManual, err := rollbackScenarioReportManualPayloadForGroup(ctx, db, groupID, yearNo)
+		if err != nil {
+			return err
+		}
+		if _, err := reportService.Submit(ctx, service.SubmitPlayerReportCommand{
+			GroupID:             groupID,
+			YearNo:              yearNo,
+			ReportManualPayload: reportManual,
+			SubmitterID:         groupID,
+			OperatorName:        fmt.Sprintf("group%02d", index+1),
+		}); err != nil {
+			return fmt.Errorf("submit rollback historical report group=%d year=%d: %w", groupID, yearNo, err)
 		}
 	}
 	return nil
 }
 
-func upsertRollbackCompletedYear(ctx context.Context, db *gorm.DB, groupID int64, yearNo int, groupIndex int, now time.Time) error {
-	yearType := enum.YearTypeFormal
-	if yearNo == 0 {
-		yearType = enum.YearTypeDemo
+func seedRollbackHistoricalOrderPrerequisite(ctx context.Context, adminOrderService *service.AdminOrderCommandService, yearNo int) error {
+	if _, err := adminOrderService.UpdateForecastControl(ctx, service.UpdateOrderForecastControlCommand{
+		Items:        rollbackZeroForecastControlItems(yearNo),
+		OperatorID:   rollbackScenarioOperatorID,
+		OperatorName: rollbackScenarioOperatorName,
+	}); err != nil {
+		return fmt.Errorf("update rollback historical zero forecast control year=%d: %w", yearNo, err)
 	}
-	if err := db.WithContext(ctx).
-		Model(&entity.GroupYearState{}).
-		Where("group_id = ? AND year_no = ?", groupID, yearNo).
-		Updates(map[string]any{
-			"year_type":                    yearType,
-			"year_status":                  enum.YearStatusCompleted,
-			"stage_status":                 enum.StageStatusYearEndOpen,
-			"report_status":                enum.ReportStatusSubmitted,
-			"summary_effective":            yearNo > 0,
-			"latest_stage_submit_version":  5,
-			"latest_report_submit_version": 1,
-			"updater":                      rollbackScenarioOperatorName,
-			"update_time":                  now,
-		}).Error; err != nil {
-		return fmt.Errorf("update rollback completed year state group=%d year=%d: %w", groupID, yearNo, err)
+	generated, err := adminOrderService.GenerateOrderPool(ctx, service.GenerateOrderPoolCommand{
+		YearNo:       yearNo,
+		Overwrite:    true,
+		OperatorID:   rollbackScenarioOperatorID,
+		OperatorName: rollbackScenarioOperatorName,
+	})
+	if err != nil {
+		return fmt.Errorf("generate rollback historical order pool year=%d: %w", yearNo, err)
 	}
+	if _, err := adminOrderService.ConfirmOrderPool(ctx, service.ConfirmOrderPoolCommand{
+		YearNo:       yearNo,
+		BatchID:      generated.BatchID,
+		OperatorID:   rollbackScenarioOperatorID,
+		OperatorName: rollbackScenarioOperatorName,
+	}); err != nil {
+		return fmt.Errorf("confirm rollback historical order pool year=%d: %w", yearNo, err)
+	}
+	return nil
+}
 
-	operatingPayload := rollbackScenarioOperatingPayload(float64(8+groupIndex*2), 0).Normalize()
-	operatingRepo := repository.NewOperatingRepository(db)
-	if err := operatingRepo.UpsertDraft(ctx, repository.UpsertOperatingDraftCommand{
-		GroupID:          groupID,
-		YearNo:           yearNo,
-		StageStatus:      enum.StageStatusYearEndOpen,
-		OperatingPayload: operatingPayload,
-		LastAutoSavedAt:  now,
-		OperatorName:     rollbackScenarioOperatorName,
-	}); err != nil {
-		return fmt.Errorf("upsert rollback historical operating draft group=%d year=%d: %w", groupID, yearNo, err)
+func rollbackZeroForecastControlItems(yearNo int) []service.UpdateOrderForecastControlItem {
+	items := make([]service.UpdateOrderForecastControlItem, 0, len(rollbackOrderSegments()))
+	for _, segment := range rollbackOrderSegments() {
+		items = append(items, service.UpdateOrderForecastControlItem{
+			YearNo:     yearNo,
+			MarketCode: segment.MarketCode,
+			OrderType:  segment.OrderType,
+			OrderCount: 0,
+		})
 	}
-	for version, stageCode := range []string{state.StageCodeQ1, state.StageCodeQ2, state.StageCodeQ3, state.StageCodeQ4, state.StageCodeYearEnd} {
-		if err := operatingRepo.CreateStageSubmission(ctx, repository.CreateStageSubmissionCommand{
-			GroupID:                  groupID,
-			YearNo:                   yearNo,
-			StageCode:                stageCode,
-			SubmitVersion:            version + 1,
-			PeriodEndCash:            80 + float64(groupIndex*5+yearNo),
-			OperatingPayloadSnapshot: operatingPayload,
-			StateBeforeJSON:          []byte("{}"),
-			StateAfterJSON:           []byte("{}"),
-			SubmitterID:              groupID,
-			SubmitTime:               now.Add(time.Duration(yearNo*20+version) * time.Minute),
-		}); err != nil {
-			return fmt.Errorf("create rollback historical stage submission group=%d year=%d stage=%s: %w", groupID, yearNo, stageCode, err)
-		}
-	}
+	return items
+}
 
-	manual := rollbackScenarioReportManualPayload()
-	computed := rollbackScenarioComputedReportPayload(yearNo, groupIndex)
-	reportRepo := repository.NewReportRepository(db)
-	if err := reportRepo.UpsertCurrentReport(ctx, repository.UpsertCurrentReportCommand{
-		GroupID:               groupID,
-		YearNo:                yearNo,
-		ReportManualPayload:   manual,
-		ReportComputedPayload: computed,
-		BalanceCheckPassed:    true,
-		LastAutoSavedAt:       now,
-		SubmittedAt:           &now,
-		OperatorName:          rollbackScenarioOperatorName,
-	}); err != nil {
-		return fmt.Errorf("upsert rollback historical report group=%d year=%d: %w", groupID, yearNo, err)
+func ensureRollbackScenarioSnapshotCoverage(ctx context.Context, db *gorm.DB, groupIDs []int64, yearNos []int) error {
+	expectedStages := []string{
+		state.StageCodeQ1,
+		state.StageCodeQ2,
+		state.StageCodeQ3,
+		state.StageCodeQ4,
+		state.StageCodeYearEnd,
+		"REPORT",
 	}
-	if err := reportRepo.CreateSubmission(ctx, repository.CreateReportSubmissionCommand{
-		GroupID:                groupID,
-		YearNo:                 yearNo,
-		SubmitVersion:          1,
-		ReportManualSnapshot:   manual,
-		ReportComputedSnapshot: computed,
-		BalanceCheckPassed:     true,
-		StateBeforeJSON:        []byte("{}"),
-		StateAfterJSON:         []byte("{}"),
-		SubmitterID:            groupID,
-		SubmitTime:             now.Add(time.Duration(yearNo*20+10) * time.Minute),
-	}); err != nil {
-		return fmt.Errorf("create rollback historical report submission group=%d year=%d: %w", groupID, yearNo, err)
-	}
-	if yearNo > 0 {
-		summary := entity.GroupSummarySnapshot{
-			GroupID:                   groupID,
-			YearNo:                    yearNo,
-			Revenue:                   computed.ReportSalesRevenue,
-			Profit:                    computed.ReportNetProfit,
-			Equity:                    computed.ReportTotalEquity,
-			BusinessStatus:            enum.BusinessStatusNormal,
-			RankingValue:              computed.ReportTotalEquity,
-			SummaryEffective:          true,
-			SourceReportSubmitVersion: 1,
-			BaseEntity:                rollbackScenarioBase(now),
-		}
-		if err := db.WithContext(ctx).Create(&summary).Error; err != nil {
-			return fmt.Errorf("create rollback historical summary group=%d year=%d: %w", groupID, yearNo, err)
+	for _, groupID := range groupIDs {
+		for _, yearNo := range yearNos {
+			for _, stageCode := range expectedStages {
+				var count int64
+				if err := db.WithContext(ctx).Model(&entity.StateSnapshot{}).
+					Where("snapshot_scope = ? AND snapshot_type = ? AND target_group_id = ? AND target_year_no = ? AND target_stage_code = ?",
+						enum.SnapshotScopeGroup, enum.SnapshotTypeAuto, groupID, yearNo, stageCode).
+					Count(&count).Error; err != nil {
+					return fmt.Errorf("count rollback snapshot coverage group=%d year=%d stage=%s: %w", groupID, yearNo, stageCode, err)
+				}
+				if count == 0 {
+					return fmt.Errorf("rollback scenario missing group snapshot: group=%d year=%d stage=%s", groupID, yearNo, stageCode)
+				}
+			}
 		}
 	}
 	return nil
@@ -454,7 +463,7 @@ func seedRollbackYearTwoOperations(
 		if err != nil {
 			return err
 		}
-		operatingPayload := rollbackScenarioOperatingPayload(baseCost, deliveryRevenue)
+		operatingPayload := rollbackScenarioOperatingPayload(2, index, baseCost, deliveryRevenue, state.StageCodeQ1)
 		if len(deliveredOrderIDs) > 0 {
 			if _, err := operatingService.SaveDraft(ctx, service.SaveOperatingDraftCommand{
 				GroupID:          groupID,
@@ -475,7 +484,7 @@ func seedRollbackYearTwoOperations(
 				return fmt.Errorf("deliver rollback orders group=%d: %w", groupID, err)
 			}
 		}
-		if err := submitRollbackFullOperatingYear(ctx, operatingService, groupID, 2, baseCost, deliveryRevenue); err != nil {
+		if err := submitRollbackFullOperatingYear(ctx, operatingService, groupID, 2, index, baseCost, deliveryRevenue); err != nil {
 			return err
 		}
 		reportManual, err := rollbackScenarioReportManualPayloadForGroup(ctx, db, groupID, 2)
@@ -521,13 +530,13 @@ func rollbackDeliveryRevenue(ctx context.Context, db *gorm.DB, groupID int64, ye
 	return details[0].OrderAmount, []int64{details[0].OrderID}, nil
 }
 
-func submitRollbackFullOperatingYear(ctx context.Context, operatingService *service.PlayerOperatingCommandService, groupID int64, yearNo int, baseCost float64, deliveryRevenue float64) error {
+func submitRollbackFullOperatingYear(ctx context.Context, operatingService *service.PlayerOperatingCommandService, groupID int64, yearNo int, groupIndex int, baseCost float64, deliveryRevenue float64) error {
 	payloads := map[string]payload.OperatingPayload{
-		state.StageCodeQ1:      rollbackScenarioOperatingPayload(baseCost, deliveryRevenue),
-		state.StageCodeQ2:      rollbackScenarioOperatingPayload(baseCost, deliveryRevenue),
-		state.StageCodeQ3:      rollbackScenarioOperatingPayload(baseCost, deliveryRevenue),
-		state.StageCodeQ4:      rollbackScenarioOperatingPayload(baseCost, deliveryRevenue),
-		state.StageCodeYearEnd: rollbackScenarioOperatingPayload(baseCost, deliveryRevenue),
+		state.StageCodeQ1:      rollbackScenarioOperatingPayload(yearNo, groupIndex, baseCost, deliveryRevenue, state.StageCodeQ1),
+		state.StageCodeQ2:      rollbackScenarioOperatingPayload(yearNo, groupIndex, baseCost, deliveryRevenue, state.StageCodeQ2),
+		state.StageCodeQ3:      rollbackScenarioOperatingPayload(yearNo, groupIndex, baseCost, deliveryRevenue, state.StageCodeQ3),
+		state.StageCodeQ4:      rollbackScenarioOperatingPayload(yearNo, groupIndex, baseCost, deliveryRevenue, state.StageCodeQ4),
+		state.StageCodeYearEnd: rollbackScenarioOperatingPayload(yearNo, groupIndex, baseCost, deliveryRevenue, state.StageCodeYearEnd),
 	}
 	for _, stageCode := range []string{state.StageCodeQ1, state.StageCodeQ2, state.StageCodeQ3, state.StageCodeQ4, state.StageCodeYearEnd} {
 		if _, err := operatingService.SubmitStage(ctx, service.SubmitOperatingStageCommand{
@@ -583,15 +592,6 @@ func rollbackScenarioReportManualPayloadForGroup(ctx context.Context, db *gorm.D
 	if err != nil {
 		return payload.ReportManualPayload{}, fmt.Errorf("apply rollback report order values group=%d year=%d: %w", groupID, yearNo, err)
 	}
-	previousReport, err := repository.NewReportRepository(db).FindEffectiveByGroupIDAndYear(ctx, groupID, yearNo-1)
-	if err != nil {
-		return payload.ReportManualPayload{}, fmt.Errorf("load rollback previous report group=%d year=%d: %w", groupID, yearNo-1, err)
-	}
-	var previousComputed payload.ReportComputedPayload
-	if err := json.Unmarshal(previousReport.ReportComputedPayload, &previousComputed); err != nil {
-		return payload.ReportManualPayload{}, fmt.Errorf("unmarshal rollback previous report group=%d year=%d: %w", groupID, yearNo-1, err)
-	}
-
 	zeroInventoryManual := payload.ReportManualPayload{
 		WorkInProgress:               float64Ptr(0),
 		FinishedGoods:                float64Ptr(0),
@@ -601,10 +601,26 @@ func rollbackScenarioReportManualPayloadForGroup(ctx context.Context, db *gorm.D
 		ProductionHumanScore:         float64Ptr(1),
 		ClosingSpeedScore:            float64Ptr(1),
 	}
-	calcContext := calcctx.NewCalculationContext(*group, *yearState, *gameConfig).
-		WithPreviousReport(&previousComputed).
+	calcContext := calcctx.NewCalculationContext(*group, *yearState, *gameConfig)
+	if yearNo == 0 {
+		calcContext = calcContext.WithInitialBaseline(rollbackScenarioBaselinePayload())
+	} else {
+		previousReport, err := repository.NewReportRepository(db).FindEffectiveByGroupIDAndYear(ctx, groupID, yearNo-1)
+		if err != nil {
+			return payload.ReportManualPayload{}, fmt.Errorf("load rollback previous report group=%d year=%d: %w", groupID, yearNo-1, err)
+		}
+		var previousComputed payload.ReportComputedPayload
+		if err := json.Unmarshal(previousReport.ReportComputedPayload, &previousComputed); err != nil {
+			return payload.ReportManualPayload{}, fmt.Errorf("unmarshal rollback previous report group=%d year=%d: %w", groupID, yearNo-1, err)
+		}
+		calcContext = calcContext.WithPreviousReport(&previousComputed)
+	}
+	calcContext = calcContext.
 		WithOperatingPayload(&operatingPayload).
 		WithReportManualPayload(&zeroInventoryManual)
+	if err := calcContext.Validate(); err != nil {
+		return payload.ReportManualPayload{}, fmt.Errorf("validate rollback report context group=%d year=%d: %w", groupID, yearNo, err)
+	}
 	computed, err := reportrules.NewCalculator().Calculate(calcContext)
 	if err != nil {
 		return payload.ReportManualPayload{}, fmt.Errorf("calculate rollback zero-inventory report group=%d year=%d: %w", groupID, yearNo, err)
@@ -613,14 +629,22 @@ func rollbackScenarioReportManualPayloadForGroup(ctx context.Context, db *gorm.D
 	if inventoryTotal < 0 {
 		return payload.ReportManualPayload{}, fmt.Errorf("rollback report balance requires negative inventory group=%d year=%d gap=%.2f", groupID, yearNo, computed.BalanceGap())
 	}
+	finishedGoods := float64(yearNo + group.GroupNo)
+	rawMaterials := float64(group.GroupNo)
+	workInProgress := inventoryTotal - finishedGoods - rawMaterials
+	if workInProgress < 0 {
+		workInProgress = inventoryTotal
+		finishedGoods = 0
+		rawMaterials = 0
+	}
 	result := payload.ReportManualPayload{
-		WorkInProgress:               float64Ptr(inventoryTotal),
-		FinishedGoods:                float64Ptr(0),
-		RawMaterials:                 float64Ptr(0),
+		WorkInProgress:               float64Ptr(workInProgress),
+		FinishedGoods:                float64Ptr(finishedGoods),
+		RawMaterials:                 float64Ptr(rawMaterials),
 		IncomeTaxRate:                float64Ptr(0),
-		EnterpriseCertificationScore: float64Ptr(1),
-		ProductionHumanScore:         float64Ptr(1),
-		ClosingSpeedScore:            float64Ptr(1),
+		EnterpriseCertificationScore: float64Ptr(float64(yearNo + 1)),
+		ProductionHumanScore:         float64Ptr(float64(group.GroupNo + 1)),
+		ClosingSpeedScore:            float64Ptr(float64(yearNo + group.GroupNo + 1)),
 	}
 	checkContext := calcContext.WithReportManualPayload(&result)
 	checkComputed, err := reportrules.NewCalculator().Calculate(checkContext)
@@ -705,35 +729,50 @@ func rollbackScenarioBaselinePayload() *payload.BaselinePayload {
 	return &item
 }
 
-func rollbackScenarioOperatingPayload(baseCost float64, deliveryRevenue float64) payload.OperatingPayload {
+func rollbackScenarioOperatingPayload(yearNo int, groupIndex int, baseCost float64, deliveryRevenue float64, throughStageCode string) payload.OperatingPayload {
 	p := payload.NewOperatingPayload()
+	stageLimit := rollbackScenarioStageLimit(throughStageCode)
+	beginningInvestment := float64((yearNo + 1) * (groupIndex + 1))
 	p.Beginning.TaxAndPlanning = map[string]any{
 		"taxRate":       0,
-		"marketBidCost": 0,
+		"marketBidCost": beginningInvestment,
 	}
 	p.Beginning.MarketBid = []map[string]any{
-		{"marketCode": enum.MarketCodeLocal, "marketInvestment": 0, "orderAmount": deliveryRevenue},
+		{"marketCode": enum.MarketCodeLocal, "marketInvestment": beginningInvestment, "orderAmount": deliveryRevenue},
 	}
-	for _, quarter := range []string{"q1", "q2", "q3", "q4"} {
+	for quarterIndex, quarter := range []string{"q1", "q2", "q3", "q4"} {
+		if quarterIndex > stageLimit {
+			continue
+		}
+		quarterOffset := float64(quarterIndex + 1)
+		groupOffset := float64(groupIndex + 1)
+		yearOffset := float64(yearNo + 1)
+		cashSafetyLoan := float64(40 + yearNo*5 + groupIndex*10)
+		balanceBuffer := 0.0
+		cashBuffer := 0.0
+		if quarter == "q4" {
+			balanceBuffer = float64(20 + yearNo*3 + groupIndex*2)
+			cashBuffer = float64(80 + yearNo*5 + groupIndex*10)
+		}
 		p.Quarter.ShortTermLoan[quarter] = map[string]any{
 			"shortTermRepayment": 0,
 			"shortTermInterest":  0,
-			"newShortTermLoan":   0,
+			"newShortTermLoan":   groupOffset + quarterOffset + cashSafetyLoan + balanceBuffer + cashBuffer,
 		}
-		p.Quarter.MaterialPayment[quarter] = map[string]any{"materialPayment": baseCost}
+		p.Quarter.MaterialPayment[quarter] = map[string]any{"materialPayment": baseCost + quarterOffset + balanceBuffer}
 		p.Quarter.ProductionLineAdjust[quarter] = map[string]any{
-			"changeProductCost":        0,
-			"lineDismantleCost":        0,
+			"changeProductCost":        yearOffset,
+			"lineDismantleCost":        groupOffset,
 			"lineSaleValue":            0,
-			"newLineInstall":           0,
+			"newLineInstall":           quarterOffset,
 			"constructionToFixed":      0,
-			"depreciableAssetIncrease": 0,
+			"depreciableAssetIncrease": quarterOffset,
 		}
-		p.Quarter.HumanResource[quarter] = map[string]any{"humanResourceCost": 1}
-		p.Quarter.SalaryAndProduction[quarter] = map[string]any{"salaryAndProductionCost": 1}
+		p.Quarter.HumanResource[quarter] = map[string]any{"humanResourceCost": groupOffset}
+		p.Quarter.SalaryAndProduction[quarter] = map[string]any{"salaryAndProductionCost": yearOffset}
 		p.Quarter.ResearchAndManagement[quarter] = map[string]any{
-			"researchCost":         1,
-			"managementSystemCost": 1,
+			"researchCost":         quarterOffset,
+			"managementSystemCost": groupOffset,
 		}
 		p.Quarter.ReceivableUpdate[quarter] = map[string]any{"receivableRecovered": 0}
 		salesRevenue := 0.0
@@ -745,90 +784,50 @@ func rollbackScenarioOperatingPayload(baseCost float64, deliveryRevenue float64)
 		p.Quarter.DeliverySettlement[quarter] = map[string]any{
 			"salesRevenue":      salesRevenue,
 			"directCost":        directCost,
-			"managementSalary":  1,
-			"deliveryQuantity":  1,
+			"managementSalary":  groupOffset,
+			"deliveryQuantity":  quarterOffset,
 			"receivableBalance": 0,
 		}
 		p.Extra.IncomeAndPenalty[quarter] = map[string]any{
 			"discountExpense":     0,
-			"extraExpensePenalty": 0,
-			"extraIncomeReward":   5,
+			"extraExpensePenalty": groupOffset,
+			"extraIncomeReward":   8 + yearOffset + quarterOffset,
 		}
 	}
-	p.YearEnd.LongTermLoan = map[string]any{
-		"longTermInterest":  0,
-		"longTermRepayment": 0,
-		"newLongTermLoan":   0,
-	}
-	p.YearEnd.AssetAdjustment = map[string]any{
-		"lineMaintenance":    1,
-		"factoryPurchase":    0,
-		"factorySale":        0,
-		"factoryRent":        1,
-		"workInConstruction": 0,
-		"marketCultivation":  1,
+	if stageLimit >= 4 {
+		groupOffset := float64(groupIndex + 1)
+		yearOffset := float64(yearNo + 1)
+		p.YearEnd.LongTermLoan = map[string]any{
+			"longTermInterest":  groupOffset,
+			"longTermRepayment": 0,
+			"newLongTermLoan":   4 + yearOffset + groupOffset,
+		}
+		p.YearEnd.AssetAdjustment = map[string]any{
+			"lineMaintenance":    groupOffset,
+			"factoryPurchase":    0,
+			"factorySale":        0,
+			"factoryRent":        yearOffset,
+			"workInConstruction": yearOffset + groupOffset,
+			"marketCultivation":  groupOffset + 1,
+		}
 	}
 	return p.Normalize()
 }
 
-func rollbackScenarioReportManualPayload() payload.ReportManualPayload {
-	return payload.ReportManualPayload{
-		WorkInProgress:               float64Ptr(6),
-		FinishedGoods:                float64Ptr(4),
-		RawMaterials:                 float64Ptr(1),
-		IncomeTaxRate:                float64Ptr(0),
-		EnterpriseCertificationScore: float64Ptr(1),
-		ProductionHumanScore:         float64Ptr(1),
-		ClosingSpeedScore:            float64Ptr(1),
-	}
-}
-
-func rollbackScenarioComputedReportPayload(yearNo int, groupIndex int) payload.ReportComputedPayload {
-	revenue := float64(80 + yearNo*15 + groupIndex*8)
-	directCost := float64(35 + groupIndex*3)
-	netProfit := revenue - directCost - 18
-	equity := 69 + netProfit + float64(yearNo*3)
-	totalLiability := float64(20)
-	totalAssets := equity + totalLiability
-	return payload.ReportComputedPayload{
-		ReportSalesRevenue:                revenue,
-		ReportDirectCost:                  directCost,
-		ReportGrossProfit:                 revenue - directCost,
-		ReportComprehensiveCost:           12,
-		ReportDepreciation:                1,
-		ReportOperatingProfit:             revenue - directCost - 13,
-		ReportFinanceIncomeExpense:        2,
-		ReportExtraIncomeExpense:          5,
-		ReportPreTaxProfit:                netProfit,
-		ReportIncomeTax:                   0,
-		ReportNetProfit:                   netProfit,
-		ReportWorkInProgress:              6,
-		ReportFinishedGoods:               4,
-		ReportRawMaterials:                1,
-		ReportWorkInConstruction:          0,
-		ReportFactoryAsset:                40,
-		ReportLineResidual:                3,
-		ReportDepreciableAsset:            0,
-		ReportTotalNonCurrentAssets:       43,
-		ReportCash:                        totalAssets - 43 - 11,
-		ReportReceivable:                  0,
-		ReportPostTaxCash:                 totalAssets - 43 - 11,
-		ReportTotalCurrentAssets:          totalAssets - 43,
-		ReportTotalAssets:                 totalAssets,
-		ReportShortTermLiability:          20,
-		ReportLongTermLiability:           0,
-		ReportTotalLiability:              totalLiability,
-		ReportShareCapital:                50,
-		ReportRetainedEarnings:            equity - 50 - netProfit,
-		ReportTotalEquity:                 equity,
-		ReportTotalLiabilityEquity:        totalAssets,
-		ReportBestMarketDirectorBaseScore: float64(yearNo + groupIndex),
-		ReportBestMarketDirectorScore:     float64(yearNo + groupIndex + 1),
-		ReportBestTechnologyDirectorScore: float64(yearNo + groupIndex + 2),
-		ReportBestSalesDirectorScore:      revenue,
-		ReportBestCfoBaseScore:            float64(yearNo + groupIndex + 3),
-		ReportBestCfoScore:                float64(yearNo + groupIndex + 4),
-		ReportBestCeoScore:                revenue + float64(yearNo+groupIndex),
+func rollbackScenarioStageLimit(stageCode string) int {
+	switch stageCode {
+	case state.StageCodeQ1:
+		return 0
+	case state.StageCodeQ2:
+		return 1
+	case state.StageCodeQ3:
+		return 2
+	case state.StageCodeQ4:
+		return 3
+	case state.StageCodeYearEnd:
+		return 4
+	default:
+		return 4
 	}
 }
 

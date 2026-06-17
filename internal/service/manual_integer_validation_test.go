@@ -26,6 +26,24 @@ func TestValidateOperatingManualIntegersIgnoresDerivedDecimalValues(t *testing.T
 	}
 }
 
+func TestValidateOperatingManualIntegersIgnoresMarketMetadata(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.Beginning.MarketBid = []map[string]any{
+		{
+			"marketCode":              "LOCAL",
+			"basicProductTotal":       1.0,
+			"standardProductTotal":    2.0,
+			"precisionProductTotal":   3.0,
+			"intelligentProductTotal": 4.0,
+			"orderAmount":             10.0,
+		},
+	}
+
+	if err := validateOperatingManualIntegers(operatingPayload); err != nil {
+		t.Fatalf("expected market metadata to be ignored, got %v", err)
+	}
+}
+
 func TestValidateReportManualIntegersAllowsIncomeTaxRateDecimal(t *testing.T) {
 	manual := payload.ReportManualPayload{
 		WorkInProgress:               float64Ptr(6),

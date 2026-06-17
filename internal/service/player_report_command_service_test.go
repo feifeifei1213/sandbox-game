@@ -14,6 +14,7 @@ import (
 	"sandbox-game/internal/model/entity"
 	"sandbox-game/internal/model/payload"
 	"sandbox-game/internal/repository"
+	"sandbox-game/internal/state"
 )
 
 func TestSavePlayerReportDraftPersistsManualPayload(t *testing.T) {
@@ -214,6 +215,84 @@ func TestSubmitPlayerReportCompletesFormalYearAndWritesSummary(t *testing.T) {
 	}
 }
 
+func TestSubmitPlayerReportAfterRollbackUsesNextHistoricalVersionAndRetrySnapshot(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureGameConfigExists(t, ctx, tx)
+
+	groupID := createFormalReportFixtures(t, ctx, tx)
+	now := time.Now()
+	createHistoricalReportSubmissionFixture(t, ctx, tx, groupID, 1, 1, now.Add(-time.Hour))
+	if err := repository.NewGroupYearStateRepository(tx).MarkRollbackPending(ctx, groupID, 1, 1, state.StageCodeQ1, 10002, "integration-admin"); err != nil {
+		t.Fatalf("mark rollback pending: %v", err)
+	}
+
+	commandService, _ := buildPlayerReportServices(tx)
+	manualPayload := buildBalancedReportManualPayload()
+	result, err := commandService.Submit(ctx, SubmitPlayerReportCommand{
+		GroupID:             groupID,
+		YearNo:              1,
+		ReportManualPayload: manualPayload,
+		SubmitterID:         90002,
+		OperatorName:        "integration-test",
+	})
+	if err != nil {
+		t.Fatalf("submit rollback retry report: %v", err)
+	}
+	if result.LatestReportSubmitVersion != 2 {
+		t.Fatalf("expected retry report submit version 2, got %d", result.LatestReportSubmitVersion)
+	}
+
+	yearState, err := repository.NewGroupYearStateRepository(tx).GetByGroupIDAndYear(ctx, groupID, 1)
+	if err != nil {
+		t.Fatalf("reload year state: %v", err)
+	}
+	if yearState.LatestReportSubmitVersion != 2 {
+		t.Fatalf("expected persisted latest report version 2, got %d", yearState.LatestReportSubmitVersion)
+	}
+	if yearState.RollbackPending {
+		t.Fatalf("expected rollback pending to be cleared after report submit")
+	}
+
+	var latestSubmission entity.GroupReportSubmission
+	if err := tx.WithContext(ctx).
+		Where("group_id = ? AND year_no = ?", groupID, 1).
+		Order("submit_version DESC").
+		First(&latestSubmission).Error; err != nil {
+		t.Fatalf("load latest report submission: %v", err)
+	}
+	if latestSubmission.SubmitVersion != 2 {
+		t.Fatalf("expected latest report submission version 2, got %d", latestSubmission.SubmitVersion)
+	}
+
+	var summary entity.GroupSummarySnapshot
+	if err := tx.WithContext(ctx).
+		Where("group_id = ? AND year_no = ?", groupID, 1).
+		First(&summary).Error; err != nil {
+		t.Fatalf("load summary snapshot: %v", err)
+	}
+	if summary.SourceReportSubmitVersion != 2 {
+		t.Fatalf("expected summary to point at retry report version 2, got %d", summary.SourceReportSubmitVersion)
+	}
+
+	snapshot := loadLatestSnapshotForTest(t, ctx, tx, groupID, 1, rollbackStageReport)
+	if snapshot.TriggerCode != enum.SnapshotTriggerRollbackReportRetry {
+		t.Fatalf("expected retry report snapshot trigger, got %s", snapshot.TriggerCode)
+	}
+	if snapshot.Description == nil || *snapshot.Description != "回退后重新提交财报自动快照" {
+		t.Fatalf("unexpected retry report snapshot description: %#v", snapshot.Description)
+	}
+}
+
 func buildPlayerReportServices(db *gorm.DB) (*PlayerReportCommandService, *PlayerReportQueryService) {
 	gameConfigRepo := repository.NewGameConfigRepository(db)
 	groupRepo := repository.NewGroupRepository(db)
@@ -384,6 +463,34 @@ func createPreviousFormalReportRecord(t *testing.T, ctx context.Context, tx *gor
 	}
 }
 
+func createHistoricalReportSubmissionFixture(t *testing.T, ctx context.Context, tx *gorm.DB, groupID int64, yearNo int, submitVersion int, submitTime time.Time) {
+	t.Helper()
+
+	manualJSON, err := json.Marshal(buildBalancedReportManualPayload())
+	if err != nil {
+		t.Fatalf("marshal historical report manual payload: %v", err)
+	}
+	computedJSON, err := json.Marshal(buildPreviousFormalReportComputedPayload())
+	if err != nil {
+		t.Fatalf("marshal historical report computed payload: %v", err)
+	}
+	item := entity.GroupReportSubmission{
+		GroupID:                groupID,
+		YearNo:                 yearNo,
+		SubmitVersion:          submitVersion,
+		ReportManualSnapshot:   manualJSON,
+		ReportComputedSnapshot: computedJSON,
+		BalanceCheckPassed:     true,
+		StateBefore:            []byte("{}"),
+		StateAfter:             []byte("{}"),
+		SubmitterID:            90000,
+		SubmitTime:             submitTime,
+	}
+	if err := tx.WithContext(ctx).Create(&item).Error; err != nil {
+		t.Fatalf("create historical report submission fixture: %v", err)
+	}
+}
+
 func buildBalancedReportManualPayload() payload.ReportManualPayload {
 	return payload.ReportManualPayload{
 		WorkInProgress:               float64Ptr(6),
@@ -476,4 +583,19 @@ func assertFloat64PointerEqual(t *testing.T, label string, expected *float64, ac
 
 func float64Ptr(value float64) *float64 {
 	return &value
+}
+
+func loadLatestSnapshotForTest(t *testing.T, ctx context.Context, tx *gorm.DB, groupID int64, yearNo int, stageCode string) entity.StateSnapshot {
+	t.Helper()
+
+	var snapshot entity.StateSnapshot
+	if err := tx.WithContext(ctx).
+		Where("snapshot_scope = ? AND snapshot_type = ? AND target_group_id = ? AND target_year_no = ? AND target_stage_code = ?",
+			enum.SnapshotScopeGroup, enum.SnapshotTypeAuto, groupID, yearNo, stageCode).
+		Order("created_at DESC").
+		Order("id DESC").
+		First(&snapshot).Error; err != nil {
+		t.Fatalf("load latest snapshot group=%d year=%d stage=%s: %v", groupID, yearNo, stageCode, err)
+	}
+	return snapshot
 }

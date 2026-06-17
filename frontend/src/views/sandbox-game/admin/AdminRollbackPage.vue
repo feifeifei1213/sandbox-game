@@ -123,6 +123,7 @@
                 <th>范围</th>
                 <th>类型</th>
                 <th>节点</th>
+                <th>说明</th>
                 <th>小组</th>
                 <th>年份</th>
                 <th>阶段</th>
@@ -132,7 +133,7 @@
             </thead>
             <tbody>
               <tr v-if="snapshots.length === 0">
-                <td colspan="9" class="empty-row">暂无快照。</td>
+                <td colspan="10" class="empty-row">暂无快照。</td>
               </tr>
               <tr
                 v-for="snapshot in snapshots"
@@ -144,6 +145,7 @@
                 <td>{{ formatSnapshotScope(snapshot.snapshotScope) }}</td>
                 <td>{{ formatSnapshotType(snapshot.snapshotType) }}</td>
                 <td>{{ formatTrigger(snapshot.triggerCode) }}</td>
+                <td>{{ snapshot.description || '--' }}</td>
                 <td>{{ snapshot.groupName ?? '--' }}</td>
                 <td>{{ snapshot.yearNo ?? '--' }}</td>
                 <td>{{ formatStage(snapshot.stageCode) }}</td>
@@ -269,6 +271,8 @@ const detailRows = computed(() => {
   const summary = snapshotDetail.value.stateSummary
   const preview = snapshotDetail.value.payloadPreview
   return [
+    { label: '生成节点', value: formatTrigger(snapshotDetail.value.snapshot.triggerCode) },
+    { label: '快照说明', value: snapshotDetail.value.snapshot.description || '--' },
     { label: '目标小组', value: String(summary.groupName ?? snapshotDetail.value.snapshot.groupName ?? '--') },
     { label: '年份', value: String(summary.yearNo ?? snapshotDetail.value.snapshot.yearNo ?? '--') },
     { label: '阶段', value: formatStage(String(summary.targetStageCode ?? snapshotDetail.value.snapshot.stageCode ?? '')) },
@@ -364,6 +368,8 @@ function formatTrigger(value?: string | null) {
   const map: Record<string, string> = {
     STAGE_SUBMITTED: '经营提交',
     REPORT_SUBMITTED: '财报提交',
+    ROLLBACK_STAGE_RESUBMITTED: '回退补提经营',
+    ROLLBACK_REPORT_RESUBMITTED: '回退补提财报',
     ORDER_POOL_CONFIRMED: '订单池确认',
     SEGMENT_COMPLETED: '标段完成',
     OPEN_NEXT_YEAR: '开放下一年',
@@ -606,7 +612,7 @@ function formatDateTime(value?: string | null) {
 
 .snapshot-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1120px;
   border-collapse: collapse;
 }
 

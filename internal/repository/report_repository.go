@@ -208,6 +208,16 @@ func (r *ReportRepository) ListSubmissionsByGroupFromYear(ctx context.Context, g
 	return items, nil
 }
 
+func (r *ReportRepository) MaxReportSubmitVersion(ctx context.Context, groupID int64, yearNo int) (int, error) {
+	var maxVersion int
+	err := r.db.WithContext(ctx).
+		Model(&entity.GroupReportSubmission{}).
+		Select("COALESCE(MAX(submit_version), 0)").
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Scan(&maxVersion).Error
+	return maxVersion, err
+}
+
 func (r *ReportRepository) InvalidateSubmission(ctx context.Context, groupID int64, yearNo int, operatorName string, operateTime time.Time) (bool, error) {
 	tx := r.db.WithContext(ctx).
 		Model(&entity.GroupReport{}).

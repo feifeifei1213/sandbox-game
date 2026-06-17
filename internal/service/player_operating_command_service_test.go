@@ -109,6 +109,76 @@ func TestSubmitOperatingStageAdvancesEditableScopeFromQ1ToQ2(t *testing.T) {
 	}
 }
 
+func TestSubmitOperatingStageAfterRollbackUsesNextHistoricalVersionAndRetrySnapshot(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureGameConfigExists(t, ctx, tx)
+
+	groupID := createIntegrationOperatingFixtures(t, ctx, tx)
+	now := time.Now()
+	if err := repository.NewOperatingRepository(tx).CreateStageSubmission(ctx, repository.CreateStageSubmissionCommand{
+		GroupID:                  groupID,
+		YearNo:                   0,
+		StageCode:                state.StageCodeQ1,
+		SubmitVersion:            1,
+		PeriodEndCash:            30,
+		OperatingPayloadSnapshot: buildValidQ1OperatingPayload(),
+		StateBeforeJSON:          []byte("{}"),
+		StateAfterJSON:           []byte("{}"),
+		SubmitterID:              90000,
+		SubmitTime:               now.Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("create historical stage submission: %v", err)
+	}
+	if err := repository.NewGroupYearStateRepository(tx).MarkRollbackPending(ctx, groupID, 0, 0, state.StageCodeQ1, 10001, "integration-admin"); err != nil {
+		t.Fatalf("mark rollback pending: %v", err)
+	}
+
+	commandService, _ := buildPlayerOperatingServices(tx)
+	result, err := commandService.SubmitStage(ctx, SubmitOperatingStageCommand{
+		GroupID:          groupID,
+		YearNo:           0,
+		StageCode:        state.StageCodeQ1,
+		OperatingPayload: buildValidQ1OperatingPayload(),
+		SubmitterID:      90001,
+		OperatorName:     "integration-test",
+	})
+	if err != nil {
+		t.Fatalf("submit rollback retry stage: %v", err)
+	}
+	if result.LatestStageSubmitVersion != 2 {
+		t.Fatalf("expected retry stage submit version 2, got %d", result.LatestStageSubmitVersion)
+	}
+
+	var latestSubmission entity.GroupStageSubmission
+	if err := tx.WithContext(ctx).
+		Where("group_id = ? AND year_no = ? AND stage_code = ?", groupID, 0, state.StageCodeQ1).
+		Order("submit_version DESC").
+		First(&latestSubmission).Error; err != nil {
+		t.Fatalf("load latest stage submission: %v", err)
+	}
+	if latestSubmission.SubmitVersion != 2 {
+		t.Fatalf("expected latest persisted stage version 2, got %d", latestSubmission.SubmitVersion)
+	}
+
+	snapshot := loadLatestSnapshotForTest(t, ctx, tx, groupID, 0, state.StageCodeQ1)
+	if snapshot.TriggerCode != enum.SnapshotTriggerRollbackStageRetry {
+		t.Fatalf("expected retry stage snapshot trigger, got %s", snapshot.TriggerCode)
+	}
+	if snapshot.Description == nil || *snapshot.Description != "回退后重新提交经营阶段自动快照" {
+		t.Fatalf("unexpected retry stage snapshot description: %#v", snapshot.Description)
+	}
+}
+
 func openIntegrationMySQL(t *testing.T) *gorm.DB {
 	t.Helper()
 

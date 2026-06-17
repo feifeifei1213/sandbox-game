@@ -11,6 +11,7 @@ import (
 
 	"sandbox-game/internal/assembler"
 	"sandbox-game/internal/enum"
+	"sandbox-game/internal/model/entity"
 	"sandbox-game/internal/model/payload"
 	"sandbox-game/internal/repository"
 	calcctx "sandbox-game/internal/rules/context"
@@ -78,8 +79,15 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 
 	calcContext := calcctx.NewCalculationContext(*group, *yearState, *gameConfig)
 	permission := s.transitionGuard.BuildReportPermission(calcContext.State)
-	if !permission.CanView {
+	report, manualPayload, computedPayload, lastDraftSavedAt, reportLoaded, err := s.loadReportDraftPayload(ctx, groupID, yearNo)
+	if err != nil {
+		return nil, err
+	}
+	if !permission.CanView && (!yearState.RollbackPending || !reportLoaded) {
 		return nil, ErrPlayerReportNotOpen
+	}
+	if !permission.CanView && yearState.RollbackPending && reportLoaded {
+		return s.buildRetainedReportDraftView(ctx, calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission)
 	}
 
 	operatingPayload := payload.NewOperatingPayload()
@@ -135,39 +143,22 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 		}
 		if previous != nil {
 			calcContext = calcContext.WithPreviousReport(previous)
+		} else if yearState.RollbackPending && reportLoaded {
+			return s.buildRetainedReportDraftView(ctx, calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission)
 		}
 	}
 	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
-	manualPayload := payload.ReportManualPayload{}
-	computedPayload := payload.ReportComputedPayload{}
-	var lastDraftSavedAt *time.Time
-	report, reportErr := s.reportRepo.FindByGroupIDAndYear(ctx, groupID, yearNo)
-	switch {
-	case reportErr == nil:
-		if len(report.ReportManualPayload) > 0 {
-			if unmarshalErr := json.Unmarshal(report.ReportManualPayload, &manualPayload); unmarshalErr != nil {
-				return nil, fmt.Errorf("unmarshal report manual payload: %w", unmarshalErr)
-			}
-		}
-		if len(report.ReportComputedPayload) > 0 {
-			if unmarshalErr := json.Unmarshal(report.ReportComputedPayload, &computedPayload); unmarshalErr != nil {
-				return nil, fmt.Errorf("unmarshal report computed payload: %w", unmarshalErr)
-			}
-		}
-		lastDraftSavedAt = report.LastAutoSavedAt
-	case errors.Is(reportErr, gorm.ErrRecordNotFound):
-	default:
-		return nil, fmt.Errorf("load group report: %w", reportErr)
-	}
-
 	calcContext = calcContext.WithReportManualPayload(&manualPayload)
 	calculatedPayload, err := s.calculator.Calculate(calcContext)
 	if err != nil {
+		if yearState.RollbackPending && reportLoaded {
+			return s.buildRetainedReportDraftView(ctx, calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission)
+		}
 		return nil, fmt.Errorf("calculate report payload: %w", err)
 	}
 
-	if calcContext.State.ReportStatus != enum.ReportStatusSubmitted || isZeroReportComputedPayload(computedPayload) {
+	if report == nil || calcContext.State.ReportStatus != enum.ReportStatusSubmitted || isZeroReportComputedPayload(computedPayload) {
 		computedPayload = calculatedPayload
 	} else {
 		overlayDirectorScores(&computedPayload, calculatedPayload)
@@ -179,4 +170,54 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 	}
 
 	return s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission, noticeBoard), nil
+}
+
+func (s *PlayerReportQueryService) loadReportDraftPayload(
+	ctx context.Context,
+	groupID int64,
+	yearNo int,
+) (*entity.GroupReport, payload.ReportManualPayload, payload.ReportComputedPayload, *time.Time, bool, error) {
+	manualPayload := payload.ReportManualPayload{}
+	computedPayload := payload.ReportComputedPayload{}
+
+	report, reportErr := s.reportRepo.FindByGroupIDAndYear(ctx, groupID, yearNo)
+	switch {
+	case reportErr == nil:
+		if len(report.ReportManualPayload) > 0 {
+			if unmarshalErr := json.Unmarshal(report.ReportManualPayload, &manualPayload); unmarshalErr != nil {
+				return nil, payload.ReportManualPayload{}, payload.ReportComputedPayload{}, nil, false, fmt.Errorf("unmarshal report manual payload: %w", unmarshalErr)
+			}
+		}
+		if len(report.ReportComputedPayload) > 0 {
+			if unmarshalErr := json.Unmarshal(report.ReportComputedPayload, &computedPayload); unmarshalErr != nil {
+				return nil, payload.ReportManualPayload{}, payload.ReportComputedPayload{}, nil, false, fmt.Errorf("unmarshal report computed payload: %w", unmarshalErr)
+			}
+		}
+		return report, manualPayload, computedPayload, report.LastAutoSavedAt, true, nil
+	case errors.Is(reportErr, gorm.ErrRecordNotFound):
+		return nil, manualPayload, computedPayload, nil, false, nil
+	default:
+		return nil, payload.ReportManualPayload{}, payload.ReportComputedPayload{}, nil, false, fmt.Errorf("load group report: %w", reportErr)
+	}
+}
+
+func (s *PlayerReportQueryService) buildRetainedReportDraftView(
+	ctx context.Context,
+	calcContext calcctx.CalculationContext,
+	computedPayload payload.ReportComputedPayload,
+	manualPayload payload.ReportManualPayload,
+	lastDraftSavedAt *time.Time,
+	permission state.ReportPermission,
+) (*assembler.PlayerReportView, error) {
+	permission.CanView = true
+	permission.CanEdit = false
+	permission.CanSubmit = false
+
+	noticeBoard, err := s.playerNoticeService.BuildBoard(ctx, calcContext.Group.ID, calcContext.YearState.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("build report notice board: %w", err)
+	}
+	view := s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission, noticeBoard)
+	view.HasInvalidDraft = true
+	return view, nil
 }

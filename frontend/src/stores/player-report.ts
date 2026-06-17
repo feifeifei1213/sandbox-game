@@ -41,7 +41,9 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
 
   const currentTab = computed(() => yearTabs.value.find((item) => item.yearNo === selectedYear.value) ?? null)
   const previewComputedPayload = computed(() =>
-    buildReportComputedPreview(currentView.value?.reportComputedPayload, draftManualPayload.value),
+    currentView.value?.rollbackPending && currentView.value.hasInvalidDraft && !currentView.value.canEdit
+      ? currentView.value.reportComputedPayload
+      : buildReportComputedPreview(currentView.value?.reportComputedPayload, draftManualPayload.value),
   )
   const balanceGap = computed(() => reportBalanceGap(previewComputedPayload.value))
   const balancePassed = computed(() => Math.abs(balanceGap.value) <= balanceTolerance)
@@ -72,7 +74,12 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     }
     return missing
   })
-  const submitReady = computed(() => Boolean(currentView.value?.canSubmit) && missingFields.value.length === 0 && manualIntegerIssues.value.length === 0 && balancePassed.value)
+  const submitReady = computed(() =>
+    Boolean(currentView.value?.canSubmit) &&
+    missingFields.value.length === 0 &&
+    manualIntegerIssues.value.length === 0 &&
+    balancePassed.value,
+  )
 
   async function bootstrap(preferredYear?: number) {
     loading.value = true

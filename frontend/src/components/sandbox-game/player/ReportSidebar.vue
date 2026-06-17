@@ -30,8 +30,8 @@
 
     <section v-if="view?.hasInvalidDraft" class="panel warning-panel">
       <h3>失效草稿</h3>
-      <p>当前保留的是上次已失效的财报草稿，需要玩家重新核对并再次提交。</p>
-      <p class="hint warning-hint">经营页重新提交后，请回到本页确认绿色手工项，再完成财报提交。</p>
+      <p>当前展示的是回退前保留的财报草稿，只能作为历史参考，不计入正式结果。</p>
+      <p class="hint warning-hint">上游经营重新提交并重新开放财报后，请回到本页核对绿色手工项，再完成财报提交。</p>
     </section>
 
     <section class="panel">
@@ -63,7 +63,7 @@
         </button>
       </div>
       <p class="hint">绿色单元格为手工项，黄色单元格为系统计算结果。</p>
-      <p v-if="view?.hasInvalidDraft" class="warning">当前为失效草稿状态，必须重新提交后才会恢复正式结果。</p>
+      <p v-if="view?.hasInvalidDraft" class="warning">当前为失效草稿状态，不能直接提交或进入汇总。</p>
       <p v-if="missingFields.length" class="warning">待填写：{{ missingFields.join('、') }}</p>
       <p v-else-if="integerIssues.length" class="warning">必须为整数：{{ integerIssues.join('、') }}</p>
       <p v-else-if="!balancePassed" class="warning">当前资产负债尚未平衡，不能提交。</p>

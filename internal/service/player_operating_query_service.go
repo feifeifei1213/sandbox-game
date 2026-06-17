@@ -128,19 +128,14 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 				calculationContext = calculationContext.WithPreviousReport(&previous)
 			}
 		case errors.Is(previousReportErr, gorm.ErrRecordNotFound):
+			if !yearState.RollbackPending {
+				return nil, fmt.Errorf("load previous report: %w", previousReportErr)
+			}
 		default:
 			return nil, fmt.Errorf("load previous report: %w", previousReportErr)
 		}
 	}
 	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
-
-	operatingResult, err := s.calculator.Calculate(calculationContext)
-	if err != nil {
-		return nil, fmt.Errorf("calculate operating view: %w", err)
-	}
-	if err := enrichOperatingDerivedValuesWithReportMetrics(ctx, s.reportRepo, s.reportCalculator, calculationContext, groupID, yearNo, &operatingResult); err != nil {
-		return nil, err
-	}
 
 	stageSubmissions, err := s.operatingRepo.ListStageSubmissions(ctx, groupID, yearNo)
 	if err != nil {
@@ -148,6 +143,10 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 	}
 
 	var carryForward *carryforwardrules.CarryForwardResult
+	operatingResult, err := s.buildOperatingViewCalculation(ctx, calculationContext, groupID, yearNo)
+	if err != nil {
+		return nil, err
+	}
 	if calculationContext.HasCarryForwardSource() {
 		result, buildErr := s.carryForward.Build(calculationContext)
 		if buildErr != nil {
@@ -162,6 +161,19 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 	}
 
 	permission := s.transitionGuard.BuildOperatingPermission(calculationContext.State)
+	if yearState.RollbackPending && !calculationContext.HasCarryForwardSource() {
+		permission.CanEdit = false
+		permission.CanSubmit = false
+		permission.EditableScopes = []string{}
+		permission.ReadonlyScopes = []string{
+			state.OperatingScopeYearStart,
+			state.OperatingScopeQ1,
+			state.OperatingScopeQ2,
+			state.OperatingScopeQ3,
+			state.OperatingScopeQ4,
+			state.OperatingScopeYearEnd,
+		}
+	}
 
 	return s.assembler.Build(
 		calculationContext,
@@ -172,4 +184,33 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 		carryForward,
 		noticeBoard,
 	), nil
+}
+
+func (s *PlayerOperatingQueryService) buildOperatingViewCalculation(
+	ctx context.Context,
+	calculationContext calcctx.CalculationContext,
+	groupID int64,
+	yearNo int,
+) (operatingrules.CalculationResult, error) {
+	if calculationContext.HasCarryForwardSource() {
+		operatingResult, err := s.calculator.Calculate(calculationContext)
+		if err != nil {
+			return operatingrules.CalculationResult{}, fmt.Errorf("calculate operating view: %w", err)
+		}
+		if err := enrichOperatingDerivedValuesWithReportMetrics(ctx, s.reportRepo, s.reportCalculator, calculationContext, groupID, yearNo, &operatingResult); err != nil {
+			return operatingrules.CalculationResult{}, err
+		}
+		return operatingResult, nil
+	}
+
+	if calculationContext.YearState.RollbackPending {
+		return operatingrules.CalculationResult{
+			OperatingPayload:  calculationContext.OperatingPayload.Normalize(),
+			QuarterCashChecks: map[string]float64{},
+			DerivedValues:     map[string]float64{},
+			PeriodEndCash:     0,
+		}, nil
+	}
+
+	return operatingrules.CalculationResult{}, fmt.Errorf("calculate operating view: missing carry forward source")
 }

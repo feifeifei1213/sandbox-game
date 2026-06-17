@@ -327,7 +327,13 @@ const activeYearTabs = computed(() => (previewMode.value ? previewYearTabs.value
 const activeView = computed(() => (previewMode.value ? previewView.value : currentView.value))
 const activeSelectedYear = computed(() => (previewMode.value ? previewYear.value : selectedYear.value))
 const activeDraftManualPayload = computed(() => (previewMode.value ? previewDraftManualPayload.value : draftManualPayload.value))
-const activeComputedPayload = computed(() => (previewMode.value ? previewComputedPayloadLocal.value : storePreviewComputedPayload.value))
+const activeComputedPayload = computed(() =>
+  previewMode.value
+    ? previewComputedPayloadLocal.value
+    : activeView.value?.rollbackPending && activeView.value.hasInvalidDraft && !activeView.value.canEdit
+      ? activeView.value.reportComputedPayload
+      : storePreviewComputedPayload.value,
+)
 const activeBalanceGap = computed(() => (previewMode.value ? previewBalanceGap.value : balanceGap.value))
 const activeBalancePassed = computed(() => (previewMode.value ? previewBalancePassed.value : balancePassed.value))
 const activeMissingFields = computed(() => (previewMode.value ? previewMissingFields.value : missingFields.value))

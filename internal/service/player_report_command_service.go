@@ -212,6 +212,13 @@ func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlaye
 		}
 		return nil, err
 	}
+	historyMaxReportVersion, err := s.reportRepo.MaxReportSubmitVersion(ctx, cmd.GroupID, cmd.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("load max report submit version: %w", err)
+	}
+	if nextState.LatestReportSubmitVersion <= historyMaxReportVersion {
+		nextState.LatestReportSubmitVersion = historyMaxReportVersion + 1
+	}
 
 	bankruptTriggered := cmd.YearNo == gameConfig.FinalYear && computedPayload.ReportTotalEquity < 0
 	bankruptReason := ""
@@ -311,8 +318,8 @@ func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlaye
 			YearNo:        cmd.YearNo,
 			StageCode:     rollbackStageReport,
 			SnapshotType:  enum.SnapshotTypeAuto,
-			TriggerCode:   enum.SnapshotTriggerReportSubmitted,
-			Description:   "财报提交后自动快照",
+			TriggerCode:   reportSubmitSnapshotTrigger(yearState.RollbackPending),
+			Description:   reportSubmitSnapshotDescription(yearState.RollbackPending),
 			OperatorID:    cmd.SubmitterID,
 			OperatorName:  cmd.OperatorName,
 			OperateTime:   submitTime,
@@ -337,6 +344,20 @@ func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlaye
 		BalanceCheckPassed:        true,
 		SubmittedAt:               submitTime,
 	}, nil
+}
+
+func reportSubmitSnapshotTrigger(rollbackPending bool) string {
+	if rollbackPending {
+		return enum.SnapshotTriggerRollbackReportRetry
+	}
+	return enum.SnapshotTriggerReportSubmitted
+}
+
+func reportSubmitSnapshotDescription(rollbackPending bool) string {
+	if rollbackPending {
+		return "回退后重新提交财报自动快照"
+	}
+	return "财报提交后自动快照"
 }
 
 func (s *PlayerReportCommandService) buildCalculationContext(

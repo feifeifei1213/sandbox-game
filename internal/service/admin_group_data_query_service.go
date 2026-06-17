@@ -102,11 +102,8 @@ func (s *AdminGroupDataQueryService) GetOperatingView(ctx context.Context, group
 		return nil, err
 	}
 
-	operatingResult, err := s.operatingCalculator.Calculate(calculationContext)
+	operatingResult, err := s.buildAdminOperatingViewCalculation(ctx, calculationContext, groupID, yearNo)
 	if err != nil {
-		return nil, fmt.Errorf("calculate operating view: %w", err)
-	}
-	if err := enrichOperatingDerivedValuesWithReportMetrics(ctx, s.reportRepo, s.reportCalculator, calculationContext, groupID, yearNo, &operatingResult); err != nil {
 		return nil, err
 	}
 
@@ -167,6 +164,18 @@ func (s *AdminGroupDataQueryService) GetReportView(ctx context.Context, groupID 
 	calculationContext = calculationContext.WithReportManualPayload(&manualPayload)
 	calculatedPayload, err := s.reportCalculator.Calculate(calculationContext)
 	if err != nil {
+		if calculationContext.YearState.RollbackPending && reportErr == nil {
+			view := s.reportAssembler.Build(
+				calculationContext,
+				computedPayload,
+				manualPayload,
+				lastDraftSavedAt,
+				buildAdminReadonlyReportPermission(),
+				nil,
+			)
+			view.HasInvalidDraft = true
+			return view, nil
+		}
 		return nil, fmt.Errorf("calculate report payload: %w", err)
 	}
 
@@ -184,6 +193,35 @@ func (s *AdminGroupDataQueryService) GetReportView(ctx context.Context, groupID 
 		buildAdminReadonlyReportPermission(),
 		nil,
 	), nil
+}
+
+func (s *AdminGroupDataQueryService) buildAdminOperatingViewCalculation(
+	ctx context.Context,
+	calculationContext calcctx.CalculationContext,
+	groupID int64,
+	yearNo int,
+) (operatingrules.CalculationResult, error) {
+	if calculationContext.HasCarryForwardSource() {
+		operatingResult, err := s.operatingCalculator.Calculate(calculationContext)
+		if err != nil {
+			return operatingrules.CalculationResult{}, fmt.Errorf("calculate operating view: %w", err)
+		}
+		if err := enrichOperatingDerivedValuesWithReportMetrics(ctx, s.reportRepo, s.reportCalculator, calculationContext, groupID, yearNo, &operatingResult); err != nil {
+			return operatingrules.CalculationResult{}, err
+		}
+		return operatingResult, nil
+	}
+
+	if calculationContext.YearState.RollbackPending {
+		return operatingrules.CalculationResult{
+			OperatingPayload:  calculationContext.OperatingPayload.Normalize(),
+			QuarterCashChecks: map[string]float64{},
+			DerivedValues:     map[string]float64{},
+			PeriodEndCash:     0,
+		}, nil
+	}
+
+	return operatingrules.CalculationResult{}, fmt.Errorf("calculate operating view: missing carry forward source")
 }
 
 func (s *AdminGroupDataQueryService) loadOperatingCalculationContext(ctx context.Context, groupID int64, yearNo int) (calcctx.CalculationContext, *entity.GroupOperatingDraft, error) {

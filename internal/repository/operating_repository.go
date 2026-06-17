@@ -78,6 +78,16 @@ func (r *OperatingRepository) HasStageSubmission(ctx context.Context, groupID in
 	return count > 0, nil
 }
 
+func (r *OperatingRepository) MaxStageSubmitVersion(ctx context.Context, groupID int64, yearNo int) (int, error) {
+	var maxVersion int
+	err := r.db.WithContext(ctx).
+		Model(&entity.GroupStageSubmission{}).
+		Select("COALESCE(MAX(submit_version), 0)").
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Scan(&maxVersion).Error
+	return maxVersion, err
+}
+
 type UpsertOperatingDraftCommand struct {
 	GroupID          int64
 	YearNo           int

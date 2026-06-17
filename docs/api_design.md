@@ -1798,7 +1798,7 @@ Go DTO 建议：
 | `id` | `int64` | 快照 ID |
 | `snapshotScope` | `string` | `GROUP` / `GLOBAL` |
 | `snapshotType` | `string` | `AUTO` / `MANUAL` / `SAFETY` |
-| `triggerCode` | `string` | 生成节点，例如 `STAGE_SUBMITTED`、`REPORT_SUBMITTED`、`ORDER_POOL_CONFIRMED`、`SEGMENT_COMPLETED`、`OPEN_NEXT_YEAR`、`BEFORE_ROLLBACK` |
+| `triggerCode` | `string` | 生成节点，例如 `STAGE_SUBMITTED`、`REPORT_SUBMITTED`、`ROLLBACK_STAGE_RESUBMITTED`、`ROLLBACK_REPORT_RESUBMITTED`、`ORDER_POOL_CONFIRMED`、`SEGMENT_COMPLETED`、`OPEN_NEXT_YEAR`、`BEFORE_ROLLBACK` |
 | `groupId` | `int64 \| null` | 小组快照所属组；全局快照为空 |
 | `groupName` | `string \| null` | 小组名称 |
 | `yearNo` | `int \| null` | 快照对应年份 |

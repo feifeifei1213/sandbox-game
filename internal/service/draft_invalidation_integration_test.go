@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"sandbox-game/internal/assembler"
 	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
 	"sandbox-game/internal/model/payload"
@@ -171,6 +172,109 @@ func TestFindEffectiveReportIgnoresInvalidatedSubmittedRecord(t *testing.T) {
 	}
 }
 
+func TestOperatingViewForRollbackPendingFutureYearSurvivesMissingPreviousReport(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureIntegrationGameConfig(t, ctx, tx, 3, 2, true)
+
+	now := time.Now()
+	groupID := createIntegrationGroup(t, ctx, tx, now, "I1_ROLLBACK_FUTURE_VIEW")
+	createInitialBaselineRecord(t, ctx, tx, groupID, now)
+	createDetailedGroupYearState(t, ctx, tx, groupID, 1, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked, false, 1, 0)
+	createDetailedGroupYearState(t, ctx, tx, groupID, 2, enum.YearTypeFormal, enum.YearStatusCompleted, enum.StageStatusYearEndOpen, enum.ReportStatusSubmitted, true, 5, 1)
+	createCompletedOperatingArtifacts(t, ctx, tx, groupID, 2, now)
+	createSubmittedReportFixture(t, ctx, tx, groupID, 1, now)
+
+	reportRepo := repository.NewReportRepository(tx)
+	if invalidated, err := reportRepo.InvalidateAfterTarget(ctx, groupID, 1, state.StageCodeQ1, "integration-admin", now); err != nil {
+		t.Fatalf("invalidate report after target: %v", err)
+	} else if invalidated == 0 {
+		t.Fatalf("expected report invalidation to affect year 1")
+	}
+	if err := repository.NewGroupYearStateRepository(tx).MarkRollbackPendingRange(ctx, groupID, 1, 2, 1, state.StageCodeQ1, 10001, "integration-admin"); err != nil {
+		t.Fatalf("mark rollback pending range: %v", err)
+	}
+
+	_, queryService := buildPlayerOperatingServices(tx)
+	view, err := queryService.GetYearView(ctx, groupID, 2)
+	if err != nil {
+		t.Fatalf("load rollback-pending future operating view: %v", err)
+	}
+
+	if !view.RollbackPending {
+		t.Fatalf("expected future year view to expose rollback pending")
+	}
+	if view.RollbackTargetYearNo == nil || *view.RollbackTargetYearNo != 1 {
+		t.Fatalf("unexpected rollback target year: %#v", view.RollbackTargetYearNo)
+	}
+	if view.OperatingPayload.Quarter.DeliverySettlement["q3"]["salesRevenue"] != float64(18) {
+		t.Fatalf("expected retained operating draft payload, got %#v", view.OperatingPayload.Quarter.DeliverySettlement)
+	}
+	if len(view.DerivedValues) != 0 || view.CarryForward != nil {
+		t.Fatalf("expected derived values and carry forward to stay empty without previous effective report")
+	}
+	if view.CanEdit || view.CanSubmit {
+		t.Fatalf("expected future year without carry-forward to be readonly, got canEdit=%v canSubmit=%v", view.CanEdit, view.CanSubmit)
+	}
+}
+
+func TestReportViewsForRollbackPendingYearsShowRetainedDrafts(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureIntegrationGameConfig(t, ctx, tx, 3, 2, true)
+
+	now := time.Now()
+	groupID := createIntegrationGroup(t, ctx, tx, now, "I1_ROLLBACK_REPORT_VIEW")
+	createInitialBaselineRecord(t, ctx, tx, groupID, now)
+	createDetailedGroupYearState(t, ctx, tx, groupID, 0, enum.YearTypeDemo, enum.YearStatusCompleted, enum.StageStatusYearEndOpen, enum.ReportStatusSubmitted, false, 5, 1)
+	createDetailedGroupYearState(t, ctx, tx, groupID, 1, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked, false, 1, 0)
+	createDetailedGroupYearState(t, ctx, tx, groupID, 2, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked, false, 0, 0)
+	createSubmittedReportFixture(t, ctx, tx, groupID, 0, now)
+	createSubmittedReportFixture(t, ctx, tx, groupID, 1, now)
+	createSubmittedReportFixture(t, ctx, tx, groupID, 2, now)
+
+	reportRepo := repository.NewReportRepository(tx)
+	if invalidated, err := reportRepo.InvalidateAfterTarget(ctx, groupID, 1, state.StageCodeQ1, "integration-admin", now); err != nil {
+		t.Fatalf("invalidate report after target: %v", err)
+	} else if invalidated < 2 {
+		t.Fatalf("expected report invalidation to affect years 1 and 2, got %d", invalidated)
+	}
+	if err := repository.NewGroupYearStateRepository(tx).MarkRollbackPendingRange(ctx, groupID, 1, 2, 1, state.StageCodeQ1, 10001, "integration-admin"); err != nil {
+		t.Fatalf("mark rollback pending range: %v", err)
+	}
+
+	_, queryService := buildPlayerReportServices(tx)
+	yearOneView, err := queryService.GetView(ctx, groupID, 1)
+	if err != nil {
+		t.Fatalf("load rollback-pending target report draft: %v", err)
+	}
+	assertReadonlyRetainedReportDraft(t, yearOneView, 1)
+
+	yearTwoView, err := queryService.GetView(ctx, groupID, 2)
+	if err != nil {
+		t.Fatalf("load rollback-pending future report draft: %v", err)
+	}
+	assertReadonlyRetainedReportDraft(t, yearTwoView, 2)
+}
+
 func createCompletedOperatingArtifacts(t *testing.T, ctx context.Context, tx *gorm.DB, groupID int64, yearNo int, now time.Time) {
 	t.Helper()
 
@@ -243,4 +347,25 @@ func createSubmittedReportFixture(t *testing.T, ctx context.Context, tx *gorm.DB
 	if err := tx.WithContext(ctx).Create(&item).Error; err != nil {
 		t.Fatalf("create submitted report fixture: %v", err)
 	}
+}
+
+func assertReadonlyRetainedReportDraft(t *testing.T, view *assembler.PlayerReportView, yearNo int) {
+	t.Helper()
+
+	if view.YearNo != yearNo {
+		t.Fatalf("expected year %d report view, got %d", yearNo, view.YearNo)
+	}
+	if !view.RollbackPending {
+		t.Fatalf("expected report view to expose rollback pending")
+	}
+	if !view.CanView || view.CanEdit || view.CanSubmit {
+		t.Fatalf("expected retained report draft to be readonly view, got canView=%v canEdit=%v canSubmit=%v", view.CanView, view.CanEdit, view.CanSubmit)
+	}
+	if !view.HasInvalidDraft {
+		t.Fatalf("expected retained report draft to be marked invalid")
+	}
+	if view.ReportComputedPayload.ReportTotalAssets != 89 {
+		t.Fatalf("expected retained computed payload, got %#v", view.ReportComputedPayload)
+	}
+	assertReportManualPayloadEqual(t, buildBalancedReportManualPayload(), view.ReportManualPayload)
 }

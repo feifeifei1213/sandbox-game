@@ -50,18 +50,24 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
 
   const currentTab = computed(() => yearTabs.value.find((item) => item.yearNo === selectedYear.value) ?? null)
   const previewCalculation = computed(() =>
-    buildOperatingPreviewCalculation({
-      payload: draftPayload.value,
-      carryForward: currentView.value?.carryForward,
-      currentStageCode: currentView.value?.currentStageCode,
-      fallback: currentView.value
-        ? {
-            quarterCashChecks: currentView.value.quarterCashChecks,
-            derivedValues: currentView.value.derivedValues,
-            periodEndCash: currentView.value.periodEndCash,
-          }
-        : null,
-    }),
+    currentView.value?.rollbackPending && !currentView.value.carryForward
+      ? {
+          quarterCashChecks: currentView.value.quarterCashChecks,
+          derivedValues: currentView.value.derivedValues,
+          periodEndCash: currentView.value.periodEndCash,
+        }
+      : buildOperatingPreviewCalculation({
+          payload: draftPayload.value,
+          carryForward: currentView.value?.carryForward,
+          currentStageCode: currentView.value?.currentStageCode,
+          fallback: currentView.value
+            ? {
+                quarterCashChecks: currentView.value.quarterCashChecks,
+                derivedValues: currentView.value.derivedValues,
+                periodEndCash: currentView.value.periodEndCash,
+              }
+            : null,
+        }),
   )
   const manualIntegerIssues = computed(() => collectOperatingIntegerIssues(draftPayload.value))
 
@@ -270,7 +276,17 @@ function collectManualIntegerIssues(label: string, value: unknown, issues: strin
   if (value === null || value === undefined || value === '') {
     return
   }
-  if (typeof value === 'number' || typeof value === 'string') {
+  if (typeof value === 'number') {
+    if (hasFractionInput(value)) {
+      issues.push(label)
+    }
+    return
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '' || !Number.isFinite(Number(trimmed))) {
+      return
+    }
     if (hasFractionInput(value)) {
       issues.push(label)
     }
