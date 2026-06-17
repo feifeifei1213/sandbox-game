@@ -3,7 +3,7 @@
     <header class="hero">
       <div>
         <h2>组数据</h2>
-        <p>管理员按“组 → 年 → 页面类型”查看数据，本页仅提供只读核对。</p>
+        
       </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="loading" @click="handleRefresh">刷新</button>
@@ -18,7 +18,7 @@
       <div class="panel-head">
         <div>
           <strong>查询条件</strong>
-          <span>默认展示经营页，只读复用玩家端页面结构。</span>
+          
         </div>
       </div>
       <div class="query-grid">
@@ -99,7 +99,7 @@
         <section class="panel-card">
           <div class="panel-head">
             <strong>当前目标</strong>
-            <span>管理员只读查看，不在本页直接编辑业务数据。</span>
+            
           </div>
           <div class="meta-list">
             <div class="meta-item">
@@ -124,7 +124,7 @@
         <section class="panel-card">
           <div class="panel-head">
             <strong>当前状态</strong>
-            <span>根据当前查看页面展示年度、阶段和财报状态。</span>
+            
           </div>
           <div class="status-grid">
             <div class="status-item">

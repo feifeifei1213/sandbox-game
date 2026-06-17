@@ -3,7 +3,7 @@
     <header class="hero">
       <div>
         <h2>年度控制</h2>
-        <p>只承载最终年份、当前开放年份和开放下一年，不扩成重型总控台。</p>
+        
       </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="shellLoading || updatingFinalYear || openingNextYear" @click="handleRefresh">刷新状态</button>
@@ -41,7 +41,7 @@
         <div class="panel-head">
           <div>
             <strong>控制区</strong>
-            <span>先调整最终年份，再在满足条件时开放下一年。</span>
+            
           </div>
         </div>
 
@@ -68,7 +68,7 @@
           <span class="status-tag" :class="config?.canOpenNextYear ? 'ok' : 'warn'">
             {{ config?.canOpenNextYear ? '可以开放下一年' : '当前不可开放' }}
           </span>
-          <span class="inline-tip">不满足条件时只展示阻断原因摘要，不展示复杂进度大盘。</span>
+          
         </div>
 
         <div class="action-row">
@@ -83,7 +83,7 @@
         <div class="panel-head">
           <div>
             <strong>阻断原因与最近动作</strong>
-            <span>首版只保留现场必要信息，不扩展为复杂大盘。</span>
+            
           </div>
         </div>
 
@@ -468,3 +468,4 @@ function formatDateTime(value?: string | null) {
   }
 }
 </style>
+

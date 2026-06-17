@@ -3,8 +3,7 @@
     <header class="hero">
       <div>
         <h2>回退与修正</h2>
-        <p>统一处理退回重提与单组快照恢复。所有操作都会写入日志，执行前自动留安全快照。</p>
-      </div>
+        </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="loading" @click="handleRefresh">刷新</button>
       </div>
@@ -23,7 +22,7 @@
       <div class="sheet-head">
         <div>
           <strong>退回重提</strong>
-          <span>适合本年内小范围填错，不依赖历史快照；无需填写原因，系统默认记录为“管理员退回重提”。</span>
+          
         </div>
       </div>
       <div class="form-grid">

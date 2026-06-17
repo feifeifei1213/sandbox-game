@@ -3,7 +3,7 @@
     <header class="hero">
       <div>
         <h2>通知与奖惩</h2>
-        <p>管理员在这里发送普通通知，并按组、按年、按季下发奖励或罚款。</p>
+        
       </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="loading" @click="handleRefresh">刷新记录</button>
@@ -18,7 +18,7 @@
       <section class="panel-card form-card">
         <div class="panel-head">
           <strong>普通通知发送区</strong>
-          <span>支持全体广播，也支持单组通知。内容为自由文本。</span>
+          
         </div>
         <div class="form-body">
           <label class="field">
@@ -58,7 +58,7 @@
       <section class="panel-card form-card">
         <div class="panel-head">
           <strong>奖惩下发区</strong>
-          <span>奖惩会自动进入经营计算，玩家经营页中对应单元格只读展示。</span>
+          
         </div>
         <div class="form-body">
           <label class="field">
@@ -129,7 +129,7 @@
       <section class="panel-card">
         <div class="panel-head">
           <strong>最近普通通知</strong>
-          <span>支持广播赛事播报、流程提醒与主持人口径说明。</span>
+          
         </div>
         <div class="table-scroll">
           <table class="record-table">
@@ -161,7 +161,7 @@
       <section class="panel-card">
         <div class="panel-head">
           <strong>最近奖惩记录</strong>
-          <span>若目标季度已锁定，应先做异常解锁，再让玩家重提该季度及后续阶段。</span>
+          
         </div>
         <div class="table-scroll">
           <table class="record-table">

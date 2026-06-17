@@ -3,9 +3,7 @@
     <div class="shell">
       <header class="page-header">
         <div>
-          <p class="eyebrow">Sandbox Game / Admin</p>
           <h1>管理员端</h1>
-          <p class="subtext">首版聚焦赛前配置、汇总、年度控制、初始基线、组数据与通知奖惩六个入口，优先服务现场主持人操作。</p>
         </div>
         <div class="header-pills">
           <span class="pill">初始化：{{ setupStatus?.initialized ? '已完成' : '未完成' }}</span>
@@ -103,14 +101,6 @@ async function handleLogout() {
   font-size: 28px;
 }
 
-.eyebrow {
-  margin: 0;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
 
 .subtext {
   margin: 0;

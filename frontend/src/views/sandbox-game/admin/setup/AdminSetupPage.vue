@@ -3,7 +3,6 @@
     <header class="hero">
       <div>
         <h2>赛前配置</h2>
-        <p>集中配置小组数量、最终年份、沙盘版本和业务显示名称；初始化后版本锁定，显示名称可按管理员授权修改。</p>
       </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="shellLoading || dictionaryLoading || initializing" @click="handleRefresh">刷新状态</button>
@@ -47,7 +46,6 @@
         <section class="setup-section">
           <div class="panel-head">
             <strong>比赛基础信息</strong>
-            <span>小组和账号由初始化生成；初始基线入口集中放在这里，初始化后进入录入。</span>
           </div>
           <div class="form-grid">
             <label class="field">
@@ -142,7 +140,7 @@
       <div class="panel-head">
         <div>
           <strong>当前比赛配置</strong>
-          <span>版本、公式和流程已锁定；最终年份仍在年度控制页维护。</span>
+          
         </div>
         <div class="toolbar-actions">
           <button type="button" class="btn" @click="goToBaseline">初始基线</button>
@@ -163,7 +161,7 @@
         <div class="panel-head">
           <div>
             <strong>当前比赛显示名称</strong>
-            <span>修改后玩家端和管理员端静默同步，不刷新业务数据。</span>
+            
           </div>
           <div class="toolbar-actions">
             <select v-model.number="selectedSchemeId" :disabled="!currentDictionaryUnlocked || dictionaryLoading">

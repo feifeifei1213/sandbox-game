@@ -3,7 +3,7 @@
     <header class="hero">
       <div>
         <h2>订单管理</h2>
-        <p>管理员按订单生成规则配置标段数量，生成预览订单池，确认后再生成选单顺序并逐段释放。</p>
+        
       </div>
       <div class="hero-actions">
         <select v-model.number="store.selectedYearNo" class="year-select" :disabled="loading || savingConfig || generatingPool" @change="handleYearChange">
@@ -168,7 +168,7 @@
       <div class="panel-head">
         <div>
           <strong>市场开启与投入上限</strong>
-          <span>默认开启状态由当前订单模板决定；未开启市场不生成订单、不进入抢单，玩家端自动按 0 提交。</span>
+          
         </div>
         <button type="button" class="btn primary" :disabled="savingMarketConfig || !config?.canUpdateConfig" @click="handleSaveMarketConfig">
           {{ savingMarketConfig ? '保存中...' : '保存市场' }}
@@ -205,7 +205,6 @@
       <div class="panel-head">
         <div>
           <strong>标段数量与释放顺序</strong>
-          <span>订单数量来自多年控制台，本区只保存当年标段释放顺序。</span>
         </div>
         <button type="button" class="btn primary" :disabled="savingConfig || !config?.canUpdateConfig" @click="handleSaveConfig">
           {{ savingConfig ? '保存中...' : '保存配置' }}
@@ -297,7 +296,7 @@
       <div class="panel-head">
         <div>
           <strong>市场竞标控制</strong>
-          <span>玩家提交完整 {{ segmentCount }} 项投入后，管理员生成全部标段选单顺序，再按释放顺序逐个释放。</span>
+          
         </div>
         <button type="button" class="btn" :disabled="loadingSelectionStatus" @click="handleLoadSelectionStatus">
           {{ loadingSelectionStatus ? '加载中...' : '刷新状态' }}
@@ -614,7 +613,7 @@ const marketLeaderAmountText = computed(() => {
 })
 const poolStatusTip = computed(() => {
   if (config.value?.confirmedBatch) {
-    return '正式订单池已确认，玩家可基于市场预测提交市场投入。'
+    return '订单池已确认。'
   }
   if (config.value?.latestPreviewBatch) {
     return '当前为预览订单，尚未保存成正式订单；确认后才会开放玩家市场投入。'

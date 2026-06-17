@@ -3,7 +3,6 @@
     <header class="hero">
       <div>
         <h2>初始基线</h2>
-        <p>页面语义是 1 份共享模板。提交后按组应用到全部小组，并整体锁定。</p>
       </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="loading || submitting" @click="handleRefresh">刷新</button>
@@ -22,7 +21,6 @@
         <div class="sheet-head">
           <div>
             <strong>共享初始基线模板</strong>
-            <span>首版使用单页高信息密度表格，方便和 Excel 对照录入。</span>
           </div>
           <span class="status-tag" :class="view?.submitted ? 'ok' : 'warn'">
             {{ view?.submitted ? '已提交并锁定' : '待提交' }}

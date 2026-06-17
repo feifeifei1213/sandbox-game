@@ -3,8 +3,7 @@
     <header class="hero">
       <div>
         <h2>汇总</h2>
-        <p>同页展示年度汇总区与最终排名区。首版不做单独排名页面，也不做导出。</p>
-      </div>
+        </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="loading" @click="handleRefresh">刷新汇总</button>
       </div>
@@ -37,7 +36,7 @@
       <div class="sheet-head">
         <div>
           <strong>年度汇总区</strong>
-          <span>按小组为行、按正式年份为列组。0 年不进入正式汇总。</span>
+          
         </div>
       </div>
 
@@ -85,7 +84,7 @@
       <div class="sheet-head">
         <div>
           <strong>最终排名区</strong>
-          <span>仅在最终年份满足开放条件后显示有效排名。</span>
+          
         </div>
       </div>
 
