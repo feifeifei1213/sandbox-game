@@ -41,7 +41,6 @@ var (
 	ErrAdminControlInitialBaselineInvalid   = errors.New("admin control initial baseline invalid")
 	ErrAdminControlEditionRequired          = errors.New("admin control edition required")
 	ErrAdminControlEditionInvalid           = errors.New("admin control edition invalid")
-	ErrAdminControlUnlockReasonRequired     = errors.New("admin control unlock reason required")
 	ErrAdminControlUnlockTargetTypeRequired = errors.New("admin control unlock target type required")
 	ErrAdminControlUnlockTargetTypeInvalid  = errors.New("admin control unlock target type invalid")
 	ErrAdminControlUnlockStageRequired      = errors.New("admin control unlock stage required")
@@ -50,11 +49,11 @@ var (
 )
 
 const (
-	unlockYearBlockedReasonNextYearOpened     = "下一年已开放，不能再解锁本年"
-	unlockYearBlockedReasonOperatingEditable  = "经营页当前无需解锁"
-	unlockYearBlockedReasonReportEditable     = "财报页当前无需解锁"
-	unlockYearBlockedReasonTargetNotSubmitted = "目标尚未正式提交，不能解锁"
-	unlockYearBlockedReasonInvalidState       = "当前目标不满足异常解锁条件"
+	unlockYearBlockedReasonNextYearOpened     = "下一年已开放，不能再退回重提本年"
+	unlockYearBlockedReasonOperatingEditable  = "经营页当前无需退回重提"
+	unlockYearBlockedReasonReportEditable     = "财报页当前无需退回重提"
+	unlockYearBlockedReasonTargetNotSubmitted = "目标尚未正式提交，不能退回重提"
+	unlockYearBlockedReasonInvalidState       = "当前目标不满足退回重提条件"
 )
 
 type InitializeInvalidError struct {

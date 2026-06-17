@@ -23,7 +23,7 @@
       <div class="sheet-head">
         <div>
           <strong>退回重提</strong>
-          <span>适合本年内小范围填错，不依赖历史快照；旧经营页与财报数据会保留为失效草稿。</span>
+          <span>适合本年内小范围填错，不依赖历史快照；无需填写原因，系统默认记录为“管理员退回重提”。</span>
         </div>
       </div>
       <div class="form-grid">

@@ -453,7 +453,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusBadRequest,
 			enum.BadRequestCode,
-			"异常解锁参数不正确",
+			"退回重提参数不正确",
 			err,
 		))
 		return
@@ -476,7 +476,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 		))
 		return
 	}
-	if !ensureAdminIdentity(c, "当前身份无权执行异常解锁") {
+	if !ensureAdminIdentity(c, "当前身份无权执行退回重提") {
 		return
 	}
 
@@ -504,25 +504,18 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 				"未找到目标小组或年份数据",
 				err,
 			))
-		case errors.Is(err, service.ErrAdminControlUnlockReasonRequired):
-			middleware.AbortWithAppError(c, middleware.NewAppError(
-				http.StatusUnprocessableEntity,
-				enum.UnprocessableEntityCode,
-				"解锁原因不能为空",
-				err,
-			))
 		case errors.Is(err, service.ErrAdminControlUnlockTargetTypeRequired):
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusUnprocessableEntity,
 				enum.UnprocessableEntityCode,
-				"解锁目标不能为空",
+				"退回目标不能为空",
 				err,
 			))
 		case errors.Is(err, service.ErrAdminControlUnlockTargetTypeInvalid):
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusUnprocessableEntity,
 				enum.UnprocessableEntityCode,
-				"解锁目标不合法",
+				"退回目标不合法",
 				err,
 			))
 		case errors.Is(err, service.ErrAdminControlUnlockStageRequired):
@@ -542,7 +535,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 		case errors.Is(err, service.ErrAdminControlUnlockNotAllowed):
 			msg := err.Error()
 			if msg == "" || msg == service.ErrAdminControlUnlockNotAllowed.Error() {
-				msg = "当前目标不满足异常解锁条件"
+				msg = "当前目标不满足退回重提条件"
 			}
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusConflict,
@@ -554,7 +547,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,
 				enum.InternalServerErrorCode,
-				"异常解锁失败",
+				"退回重提失败",
 				err,
 			))
 		}

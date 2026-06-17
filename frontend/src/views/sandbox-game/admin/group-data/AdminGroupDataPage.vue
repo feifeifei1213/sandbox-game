@@ -3,13 +3,10 @@
     <header class="hero">
       <div>
         <h2>组数据</h2>
-        <p>管理员按“组 → 年 → 页面类型”查看数据，并在同页发起异常解锁。</p>
+        <p>管理员按“组 → 年 → 页面类型”查看数据，本页仅提供只读核对。</p>
       </div>
       <div class="hero-actions">
         <button type="button" class="btn" :disabled="loading" @click="handleRefresh">刷新</button>
-        <button type="button" class="btn primary" :disabled="!selectedGroup || unlocking" @click="openUnlockDialog">
-          异常解锁
-        </button>
       </div>
     </header>
 
@@ -168,111 +165,7 @@
             </div>
           </div>
         </section>
-
-        <section class="panel-card">
-          <div class="panel-head">
-            <strong>异常解锁</strong>
-            <span>是否解锁由管理员现场判断，服务端只做最小硬校验。</span>
-          </div>
-          <div class="unlock-box">
-            <p>若发现该组该年需要重提，可选择解锁经营页或财报页。经营页支持回退到指定阶段，财报页则仅重新开放财报填写。</p>
-            <button type="button" class="btn primary full" :disabled="!selectedGroup || unlocking" @click="openUnlockDialog">
-              {{ unlocking ? '提交中...' : '打开异常解锁弹窗' }}
-            </button>
-          </div>
-        </section>
-
-        <section class="panel-card" v-if="latestUnlockResult">
-          <div class="panel-head">
-            <strong>最近一次解锁记录</strong>
-            <span>显示本次管理会话最近一次成功提交的异常解锁结果。</span>
-          </div>
-          <div class="meta-list">
-            <div class="meta-item">
-              <span>解锁日志 ID</span>
-              <strong>{{ latestUnlockResult.unlockLogId }}</strong>
-            </div>
-            <div class="meta-item">
-              <span>解锁目标</span>
-              <strong>{{ formatUnlockTargetType(latestUnlockResult.unlockTargetType) }}</strong>
-            </div>
-            <div class="meta-item">
-              <span>年份状态</span>
-              <strong>{{ formatYearStatus(latestUnlockResult.yearStatus) }}</strong>
-            </div>
-            <div class="meta-item">
-              <span>阶段状态</span>
-              <strong>{{ formatStageStatus(latestUnlockResult.stageStatus) }}</strong>
-            </div>
-            <div class="meta-item">
-              <span>财报状态</span>
-              <strong>{{ formatReportStatus(latestUnlockResult.reportStatus) }}</strong>
-            </div>
-            <div class="meta-item" v-if="latestUnlockResult.targetStageCode">
-              <span>回退阶段</span>
-              <strong>{{ formatStageCode(latestUnlockResult.targetStageCode) }}</strong>
-            </div>
-            <div class="meta-item" v-if="latestUnlockResult.editableStageCode">
-              <span>重新开放阶段</span>
-              <strong>{{ formatStageCode(latestUnlockResult.editableStageCode) }}</strong>
-            </div>
-            <div class="meta-item wide-item">
-              <span>解锁原因</span>
-              <strong>{{ latestUnlockReason }}</strong>
-            </div>
-          </div>
-        </section>
       </aside>
-    </div>
-
-    <div v-if="unlockDialogVisible" class="dialog-mask" @click.self="closeUnlockDialog">
-      <div class="dialog-card">
-        <div class="dialog-head">
-          <div>
-            <strong>异常解锁确认</strong>
-            <span>提交前请再次确认目标组、年份、解锁目标和影响范围。</span>
-          </div>
-        </div>
-        <div class="dialog-body">
-          <div class="dialog-target">
-            <div><span>目标小组</span><strong>{{ selectedGroup ? `第${selectedGroup.groupNo}组` : '--' }}</strong></div>
-            <div><span>目标年份</span><strong>{{ selectedYear }} 年</strong></div>
-            <div><span>当前页面</span><strong>{{ selectedPageType === 'operating' ? '经营页' : '财报页' }}</strong></div>
-          </div>
-          <label class="field">
-            <span>解锁目标</span>
-            <select :value="unlockTargetType" :disabled="unlocking" @change="handleUnlockTargetTypeChange">
-              <option value="OPERATING">{{ formatUnlockTargetType('OPERATING') }}</option>
-              <option value="REPORT">{{ formatUnlockTargetType('REPORT') }}</option>
-            </select>
-          </label>
-          <label v-if="unlockTargetType === 'OPERATING'" class="field">
-            <span>回退阶段</span>
-            <select :value="unlockTargetStageCode ?? ''" :disabled="unlocking" @change="handleUnlockTargetStageChange">
-              <option v-for="item in unlockStageOptions" :key="item" :value="item">{{ formatStageCode(item) }}</option>
-            </select>
-          </label>
-          <div class="field impact-field">
-            <span>影响说明</span>
-            <p>{{ unlockImpactText }}</p>
-          </div>
-          <label class="field">
-            <span>解锁原因</span>
-            <textarea
-              :value="unlockReason"
-              rows="5"
-              placeholder="请输入管理员现场确认后的解锁原因"
-              @input="handleUnlockReasonInput"
-            ></textarea>
-          </label>
-        </div>
-        <div class="dialog-actions">
-          <button type="button" class="btn" :disabled="unlocking" @click="closeUnlockDialog">取消</button>
-          <button type="button" class="btn primary" :disabled="unlocking" @click="handleUnlockSubmit">
-            {{ unlocking ? '提交中...' : '确认异常解锁' }}
-          </button>
-        </div>
-      </div>
     </div>
   </section>
 </template>
@@ -293,7 +186,7 @@ import { useAdminGroupDataStore } from '@/stores/admin-group-data'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useDictionaryStore } from '@/stores/dictionary'
 import { reportBalanceGap, type OperatingPayload, type ReportManualPayload } from '@/types/sandbox-game'
-import type { AdminGroupDataPageType, UnlockStageCode, UnlockTargetType } from '@/types/sandbox-game-admin'
+import type { AdminGroupDataPageType } from '@/types/sandbox-game-admin'
 import {
   formatBusinessStatus,
   formatReportStatus,
@@ -314,14 +207,7 @@ const {
   operatingView,
   reportView,
   loading,
-  unlocking,
   pageMessage,
-  unlockDialogVisible,
-  unlockReason,
-  unlockTargetType,
-  unlockTargetStageCode,
-  latestUnlockResult,
-  latestUnlockReason,
   selectedGroup,
 } = storeToRefs(groupDataStore)
 
@@ -348,16 +234,6 @@ const activeOperatingLabels = computed(() =>
 const activeReportLabels = computed(() =>
   applyDictionaryToReportLabels(resolveReportLabels(config.value?.editionCode), dictionaryStore.displayName),
 )
-
-const unlockStageOptions: UnlockStageCode[] = ['Q1', 'Q2', 'Q3', 'Q4', 'YEAR_END']
-
-const unlockImpactText = computed(() => {
-  if (unlockTargetType.value === 'OPERATING') {
-    const stageText = formatStageCode(unlockTargetStageCode.value)
-    return `经营页将回退到${stageText}，后续经营结果与财报结果会失效，玩家需要重新提交。`
-  }
-  return '经营结果保持不变，财报结果会失效并重新开放填写。'
-})
 
 onMounted(async () => {
   try {
@@ -415,38 +291,6 @@ async function switchPageType(pageType: AdminGroupDataPageType) {
   await groupDataStore.loadCurrentView()
 }
 
-function openUnlockDialog() {
-  groupDataStore.openUnlockDialog()
-}
-
-function closeUnlockDialog() {
-  groupDataStore.closeUnlockDialog()
-}
-
-function handleUnlockTargetTypeChange(event: Event) {
-  const target = event.target as HTMLSelectElement
-  groupDataStore.setUnlockTargetType(target.value as UnlockTargetType)
-}
-
-function handleUnlockTargetStageChange(event: Event) {
-  const target = event.target as HTMLSelectElement
-  groupDataStore.setUnlockTargetStageCode(target.value as UnlockStageCode)
-}
-
-function handleUnlockReasonInput(event: Event) {
-  const target = event.target as HTMLTextAreaElement
-  groupDataStore.setUnlockReason(target.value)
-}
-
-async function handleUnlockSubmit() {
-  try {
-    await groupDataStore.submitUnlock()
-    await shellStore.refreshConfig({ silent: true })
-  } catch {
-    // 页面消息由 store 统一处理。
-  }
-}
-
 function noopOperatingUpdate(_: OperatingPayload) {
   // 管理员组数据页复用玩家视图，但始终只读。
 }
@@ -475,16 +319,6 @@ function formatDateTime(value?: string | null) {
   }
   return date.toLocaleString('zh-CN', { hour12: false })
 }
-
-function formatUnlockTargetType(value?: UnlockTargetType | null) {
-  if (value === 'OPERATING') {
-    return '经营页'
-  }
-  if (value === 'REPORT') {
-    return '财报页'
-  }
-  return '--'
-}
 </script>
 
 <style scoped>
@@ -511,8 +345,7 @@ function formatUnlockTargetType(value?: UnlockTargetType | null) {
   line-height: 1.6;
 }
 
-.hero-actions,
-.dialog-actions {
+.hero-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -523,17 +356,6 @@ function formatUnlockTargetType(value?: UnlockTargetType | null) {
   background: #ffffff;
   border-radius: 12px;
   padding: 10px 14px;
-}
-
-.btn.primary {
-  color: #ffffff;
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
-.btn.full {
-  width: 100%;
-  justify-content: center;
 }
 
 .message-bar {
@@ -612,16 +434,6 @@ function formatUnlockTargetType(value?: UnlockTargetType | null) {
   font: inherit;
 }
 
-.impact-field p {
-  margin: 0;
-  padding: 12px 14px;
-  border: 1px solid #d8e4ff;
-  border-radius: 12px;
-  background: #f6f9ff;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
 .mode-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -681,94 +493,14 @@ function formatUnlockTargetType(value?: UnlockTargetType | null) {
 }
 
 .meta-item span,
-.status-item span,
-.dialog-target span {
+.status-item span {
   color: var(--muted);
   font-size: 13px;
 }
 
 .meta-item strong,
-.status-item strong,
-.dialog-target strong {
+.status-item strong {
   font-size: 14px;
-}
-
-.wide-item {
-  align-items: flex-start;
-}
-
-.wide-item strong {
-  text-align: right;
-  line-height: 1.6;
-}
-
-.unlock-box {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-}
-
-.unlock-box p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
-.dialog-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.36);
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  z-index: 20;
-}
-
-.dialog-card {
-  width: min(560px, 100%);
-  border-radius: 20px;
-  background: #ffffff;
-  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
-  overflow: hidden;
-}
-
-.dialog-head {
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--line);
-  background: #f8fafc;
-}
-
-.dialog-head strong {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 18px;
-}
-
-.dialog-head span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.dialog-body {
-  display: grid;
-  gap: 16px;
-  padding: 20px;
-}
-
-.dialog-target {
-  display: grid;
-  gap: 10px;
-}
-
-.dialog-target div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.dialog-actions {
-  justify-content: flex-end;
-  padding: 0 20px 20px;
 }
 
 @media (max-width: 1280px) {

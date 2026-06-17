@@ -231,7 +231,7 @@
 | 里程碑 | 目标 | 说明 |
 |---|---|---|
 | M1 | 打通首版最小可运行主链 | 后端骨架、数据库、玩家经营、财报、管理员控制主链可跑通 |
-| M2 | 补齐管理员运维能力与前端页面落地 | 汇总、组数据查看、异常解锁、Excel 风格页面联调完成 |
+| M2 | 补齐管理员运维能力与前端页面落地 | 汇总、组数据查看、回退与修正、Excel 风格页面联调完成 |
 | M3 | 收口测试与 Excel 最终命名适配 | 测试补齐、字段命名映射、上线前回归 |
 
 ### 9.3 M1：首版最小可运行主链
@@ -260,13 +260,13 @@
 | M2-03 | 实现管理员开放下一年接口 | P0 | ??? | M1-05、M2-01、M2-02 | `open-next-year` 接口与状态推进逻辑 | 所有组在管理员动作后统一开放下一年 | 无 |
 | M2-04 | 实现管理员汇总与最终排名接口 | P0 | ??? | M1-12、M1-04 | `admin-summary` 年度汇总/最终排名接口 | 前端可按正式年份顺序展示年度汇总区，并在满足条件后展示最终排名区 | 无 |
 | M2-05 | 实现管理员组数据查看接口 | P1 | ??? | M1-07、M1-10 | `admin-group-data` 查询接口 | 管理员可按组、按年查看经营页与财报页 | 无 |
-| M2-06 | 实现异常解锁接口与审计日志 | P0 | ??? | M1-05、M1-09、M1-12、M2-03 | `unlock-year` 接口、`sg_admin_unlock_log`、`sg_admin_action_log` | 满足“仅下一年未开放前可解锁、解锁需写原因、财报失效、汇总撤回” | 无 |
+| M2-06 | 实现退回重提接口与审计日志 | P0 | ??? | M1-05、M1-09、M1-12、M2-03 | `unlock-year` 接口、`sg_admin_unlock_log`、`sg_admin_action_log`、回退日志与安全快照 | 满足“仅下一年未开放前可退回重提、原因可空并由系统默认记录、财报失效、汇总撤回” | 无 |
 | M2-07 | 搭建玩家端经营页 Excel 风格静态壳子 | P0 | ??? | 现有 demo、`docs/requirements_spec.md` | 玩家经营页前端骨架、年份标签、阶段表格框架 | 当前正式前端页面已作为经营页视觉基线收口；整页 Excel 风格、年份标签、经营/财报切换、右侧轻量工作栏与“未来阶段可见但锁定”口径已落地 | 无 |
 | M2-08 | 接入经营页查询、草稿、阶段提交链路 | P0 | ??? | M1-07、M1-08、M1-09、M2-07 | 经营页联调页面 | 已完成真实读取、草稿保存、错误提交拦截与成功提交流程闭环；并通过事务级集成测试验证 `Q1 -> Q2` 推进、阶段流水写入与可编辑范围切换 | 无 |
 | M2-09 | 搭建玩家端财报页 Excel 风格静态壳子 | P0 | ?? | 现有 demo、`docs/requirements_spec.md` | 玩家财报页前端骨架 | 财报页已接入正式前端工程并具备 Excel 风格主表、绿色手工项与税率下拉；仍待继续按最终视觉口径验收 | 无 |
 | M2-10 | 接入财报查询、草稿、提交链路 | P0 | ??? | M1-10、M1-11、M1-12、M2-09 | 财报页联调页面 | 财报查询、草稿、提交与平衡校验链路已接入正式前端工程，并通过事务级集成测试验证草稿持久化、正式年份提交、汇总快照写入与提交后只读 | 无 |
 | M2-11 | 搭建管理员页面基础框架 | P1 | ??? | M2-04、现有 demo | 管理员导航、汇总页、年度控制页、初始基线页 | 管理员正式前端页面已落入 `frontend/` 工程，完成左侧菜单、汇总页、年度控制页、初始基线页与真实接口接入，并通过 `npm run build` | 无 |
-| M2-12 | 搭建组数据查看与异常解锁前端 | P1 | ??? | M2-05、M2-06、M2-11 | 组数据查看页、解锁弹窗、日志提示 | 管理员正式前端已支持按组按年查看经营/财报只读视图、切换页面类型、发起异常解锁并展示最近一次原因记录，同时通过 `go test ./...` 与 `npm run build` | 无 |
+| M2-12 | 搭建组数据查看前端并统一回退入口 | P1 | ??? | M2-05、M2-06、M2-11 | 组数据只读查看页、`回退与修正` 统一入口 | 管理员正式前端支持按组按年查看经营/财报只读视图、切换页面类型；退回重提统一在 `回退与修正` 页面发起，组数据页不再保留异常解锁按钮 | 无 |
 | M2-13 | 实现最小登录认证接口与认证中间件 | P0 | ??? | M1-02、M1-04、`docs/api_design.md` 6.0 | `auth/login`、`auth/get-current-user`、`auth/logout`、认证中间件、密码校验 | 已补齐最小登录接口、Bearer 鉴权中间件、密码校验与登录态解析；业务接口默认按正式登录态识别 `ADMIN/GROUP`，未登录访问返回 `401`，并通过 `go test ./...` | 无 |
 | M2-14 | 实现统一登录页与角色自动跳转 | P0 | ??? | M2-13、`docs/frontend_page_structure.md` | `/sandbox-game/login`、登录态存储、路由守卫、退出登录入口 | 已落统一登录页、登录态持久化、角色自动跳转与退出登录；玩家默认进入 `0年经营`，管理员默认进入 `汇总页`，并通过 `frontend/npm run build` | 无 |
 
@@ -642,6 +642,7 @@
 | 2026-06-16 | 任务状态：✅ 已完成；落点：`frontend/src/stores/player-operating.ts`、`internal/service/manual_integer_validation_test.go`、`docs/implementation_plan.md`；偏差说明：用户直接重新提交 `1年经营` 时，前端整数校验把订单联动写入经营页的 `marketCode` 字符串误判为小数。本轮不改变“用户手工数字必须为整数”的业务口径，只收窄经营页前端递归校验：仅校验数字和可解析为数字的字符串，非数字字符串视为编码/名称类元数据跳过；后端补充 `marketCode` 元数据不触发整数校验的回归测试。验证：已通过 `GOCACHE=.go-build-cache go test ./internal/service -run TestValidate` 与 `frontend/npm.cmd run build`。下一步：用户可复测回退到 `1年 Q1` 后不修改数据直接重新提交经营页。 |
 | 2026-06-16 | 任务状态：✅ 已完成；落点：`internal/repository/operating_repository.go`、`internal/repository/report_repository.go`、`internal/service/player_operating_command_service.go`、`internal/service/player_report_command_service.go`、`internal/enum/rollback.go`、`internal/service/player_operating_command_service_test.go`、`internal/service/player_report_command_service_test.go`、`docs/implementation_plan.md`；偏差说明：用户复测回退后重新提交 `1年财报` 时，页面平衡差额为 `0` 但提交接口返回 `500`。排查确认风险点在回退后保留历史提交流水，而年度状态恢复到旧提交版本，重新提交可能撞上 `group/year/version` 唯一键。本轮不删除历史流水，改为经营阶段和财报提交均基于历史最大提交版本递增；当提交前处于 `rollback_pending` 时，自动快照 trigger 改为 `ROLLBACK_STAGE_RESUBMITTED / ROLLBACK_REPORT_RESUBMITTED`，描述显示“回退后重新提交...自动快照”，便于管理员区分首次提交与补提快照。验证：已通过 `GOCACHE=.go-build-cache go test ./internal/service -run "TestSubmit(PlayerReport|OperatingStage)|TestReportViewsForRollback|TestOperatingViewForRollback|TestFindEffective"` 与 `GOCACHE=.go-build-cache go test ./internal/service/...`。下一步：重启后端后复测第二小组从 `1年 Q1` 补提到 `1年财报`，确认接口不再 500，且回退与修正页面能看到补提生成的新自动快照。 |
 | 2026-06-16 | 任务状态：✅ 已完成；落点：`frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`docs/api_design.md`、`docs/rollback_module_acceptance_checklist.md`、`docs/implementation_plan.md`；偏差说明：用户确认回退重提重新提交也需要产生快照，并且页面要能看出是重新提交产生。本轮在管理员 `回退与修正 -> 恢复快照` 列表新增快照说明列，详情中新增生成节点和快照说明；新增 trigger 前端中文映射 `ROLLBACK_STAGE_RESUBMITTED = 回退补提经营`、`ROLLBACK_REPORT_RESUBMITTED = 回退补提财报`，并同步接口文档与验收清单。验证：已通过 `frontend/npm.cmd run build`。下一步：重启前后端后，在回退待重提状态下分别重提经营阶段和财报，确认快照列表显示补提节点与说明。 |
+| 2026-06-17 | 任务状态：✅ 已完成；落点：`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`frontend/src/stores/admin-group-data.ts`、`frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`frontend/src/components/sandbox-game/admin/AdminNav.vue`、`internal/service/admin_control_command_service.go`、`internal/http/handler/admin_control_handler.go`、`docs/implementation_plan.md`；偏差说明：本轮按用户确认统一功能使用位置，组数据页只保留按组 / 年 / 页面类型只读查看，删除原“异常解锁”按钮、侧栏、弹窗和最近解锁记录；退回重提继续统一在 `回退与修正` 页面发起，且无需填写原因，原因为空时仍由后端默认记录为 `管理员退回重提`；同步移除后端未使用的“解锁原因必填”错误口径残留；不改变恢复快照仍需填写原因的规则。验证：已通过 `npm.cmd run build` 与 `GOCACHE=E:\project\sand box game\.go-build-cache go test ./internal/service -run TestEnsureUnlock -count=1`。下一步：重启前后端后，在页面确认组数据页无退回入口、回退与修正页退回重提原因可空。 |
 
 
 
