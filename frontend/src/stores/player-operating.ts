@@ -70,6 +70,7 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
         }),
   )
   const manualIntegerIssues = computed(() => collectOperatingIntegerIssues(draftPayload.value))
+  const supplyChainOrderQuantityIssues = computed(() => collectSupplyChainOrderQuantityIssues(draftPayload.value))
 
   async function bootstrap(preferredYear?: number) {
     loading.value = true
@@ -128,6 +129,13 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
       }
       return
     }
+    if (supplyChainOrderQuantityIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: `订单数量必须为非负整数：${supplyChainOrderQuantityIssues.value.slice(0, 3).join('、')}`,
+      }
+      return
+    }
     saving.value = true
     try {
       const result = await savePlayerOperatingDraft({
@@ -164,6 +172,13 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
       pageMessage.value = {
         type: 'error',
         text: buildIntegerIssueMessage('经营页手工数字', manualIntegerIssues.value),
+      }
+      return
+    }
+    if (supplyChainOrderQuantityIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: `订单数量必须为非负整数：${supplyChainOrderQuantityIssues.value.slice(0, 3).join('、')}`,
       }
       return
     }
@@ -264,11 +279,35 @@ function collectOperatingIntegerIssues(payload: OperatingPayload) {
   collectManualIntegerIssues('人力资源', normalized.quarter.humanResource, issues)
   collectManualIntegerIssues('工资与生产', normalized.quarter.salaryAndProduction, issues)
   collectManualIntegerIssues('研发与管理', normalized.quarter.researchAndManagement, issues)
+  collectManualIntegerIssues('订单数量留痕', normalized.quarter.supplyChainOrderRecord, issues)
   collectManualIntegerIssues('应收更新', normalized.quarter.receivableUpdate, issues)
   collectManualIntegerIssues('交货结算', normalized.quarter.deliverySettlement, issues)
   collectManualIntegerIssues('长期贷款', normalized.yearEnd.longTermLoan, issues)
   collectManualIntegerIssues('资产调整', normalized.yearEnd.assetAdjustment, issues)
   collectManualIntegerIssues('其他收支', normalized.extra.incomeAndPenalty, issues)
+  return issues
+}
+
+function collectSupplyChainOrderQuantityIssues(payload: OperatingPayload) {
+  const issues: string[] = []
+  const fieldLabels: Record<string, string> = {
+    basicProduct: '第一类',
+    standardProduct: '第二类',
+    precisionProduct: '第三类',
+    intelligentProduct: '第四类',
+  }
+  for (const [quarterKey, values] of Object.entries(payload.quarter.supplyChainOrderRecord ?? {})) {
+    for (const [fieldKey, label] of Object.entries(fieldLabels)) {
+      const raw = values?.[fieldKey]
+      if (raw === '' || raw === undefined || raw === null) {
+        continue
+      }
+      const parsed = Number(raw)
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+        issues.push(`${quarterKey.toUpperCase()}.${label}`)
+      }
+    }
+  }
   return issues
 }
 

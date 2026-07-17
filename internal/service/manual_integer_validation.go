@@ -13,6 +13,7 @@ import (
 const manualIntegerPreviewLimit = 3
 
 var ErrManualNumberNotInteger = fmt.Errorf("manual number not integer")
+var ErrSupplyChainOrderQuantityInvalid = fmt.Errorf("supply chain order quantity invalid")
 
 type ManualIntegerIssue struct {
 	Path  string
@@ -63,13 +64,85 @@ func validateOperatingManualIntegers(value payload.OperatingPayload) error {
 	collectManualIntegerIssues("quarter.humanResource", normalized.Quarter.HumanResource, &issues)
 	collectManualIntegerIssues("quarter.salaryAndProduction", normalized.Quarter.SalaryAndProduction, &issues)
 	collectManualIntegerIssues("quarter.researchAndManagement", normalized.Quarter.ResearchAndManagement, &issues)
+	collectManualIntegerIssues("quarter.supplyChainOrderRecord", normalized.Quarter.SupplyChainOrderRecord, &issues)
 	collectManualIntegerIssues("quarter.receivableUpdate", normalized.Quarter.ReceivableUpdate, &issues)
 	collectManualIntegerIssues("quarter.deliverySettlement", normalized.Quarter.DeliverySettlement, &issues)
 	collectManualIntegerIssues("yearEnd.longTermLoan", normalized.YearEnd.LongTermLoan, &issues)
 	collectManualIntegerIssues("yearEnd.assetAdjustment", normalized.YearEnd.AssetAdjustment, &issues)
 	collectManualIntegerIssues("extra.incomeAndPenalty", normalized.Extra.IncomeAndPenalty, &issues)
 
-	return buildManualIntegerError("经营页手工数字", issues)
+	if err := buildManualIntegerError("经营页手工数字", issues); err != nil {
+		return err
+	}
+	return validateSupplyChainOrderQuantities(normalized.Quarter.SupplyChainOrderRecord)
+}
+
+func validateSupplyChainOrderQuantities(value payload.OperatingQuarterMap) error {
+	issues := make([]ManualIntegerIssue, 0)
+	for quarterKey, quarterValue := range value {
+		for _, fieldKey := range []string{"basicProduct", "standardProduct", "precisionProduct", "intelligentProduct"} {
+			raw, exists := quarterValue[fieldKey]
+			if !exists || raw == nil || (reflect.ValueOf(raw).Kind() == reflect.String && strings.TrimSpace(fmt.Sprint(raw)) == "") {
+				continue
+			}
+			parsed, ok := manualNumericValue(raw)
+			if ok && parsed >= 0 && isWholeNumber(parsed) {
+				continue
+			}
+			issues = append(issues, ManualIntegerIssue{
+				Path:  fmt.Sprintf("quarter.supplyChainOrderRecord.%s.%s", quarterKey, fieldKey),
+				Value: strings.TrimSpace(fmt.Sprint(raw)),
+			})
+		}
+	}
+	if len(issues) == 0 {
+		return nil
+	}
+	parts := make([]string, 0, minInt(len(issues), manualIntegerPreviewLimit))
+	for index, issue := range issues {
+		if index >= manualIntegerPreviewLimit {
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", issue.Path, issue.Value))
+	}
+	return fmt.Errorf("%w: 订单数量必须为非负整数，发现：%s", ErrSupplyChainOrderQuantityInvalid, strings.Join(parts, "、"))
+}
+
+func manualNumericValue(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return float64(typed), true
+	case int8:
+		return float64(typed), true
+	case int16:
+		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case uint:
+		return float64(typed), true
+	case uint8:
+		return float64(typed), true
+	case uint16:
+		return float64(typed), true
+	case uint32:
+		return float64(typed), true
+	case uint64:
+		return float64(typed), true
+	case float32:
+		return float64(typed), true
+	case float64:
+		return typed, true
+	case json.Number:
+		parsed, err := strconv.ParseFloat(typed.String(), 64)
+		return parsed, err == nil
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func validateReportManualIntegers(value payload.ReportManualPayload) error {

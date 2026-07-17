@@ -78,6 +78,7 @@ func (v *Validator) ValidateStageSubmit(ctx calcctx.CalculationContext, stageCod
 	}
 
 	issues = append(issues, validateRequiredScopes(ctx.OperatingPayload.Normalize(), stageCode)...)
+	issues = append(issues, validateSupplyChainOrderRecord(ctx.OperatingPayload.Normalize(), stageCode)...)
 	if len(issues) > 0 {
 		return failedResult(issues)
 	}
@@ -86,6 +87,59 @@ func (v *Validator) ValidateStageSubmit(ctx calcctx.CalculationContext, stageCod
 		Passed: true,
 		Issues: []ValidationIssue{},
 	}
+}
+
+var supplyChainOrderRecordFieldKeys = []string{
+	"basicProduct",
+	"standardProduct",
+	"precisionProduct",
+	"intelligentProduct",
+}
+
+func validateSupplyChainOrderRecord(operatingPayload payload.OperatingPayload, stageCode string) []ValidationIssue {
+	quarterKey := ""
+	switch strings.ToUpper(strings.TrimSpace(stageCode)) {
+	case state.StageCodeQ1:
+		quarterKey = "q1"
+	case state.StageCodeQ2:
+		quarterKey = "q2"
+	case state.StageCodeQ3:
+		quarterKey = "q3"
+	case state.StageCodeQ4:
+		quarterKey = "q4"
+	default:
+		return []ValidationIssue{}
+	}
+
+	quarterValue := findQuarterValue(operatingPayload.Quarter.SupplyChainOrderRecord, quarterKey)
+	basePath := fmt.Sprintf("quarter.supplyChainOrderRecord.%s", quarterKey)
+	if quarterValue == nil {
+		return []ValidationIssue{{
+			Field:   basePath,
+			Message: strings.ToUpper(quarterKey) + "订单数量留痕区未填写",
+		}}
+	}
+	quarterFields, ok := quarterValue.(map[string]any)
+	if !ok {
+		return []ValidationIssue{{
+			Field:   basePath,
+			Message: strings.ToUpper(quarterKey) + "订单数量留痕区格式错误",
+		}}
+	}
+
+	issues := make([]ValidationIssue, 0)
+	for _, fieldKey := range supplyChainOrderRecordFieldKeys {
+		value, exists := quarterFields[fieldKey]
+		if exists && !isMissingLeaf(value) {
+			continue
+		}
+		fieldPath := basePath + "." + fieldKey
+		issues = append(issues, ValidationIssue{
+			Field:   fieldPath,
+			Message: fieldPath + " 未填写",
+		})
+	}
+	return issues
 }
 
 func validateRequiredScopes(operatingPayload payload.OperatingPayload, stageCode string) []ValidationIssue {

@@ -44,6 +44,26 @@ func TestValidateOperatingManualIntegersIgnoresMarketMetadata(t *testing.T) {
 	}
 }
 
+func TestValidateOperatingManualIntegersRejectsNegativeSupplyChainOrderQuantity(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.Quarter.SupplyChainOrderRecord["q1"]["basicProduct"] = -1
+
+	err := validateOperatingManualIntegers(operatingPayload)
+	if !errors.Is(err, ErrSupplyChainOrderQuantityInvalid) {
+		t.Fatalf("expected ErrSupplyChainOrderQuantityInvalid, got %v", err)
+	}
+}
+
+func TestValidateOperatingManualIntegersRejectsTextSupplyChainOrderQuantity(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.Quarter.SupplyChainOrderRecord["q1"]["basicProduct"] = "无"
+
+	err := validateOperatingManualIntegers(operatingPayload)
+	if !errors.Is(err, ErrSupplyChainOrderQuantityInvalid) {
+		t.Fatalf("expected ErrSupplyChainOrderQuantityInvalid, got %v", err)
+	}
+}
+
 func TestValidateReportManualIntegersAllowsIncomeTaxRateDecimal(t *testing.T) {
 	manual := payload.ReportManualPayload{
 		WorkInProgress:               float64Ptr(6),

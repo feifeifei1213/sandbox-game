@@ -63,6 +63,7 @@ export interface OperatingPayload {
     humanResource: QuarterValueMap
     salaryAndProduction: QuarterValueMap
     researchAndManagement: QuarterValueMap
+    supplyChainOrderRecord: QuarterValueMap
     receivableUpdate: QuarterValueMap
     deliverySettlement: QuarterValueMap
   }
@@ -173,6 +174,7 @@ export function createEmptyOperatingPayload(): OperatingPayload {
       humanResource: {},
       salaryAndProduction: {},
       researchAndManagement: {},
+      supplyChainOrderRecord: {},
       receivableUpdate: {},
       deliverySettlement: {},
     },
@@ -193,7 +195,9 @@ export function cloneOperatingPayload(payload?: OperatingPayload | null): Operat
   if (!payload) {
     return createEmptyOperatingPayload()
   }
-  return JSON.parse(JSON.stringify(payload)) as OperatingPayload
+  const cloned = JSON.parse(JSON.stringify(payload)) as OperatingPayload
+  cloned.quarter.supplyChainOrderRecord = cloned.quarter.supplyChainOrderRecord ?? {}
+  return cloned
 }
 export interface ReportManualPayload {
   workInProgress: number | null

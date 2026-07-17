@@ -125,13 +125,15 @@ func TestSubmitOperatingStageAfterRollbackUsesNextHistoricalVersionAndRetrySnaps
 
 	groupID := createIntegrationOperatingFixtures(t, ctx, tx)
 	now := time.Now()
+	historicalPayload := buildValidQ1OperatingPayload()
+	historicalPayload.Quarter.SupplyChainOrderRecord["q1"]["basicProduct"] = 3
 	if err := repository.NewOperatingRepository(tx).CreateStageSubmission(ctx, repository.CreateStageSubmissionCommand{
 		GroupID:                  groupID,
 		YearNo:                   0,
 		StageCode:                state.StageCodeQ1,
 		SubmitVersion:            1,
 		PeriodEndCash:            30,
-		OperatingPayloadSnapshot: buildValidQ1OperatingPayload(),
+		OperatingPayloadSnapshot: historicalPayload,
 		StateBeforeJSON:          []byte("{}"),
 		StateAfterJSON:           []byte("{}"),
 		SubmitterID:              90000,
@@ -144,11 +146,13 @@ func TestSubmitOperatingStageAfterRollbackUsesNextHistoricalVersionAndRetrySnaps
 	}
 
 	commandService, _ := buildPlayerOperatingServices(tx)
+	retryPayload := buildValidQ1OperatingPayload()
+	retryPayload.Quarter.SupplyChainOrderRecord["q1"]["basicProduct"] = 5
 	result, err := commandService.SubmitStage(ctx, SubmitOperatingStageCommand{
 		GroupID:          groupID,
 		YearNo:           0,
 		StageCode:        state.StageCodeQ1,
-		OperatingPayload: buildValidQ1OperatingPayload(),
+		OperatingPayload: retryPayload,
 		SubmitterID:      90001,
 		OperatorName:     "integration-test",
 	})
@@ -168,6 +172,26 @@ func TestSubmitOperatingStageAfterRollbackUsesNextHistoricalVersionAndRetrySnaps
 	}
 	if latestSubmission.SubmitVersion != 2 {
 		t.Fatalf("expected latest persisted stage version 2, got %d", latestSubmission.SubmitVersion)
+	}
+	var latestPayload payload.OperatingPayload
+	if err := json.Unmarshal(latestSubmission.OperatingPayloadSnapshot, &latestPayload); err != nil {
+		t.Fatalf("unmarshal latest operating payload snapshot: %v", err)
+	}
+	if got := latestPayload.Quarter.SupplyChainOrderRecord["q1"]["basicProduct"]; got != float64(5) {
+		t.Fatalf("expected rollback retry snapshot to keep edited supply chain order quantity 5, got %#v", got)
+	}
+	var historicalSubmission entity.GroupStageSubmission
+	if err := tx.WithContext(ctx).
+		Where("group_id = ? AND year_no = ? AND stage_code = ? AND submit_version = ?", groupID, 0, state.StageCodeQ1, 1).
+		First(&historicalSubmission).Error; err != nil {
+		t.Fatalf("load historical stage submission: %v", err)
+	}
+	var historicalSnapshot payload.OperatingPayload
+	if err := json.Unmarshal(historicalSubmission.OperatingPayloadSnapshot, &historicalSnapshot); err != nil {
+		t.Fatalf("unmarshal historical operating payload snapshot: %v", err)
+	}
+	if got := historicalSnapshot.Quarter.SupplyChainOrderRecord["q1"]["basicProduct"]; got != float64(3) {
+		t.Fatalf("expected historical supply chain order quantity 3 to be preserved, got %#v", got)
 	}
 
 	snapshot := loadLatestSnapshotForTest(t, ctx, tx, groupID, 0, state.StageCodeQ1)
@@ -854,6 +878,14 @@ func buildValidQ1OperatingPayload() payload.OperatingPayload {
 		"q1": {
 			"researchCost":         0,
 			"managementSystemCost": 0,
+		},
+	}
+	p.Quarter.SupplyChainOrderRecord = payload.OperatingQuarterMap{
+		"q1": {
+			"basicProduct":       0,
+			"standardProduct":    0,
+			"precisionProduct":   0,
+			"intelligentProduct": 0,
 		},
 	}
 	p.Quarter.ReceivableUpdate = payload.OperatingQuarterMap{

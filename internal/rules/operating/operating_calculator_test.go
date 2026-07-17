@@ -54,6 +54,12 @@ func TestCalculateDemoYearBuildsQuarterCashChecksAndYearEndCash(t *testing.T) {
 		"q3": {"technologyResearch": 3.0, "managementSystem": 1.0},
 		"q4": {"technologyResearch": 2.0, "managementSystem": 2.0},
 	}
+	operatingPayload.Quarter.SupplyChainOrderRecord = payload.OperatingQuarterMap{
+		"q1": {"basicProduct": 1000.0, "standardProduct": 2000.0, "precisionProduct": 3000.0, "intelligentProduct": 4000.0},
+		"q2": {"basicProduct": 5000.0, "standardProduct": 6000.0, "precisionProduct": 7000.0, "intelligentProduct": 8000.0},
+		"q3": {"basicProduct": 9000.0, "standardProduct": 10000.0, "precisionProduct": 11000.0, "intelligentProduct": 12000.0},
+		"q4": {"basicProduct": 13000.0, "standardProduct": 14000.0, "precisionProduct": 15000.0, "intelligentProduct": 16000.0},
+	}
 	operatingPayload.Quarter.ReceivableUpdate = payload.OperatingQuarterMap{
 		"q1": {"receivableCollection": 9.0},
 		"q2": {"receivableCollection": 10.0},

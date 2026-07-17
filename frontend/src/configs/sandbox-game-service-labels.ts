@@ -60,7 +60,7 @@ const productionOperatingLabels = {
   salaryGroupTitle: '5. 工资与生产',
   salaryLabel: '工资与生产费用',
   researchAndManagementGroupTitle: '6. 研发与管理',
-  newOrderReminder: '下新供应链订单',
+  newOrderReminder: '9. 下新供应链订单',
   receivableGroupTitle: '7. 应收更新',
   receivableLabel: '应收回款',
   receivableReminder: '请将应收账款向左移动一格',

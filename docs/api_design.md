@@ -2111,6 +2111,27 @@ Go DTO 建议：
 - 表示经营页业务区块数据
 - 具体内部键名已按 `1组 最终版.xlsx` 和 `docs/excel_field_mapping.md` 冻结首版基线；后续若只调整页面显示名，不改 payload 结构
 - 接口层将其视为结构化 JSON 对象
+- `quarter.supplyChainOrderRecord` 为第 9 步订单数量留痕，按 `q1/q2/q3/q4` 组织；每季度固定包含 `basicProduct / standardProduct / precisionProduct / intelligentProduct` 四个稳定字段。
+- 生产制造版和贵宾服务版共用上述字段编码，仅通过版本化业务显示字典切换产品/服务名称。
+- 四项值为非负整数且当前季度必填，无订单时显式提交 `0`；该字段不跨年带入，不进入计算和正式订单模块。
+- 旧经营 JSON 缺少该字段时按空对象兼容读取，不批量回填为 `0`；旧年份回退后重新提交目标季度时，按新规则补齐四项。
+
+示例：
+
+```json
+{
+  "quarter": {
+    "supplyChainOrderRecord": {
+      "q1": {
+        "basicProduct": 3,
+        "standardProduct": 2,
+        "precisionProduct": 0,
+        "intelligentProduct": 0
+      }
+    }
+  }
+}
+```
 
 ### 7.2 `ReportManualPayload`
 

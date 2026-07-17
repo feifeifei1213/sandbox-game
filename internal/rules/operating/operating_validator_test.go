@@ -32,6 +32,7 @@ func TestValidateStageSubmitRejectsMissingQ1Scopes(t *testing.T) {
 
 	assertHasIssueField(t, result.Issues, "beginning.marketBid")
 	assertHasIssueField(t, result.Issues, "quarter.shortTermLoan.q1")
+	assertHasIssueField(t, result.Issues, "quarter.supplyChainOrderRecord.q1")
 	assertHasIssueField(t, result.Issues, "extra.incomeAndPenalty.q1")
 }
 
@@ -57,6 +58,9 @@ func TestValidateStageSubmitAcceptsExplicitZeroValues(t *testing.T) {
 	}
 	operatingPayload.Quarter.ResearchAndManagement = payload.OperatingQuarterMap{
 		"q2": {"technologyResearch": 0.0, "managementSystem": 0.0},
+	}
+	operatingPayload.Quarter.SupplyChainOrderRecord = payload.OperatingQuarterMap{
+		"q2": {"basicProduct": 0.0, "standardProduct": 0.0, "precisionProduct": 0.0, "intelligentProduct": 0.0},
 	}
 	operatingPayload.Quarter.ReceivableUpdate = payload.OperatingQuarterMap{
 		"q2": {"receivableCollection": 0.0},
@@ -134,6 +138,9 @@ func TestValidateStageSubmitRejectsBlankLeafValue(t *testing.T) {
 	operatingPayload.Quarter.ResearchAndManagement = payload.OperatingQuarterMap{
 		"q3": {"technologyResearch": 0.0},
 	}
+	operatingPayload.Quarter.SupplyChainOrderRecord = payload.OperatingQuarterMap{
+		"q3": {"basicProduct": 0.0, "standardProduct": 0.0, "precisionProduct": 0.0, "intelligentProduct": 0.0},
+	}
 	operatingPayload.Quarter.ReceivableUpdate = payload.OperatingQuarterMap{
 		"q3": {"receivableCollection": 0.0},
 	}
@@ -156,6 +163,29 @@ func TestValidateStageSubmitRejectsBlankLeafValue(t *testing.T) {
 	}
 
 	assertHasIssueField(t, result.Issues, "quarter.shortTermLoan.q3.dueRepayment")
+}
+
+func TestValidateStageSubmitRejectsIncompleteSupplyChainOrderRecord(t *testing.T) {
+	t.Parallel()
+
+	validator := NewValidator()
+	operatingPayload := payload.NewOperatingPayload()
+	operatingPayload.Quarter.SupplyChainOrderRecord = payload.OperatingQuarterMap{
+		"q2": {"basicProduct": 0.0},
+	}
+
+	ctx := newOperatingValidationContext(enum.StageStatusQ2Open).
+		WithPreviousReport(&payload.ReportComputedPayload{ReportCash: 1}).
+		WithOperatingPayload(&operatingPayload)
+
+	result := validator.ValidateStageSubmit(ctx, state.StageCodeQ2)
+	if result.Passed {
+		t.Fatal("expected validation to fail when supply chain order fields are incomplete")
+	}
+
+	assertHasIssueField(t, result.Issues, "quarter.supplyChainOrderRecord.q2.standardProduct")
+	assertHasIssueField(t, result.Issues, "quarter.supplyChainOrderRecord.q2.precisionProduct")
+	assertHasIssueField(t, result.Issues, "quarter.supplyChainOrderRecord.q2.intelligentProduct")
 }
 
 func newOperatingValidationContext(stageStatus string) calcctx.CalculationContext {

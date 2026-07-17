@@ -288,7 +288,8 @@
 | `quarter.humanResource` | `B29:O30` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 招聘、辞退、待岗、培训等费用输入 |
 | `quarter.salaryAndProduction` | `B31:O32` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 生产线投料与工资相关输入 |
 | `quarter.researchAndManagement` | `B33:O34` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 技术研发、质量环境健康投入 |
-| `quarter.receivableUpdate` | `B35:O37` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 供应链订单、应收账款更新与回款记录 |
+| `quarter.supplyChainOrderRecord` | 原 `B35:P35` 提醒行；系统扩展为四类型 × 四季度录入区 | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `新增结构冻结` | 生产版记录四类产品、贵宾版记录四类服务；单位“个”，非负整数，按年独立，不参与公式 |
+| `quarter.receivableUpdate` | 原 `B36:O37` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 应收账款更新与回款记录；与第 9 步订单数量留痕分开建模 |
 | `quarter.deliverySettlement` | `B38:O40` | `quarterMap<object>` | `Q1/Q2/Q3/Q4` | `结构冻结` | 包含交货销售额、交货成本、管理人员费用 |
 | `yearEnd.longTermLoan` | `B42:P44` | `object` | `YEAR_END` | `结构冻结` | 长期贷款账期更新、还款与新贷款 |
 | `yearEnd.assetAdjustment` | `B45:O53` | `object` | `YEAR_END` | `结构冻结，细项可补充` | 包含维护费、厂房、生产线残值/折旧、新市场培育 |
@@ -297,6 +298,7 @@
 补充建议：
 
 - `quarterMap<object>` 推荐统一按 `q1/q2/q3/q4` 四个键组织，避免前后端对列坐标有隐式依赖。
+- `quarter.supplyChainOrderRecord` 每季度固定使用 `basicProduct / standardProduct / precisionProduct / intelligentProduct` 四个字段；旧 JSON 缺失时保持空值，不自动补 `0`。
 - 若某区块是“按产品/区域/费用类型”的二维输入，推荐以显式对象数组存储，而不是 `G14/I14/K14/M14` 这类坐标命名。
 - 经营页中的 `periodEndCash`、`quarterCashCheck`、`planRevenue`、`comprehensiveCostTotal` 等结果值应由规则层计算后回填视图，不建议前端自行算。
 

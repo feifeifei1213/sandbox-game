@@ -20,14 +20,15 @@ type OperatingBeginningPayload struct {
 
 // OperatingQuarterPayload 对应经营页季度区。
 type OperatingQuarterPayload struct {
-	ShortTermLoan         OperatingQuarterMap `json:"shortTermLoan"`
-	MaterialPayment       OperatingQuarterMap `json:"materialPayment"`
-	ProductionLineAdjust  OperatingQuarterMap `json:"productionLineAdjustment"`
-	HumanResource         OperatingQuarterMap `json:"humanResource"`
-	SalaryAndProduction   OperatingQuarterMap `json:"salaryAndProduction"`
-	ResearchAndManagement OperatingQuarterMap `json:"researchAndManagement"`
-	ReceivableUpdate      OperatingQuarterMap `json:"receivableUpdate"`
-	DeliverySettlement    OperatingQuarterMap `json:"deliverySettlement"`
+	ShortTermLoan          OperatingQuarterMap `json:"shortTermLoan"`
+	MaterialPayment        OperatingQuarterMap `json:"materialPayment"`
+	ProductionLineAdjust   OperatingQuarterMap `json:"productionLineAdjustment"`
+	HumanResource          OperatingQuarterMap `json:"humanResource"`
+	SalaryAndProduction    OperatingQuarterMap `json:"salaryAndProduction"`
+	ResearchAndManagement  OperatingQuarterMap `json:"researchAndManagement"`
+	SupplyChainOrderRecord OperatingQuarterMap `json:"supplyChainOrderRecord"`
+	ReceivableUpdate       OperatingQuarterMap `json:"receivableUpdate"`
+	DeliverySettlement     OperatingQuarterMap `json:"deliverySettlement"`
 }
 
 // OperatingYearEndPayload 对应经营页年末区。
@@ -54,14 +55,15 @@ func NewOperatingPayload() OperatingPayload {
 			MarketBid:      []map[string]any{},
 		},
 		Quarter: OperatingQuarterPayload{
-			ShortTermLoan:         OperatingQuarterMap{},
-			MaterialPayment:       OperatingQuarterMap{},
-			ProductionLineAdjust:  OperatingQuarterMap{},
-			HumanResource:         OperatingQuarterMap{},
-			SalaryAndProduction:   OperatingQuarterMap{},
-			ResearchAndManagement: OperatingQuarterMap{},
-			ReceivableUpdate:      OperatingQuarterMap{},
-			DeliverySettlement:    OperatingQuarterMap{},
+			ShortTermLoan:          OperatingQuarterMap{},
+			MaterialPayment:        OperatingQuarterMap{},
+			ProductionLineAdjust:   OperatingQuarterMap{},
+			HumanResource:          OperatingQuarterMap{},
+			SalaryAndProduction:    OperatingQuarterMap{},
+			ResearchAndManagement:  OperatingQuarterMap{},
+			SupplyChainOrderRecord: OperatingQuarterMap{},
+			ReceivableUpdate:       OperatingQuarterMap{},
+			DeliverySettlement:     OperatingQuarterMap{},
 		},
 		YearEnd: OperatingYearEndPayload{
 			LongTermLoan:    map[string]any{},
@@ -93,6 +95,7 @@ func (p OperatingPayload) Normalize() OperatingPayload {
 	normalized.Quarter.HumanResource = normalizeQuarterMap(normalized.Quarter.HumanResource)
 	normalized.Quarter.SalaryAndProduction = normalizeQuarterMap(normalized.Quarter.SalaryAndProduction)
 	normalized.Quarter.ResearchAndManagement = normalizeQuarterMap(normalized.Quarter.ResearchAndManagement)
+	normalized.Quarter.SupplyChainOrderRecord = normalizeQuarterMap(normalized.Quarter.SupplyChainOrderRecord)
 	normalized.Quarter.ReceivableUpdate = normalizeQuarterMap(normalized.Quarter.ReceivableUpdate)
 	normalized.Quarter.DeliverySettlement = normalizeQuarterMap(normalized.Quarter.DeliverySettlement)
 

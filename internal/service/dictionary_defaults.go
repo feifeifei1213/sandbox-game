@@ -64,7 +64,7 @@ func builtInOperatingDictionaryDefinitions(editionCode string) []DictionaryDefin
 			opDef("salaryGroupTitle", "5. 工资与生产", 250),
 			opDef("salaryLabel", "工资与生产费用", 260),
 			opDef("researchAndManagementGroupTitle", "6. 研发与管理", 270),
-			opDef("newOrderReminder", "下新供应链订单", 280),
+			opDef("newOrderReminder", "9. 下新供应链订单", 280),
 			opDef("receivableGroupTitle", "7. 应收更新", 290),
 			opDef("receivableLabel", "应收回款", 300),
 			opDef("receivableReminder", "请将应收账款向左移动一格", 310),
