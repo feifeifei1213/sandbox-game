@@ -709,6 +709,9 @@
 | `businessStatus` | 正常 / 已破产 |
 | `hasInvalidDraft` | 当前财报页是否为失效草稿待重提状态 |
 | `reportComputedPayload` | 自动计算结果 |
+| `reportComputedPayload.reportTotalEquity` | 当前年份所有者权益；最佳 CEO 得分新增项的计算基数 |
+| `reportComputedPayload.reportBestSalesDirectorScore` | 截至当前年份累计订单总额除以 `10` 后的最佳销售总监得分 |
+| `reportComputedPayload.reportBestCeoScore` | 五项总监最终得分合计再加当前年份所有者权益的 `1/2` |
 | `reportManualPayload` | 手工项当前值 |
 | `manualFieldOptions` | 如税率下拉选项 |
 | `lastDraftSavedAt` | 最近草稿保存时间 |
@@ -765,6 +768,40 @@
 重复提交规则：
 
 - 年份已完成后再次提交财报，返回 `409`
+
+#### 6.3.4 总监得分计算与返回口径
+
+- 本次公式调整不新增接口字段，不修改请求结构，也不需要数据库迁移；继续复用 `reportComputedPayload` 中现有字段。
+- 最佳销售总监得分按以下业务公式返回：
+
+```text
+reportBestSalesDirectorScore_y =
+  (orderTotal_0 + orderTotal_1 + ... + orderTotal_y) / 10
+```
+
+- 服务端按年递推时应实现为：
+
+```text
+previousReport.reportBestSalesDirectorScore + currentYear.orderTotal / 10
+```
+
+- 不得实现为 `(previousReport.reportBestSalesDirectorScore + currentYear.orderTotal) / 10`，避免已经缩放的历史得分被再次除以 `10`。
+- 最佳 CEO 得分按以下公式返回：
+
+```text
+reportBestCeoScore =
+  reportBestMarketDirectorScore
+  + reportBestTechnologyDirectorScore
+  + productionHumanScore
+  + reportBestSalesDirectorScore
+  + reportBestCfoScore
+  + reportTotalEquity / 2
+```
+
+- `reportTotalEquity` 为当前年份财报权益；允许为负，负值会降低 CEO 得分。两个得分字段均不额外取整，允许小数。
+- 新公式从 `0年` 起适用于生产制造版和贵宾服务版。获取历史财报视图时，服务端应按当前规则从 `0年` 递归重建总监得分后返回，不要求物理改写旧提交 JSON 或旧快照。
+- 保存草稿与提交财报均由后端按当前公式生成计算结果；提交结果仍是正式权威口径。
+- 前端财报实时预览可复用返回值中的 `reportBestSalesDirectorScore`，不得再次执行 `/ 10`；前端必须用当前预览得到的 `reportTotalEquity` 重新计算 CEO 的权益项，避免编辑态与提交态显示不一致。
 
 ---
 
@@ -2138,8 +2175,9 @@ Go DTO 建议：
 说明：
 
 - 表示财报页绿色手工项集合
-- 当前至少覆盖：在制品、成品、材料、所得税税率
+- 当前至少覆盖：在制品、成品、材料、所得税税率、企业认证得分、最佳生产/服务人力总监得分、关账速度得分
 - 税率字段应限制在：`0.25 / 0.15 / 0`
+- `reportBestSalesDirectorScore`、`reportBestCeoScore`、`reportTotalEquity` 均属于 `ReportComputedPayload`，不得由客户端通过本对象直接提交覆盖
 
 ### 7.3 `StateSnapshot`
 

@@ -215,6 +215,74 @@ func TestSubmitPlayerReportCompletesFormalYearAndWritesSummary(t *testing.T) {
 	}
 }
 
+func TestGetPlayerReportViewRebuildsHistoricalDirectorScoresWithCurrentFormula(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureGameConfigExists(t, ctx, tx)
+	groupID := createFormalReportFixtures(t, ctx, tx)
+	now := time.Now()
+	createInitialBaselineRecord(t, ctx, tx, groupID, now)
+
+	operatingRepo := repository.NewOperatingRepository(tx)
+	for yearNo, orderTotal := range map[int]float64{0: 100, 1: 140} {
+		operatingPayload := payload.NewOperatingPayload()
+		operatingPayload.Beginning.TaxAndPlanning = map[string]any{
+			"orderTotal": orderTotal,
+		}
+		if err := operatingRepo.UpsertDraft(ctx, repository.UpsertOperatingDraftCommand{
+			GroupID:          groupID,
+			YearNo:           yearNo,
+			StageStatus:      enum.StageStatusYearEndOpen,
+			OperatingPayload: operatingPayload,
+			LastAutoSavedAt:  now,
+			OperatorName:     "integration-test",
+		}); err != nil {
+			t.Fatalf("upsert year %d operating draft: %v", yearNo, err)
+		}
+	}
+
+	_, queryService := buildPlayerReportServices(tx)
+	view, err := queryService.GetView(ctx, groupID, 1)
+	if err != nil {
+		t.Fatalf("load formal report view: %v", err)
+	}
+
+	computed := view.ReportComputedPayload
+	if computed.ReportBestSalesDirectorScore != 24 {
+		t.Fatalf("expected rebuilt sales director score 24, got %f", computed.ReportBestSalesDirectorScore)
+	}
+	expectedCeoScore := computed.ReportBestMarketDirectorScore +
+		computed.ReportBestTechnologyDirectorScore +
+		computed.ReportBestSalesDirectorScore +
+		computed.ReportBestCfoScore +
+		computed.ReportTotalEquity/2
+	if computed.ReportBestCeoScore != expectedCeoScore {
+		t.Fatalf("expected rebuilt CEO score %f, got %f", expectedCeoScore, computed.ReportBestCeoScore)
+	}
+
+	// 历史查询只覆盖返回的总监得分，不物理改写旧财报 JSON。
+	storedReport, err := repository.NewReportRepository(tx).FindByGroupIDAndYear(ctx, groupID, 0)
+	if err != nil {
+		t.Fatalf("reload stored demo report: %v", err)
+	}
+	var storedComputed payload.ReportComputedPayload
+	if err := json.Unmarshal(storedReport.ReportComputedPayload, &storedComputed); err != nil {
+		t.Fatalf("unmarshal stored demo report: %v", err)
+	}
+	if storedComputed.ReportBestSalesDirectorScore != 0 {
+		t.Fatalf("expected legacy stored score to remain unchanged, got %f", storedComputed.ReportBestSalesDirectorScore)
+	}
+}
+
 func TestSubmitPlayerReportAfterRollbackUsesNextHistoricalVersionAndRetrySnapshot(t *testing.T) {
 	db := openIntegrationMySQL(t)
 

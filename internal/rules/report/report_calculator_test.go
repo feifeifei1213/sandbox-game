@@ -123,7 +123,7 @@ func TestCalculateUsesInitialBaselineForDemoYear(t *testing.T) {
 	assertFloatEquals(t, result.ReportBestSalesDirectorScore, 0)
 	assertFloatEquals(t, result.ReportBestCfoBaseScore, 0)
 	assertFloatEquals(t, result.ReportBestCfoScore, 6)
-	assertFloatEquals(t, result.ReportBestCeoScore, 169)
+	assertFloatEquals(t, result.ReportBestCeoScore, 30.5)
 	assertFloatEquals(t, result.BalanceGap(), 0)
 }
 
@@ -192,7 +192,7 @@ func TestCalculateUsesPreviousReportForFormalYear(t *testing.T) {
 			ReportBestMarketDirectorBaseScore: 3,
 			ReportBestMarketDirectorScore:     3,
 			ReportBestTechnologyDirectorScore: 7,
-			ReportBestSalesDirectorScore:      100,
+			ReportBestSalesDirectorScore:      10,
 			ReportBestCfoBaseScore:            0,
 		}).
 		WithOperatingPayload(&operatingPayload).
@@ -231,10 +231,10 @@ func TestCalculateUsesPreviousReportForFormalYear(t *testing.T) {
 	assertFloatEquals(t, result.ReportBestMarketDirectorBaseScore, 23)
 	assertFloatEquals(t, result.ReportBestMarketDirectorScore, 31)
 	assertFloatEquals(t, result.ReportBestTechnologyDirectorScore, 16)
-	assertFloatEquals(t, result.ReportBestSalesDirectorScore, 240)
+	assertFloatEquals(t, result.ReportBestSalesDirectorScore, 24)
 	assertFloatEquals(t, result.ReportBestCfoBaseScore, 201.5)
 	assertFloatEquals(t, result.ReportBestCfoScore, 211.5)
-	assertFloatEquals(t, result.ReportBestCeoScore, 507.5)
+	assertFloatEquals(t, result.ReportBestCeoScore, 527.5)
 	assertFloatEquals(t, result.BalanceGap(), 0)
 }
 
@@ -303,7 +303,7 @@ func TestCalculateFormalYearAccumulatesCfoBaseAgainstDemoYearReference(t *testin
 			ReportBestMarketDirectorBaseScore: 23,
 			ReportBestMarketDirectorScore:     31,
 			ReportBestTechnologyDirectorScore: 16,
-			ReportBestSalesDirectorScore:      240,
+			ReportBestSalesDirectorScore:      24,
 			ReportBestCfoBaseScore:            201.5,
 			ReportBestCfoScore:                211.5,
 		}).
@@ -324,8 +324,10 @@ func TestCalculateFormalYearAccumulatesCfoBaseAgainstDemoYearReference(t *testin
 	}
 
 	assertFloatEquals(t, result.ReportTotalEquity, 565)
+	assertFloatEquals(t, result.ReportBestSalesDirectorScore, 38)
 	assertFloatEquals(t, result.ReportBestCfoBaseScore, 248)
 	assertFloatEquals(t, result.ReportBestCfoScore, 258)
+	assertFloatEquals(t, result.ReportBestCeoScore, 663.5)
 }
 
 func TestCalculateFormalYearDoesNotCarryForwardPreviousWorkInConstruction(t *testing.T) {
@@ -493,10 +495,10 @@ func TestCalculateDemoYearMatchesExcelFinalSample(t *testing.T) {
 	assertFloatEquals(t, result.ReportBestMarketDirectorBaseScore, 1)
 	assertFloatEquals(t, result.ReportBestMarketDirectorScore, 5)
 	assertFloatEquals(t, result.ReportBestTechnologyDirectorScore, 5)
-	assertFloatEquals(t, result.ReportBestSalesDirectorScore, 32)
+	assertFloatEquals(t, result.ReportBestSalesDirectorScore, 3.2)
 	assertFloatEquals(t, result.ReportBestCfoBaseScore, 0)
 	assertFloatEquals(t, result.ReportBestCfoScore, 2)
-	assertFloatEquals(t, result.ReportBestCeoScore, 50)
+	assertFloatEquals(t, result.ReportBestCeoScore, 44.2)
 	assertFloatEquals(t, result.BalanceGap(), 0)
 }
 

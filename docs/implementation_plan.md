@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-07-17
+> 更新日期：2026-07-20
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -20,12 +20,12 @@
 
 ## 开发执行层任务总览
 
-- 总任务数：`64`
-- 已完成：`64`
+- 总任务数：`67`
+- 已完成：`67`
 - 部分完成：`0`
 - 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I10-01 ~ I10-04 第 9 步订单数量留痕已完成文档、前后端、回退兼容、原型与测试收口`
+- 当前状态：`I11-01 ~ I11-03 总监得分公式调整已完成文档、后端权威公式、历史重建、前端预览与测试收口`
 
 ---
 
@@ -560,10 +560,20 @@
 | I10-03 | 实现生产版与贵宾版经营页录入 | P0 | 已完成 | `I10-02` | `frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/types/sandbox-game.ts`、`frontend/src/stores/player-operating.ts`、版本化标签与字典默认项 | 两版本均显示四行季度录入，锁定、草稿、提交和管理员只读查看正常；机场版不受影响 | 前端生产构建已通过 |
 | I10-04 | 回退回归、原型同步与验收 | P0 | 已完成 | `I10-02`、`I10-03` | `internal/model/payload/operating_payload_test.go`、经营计算/回退补提测试、`demo 网页/excel-combined-demo.html`、`demo 网页/player-operating-refined-demo.html`、`docs/implementation_plan.md` | 回退到目标季度后可修改并补提；旧提交/安全快照保留；旧 JSON 不伪补 `0`；数据不跨年、不影响公式；针对性 Go 测试与前端构建通过 | 全量 `go test ./...` 仅既有 `TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished` 市场龙头用例失败；排除该无关用例后全量通过 |
 
+### 9.13 I11：总监得分公式调整
+
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I11-01 | 冻结销售总监与 CEO 新公式及历史兼容口径 | P0 | 已完成 | 用户 2026-07-20 确认、`1组贵宾.xlsx`、`1组（服务）.xlsx`、现有财报递归重建机制 | `docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/calculation_rule_spec.md`、`docs/api_design.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md` | 已明确销售总监为累计订单总额整体除以 `10`，递推时仅将当年订单额除以 `10`；CEO 为五项总监最终得分合计加当前所有者权益的 `1/2`；新公式从 `0年` 追溯生效，负权益扣分，不额外取整；旧提交和快照不物理改写 | 无 |
+| I11-02 | 修改后端权威公式并兼容历史重建、回退重提 | P0 | 已完成 | `I11-01` | `internal/rules/report/report_calculator.go`、`internal/rules/report/report_calculator_test.go`、`internal/service/player_report_command_service_test.go` | `0年` 与跨年销售得分均只缩放一次；CEO 使用当年 `reportTotalEquity / 2`；历史查询、后续承接、管理员只读查看和回退重提均按新公式计算；无需数据库迁移 | 已通过规则层与历史递归重建回归；旧财报 JSON 保持不改写 |
+| I11-03 | 同步前端实时预览并完成公式回归 | P0 | 已完成 | `I11-02` | `frontend/src/types/sandbox-game.ts`、后端单元/集成测试、前端构建 | 前端不对后端销售总监得分二次除以 `10`，CEO 预览加入实时权益的一半；覆盖负权益、奇数权益小数、跨年递推、历史重建与旧数据不改写；前端构建和相关 Go 测试通过 | 完整 `go test ./...` 仍仅既有订单市场龙头用例失败；排除该无关用例后全量通过 |
+
 ### 12.1 本轮新增记录
 
 | 日期 | 记录 |
 |---|---|
+| 2026-07-20 | 任务状态：✅ 已完成；落点：`internal/rules/report/report_calculator.go`、`internal/rules/report/report_calculator_test.go`、`internal/service/player_report_command_service_test.go`、`frontend/src/types/sandbox-game.ts`、`docs/implementation_plan.md`；偏差说明：本轮完成 `I11-02 / I11-03`。后端最佳销售总监得分改为“上一年已缩放得分 + 当年订单总额 / 10”，最佳 CEO 得分在五项总监最终得分合计基础上增加当前 `reportTotalEquity / 2`；前端财报实时预览直接复用后端销售总监得分，仅给 CEO 增加实时预览权益的一半。新增规则层回归覆盖 `0年`、跨年不重复缩放、负权益扣分与小数保留；新增服务层历史重建测试验证旧 `0年` 财报 JSON 不物理改写、`1年` 查询仍按 `100/10 + 140/10 = 24` 返回新销售得分。验证：针对性规则层与历史重建测试通过，`go test ./internal/rules/report ./internal/service -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`go test ./... -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`frontend/npm.cmd run build` 通过；未排除时仍仅既有订单市场龙头集成用例失败，失败内容与本次财报公式无关。下一步：页面人工验收 `0年 / 1年` 销售得分、负权益 CEO 扣分和财报手工项变化时的 CEO 实时预览；确认后可提交本次公式改动。 |
+| 2026-07-20 | 任务状态：✅ 已完成；落点：`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/calculation_rule_spec.md`、`docs/api_design.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md`；偏差说明：本轮按用户要求只完成总监得分公式文档冻结，不修改代码、不改原始 Excel、不新增数据库字段。经只读核验 `1组贵宾.xlsx / 1组（服务）.xlsx`，原 `H27` 为从 `0年` 起累计订单总额，原 `H29` 为总监得分区合计；新规则明确销售总监得分为累计订单总额整体除以 `10`，跨年递推必须使用“上一年已缩放得分 + 当年订单总额 / 10”，CEO 在五项总监最终得分合计基础上增加当前 `K19 / reportTotalEquity` 的 `1/2`；从 `0年` 起追溯，负权益扣分，结果不额外取整，旧提交与快照不物理改写。下一步：进入 `I11-02 / I11-03` 修改后端权威公式、前端预览并补充跨年/历史/回退测试。 |
 | 2026-07-17 | 任务状态：✅ 已完成；落点：`internal/model/payload/operating_payload.go`、`internal/rules/operating/operating_validator.go`、`internal/service/manual_integer_validation.go`、`internal/http/handler/player_operating_handler.go`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/types/sandbox-game.ts`、`frontend/src/stores/player-operating.ts`、版本化标签/字典、相关测试、规则文档与 HTML 原型；偏差说明：按用户确认将生产版“下新供应链订单”和贵宾版“下新服务订单”从静态提醒改为四类型 × 四季度的非负整数手工留痕，当前季度四项必填、无订单填 `0`、按年独立、不进入公式或正式订单链；现有阶段级退回重提/恢复快照可修改并保留旧提交、安全快照和补提版本，无需数据库迁移。验证：针对性 payload、经营校验、整数校验、计算不受影响和回退补提版本测试通过；`go test ./... -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$'` 全部通过；`frontend/npm.cmd run build` 通过；完整 `go test ./...` 中既有订单市场龙头集成用例仍失败且单独复跑一致，未修改该无关订单逻辑。下一步：在页面分别用 `PRODUCTION_V1 / VIP_SERVICE_V1` 做 Q1 填 `0`、负数拦截、季度锁定和退回 Q1 后修改的人工验收。 |
 | 2026-06-12 | 任务状态：✅ 已完成；落点：`internal/service/order_template_registry.go`、`internal/service/game_edition_registry.go`、`internal/model/entity/order.go`、`migrations/mysql/0013_order_template_airport.sql`、`internal/service/order_generation_engine.go`、`internal/service/admin_order_service.go`、`internal/service/player_order_service.go`、`internal/service/dictionary_defaults.go`、`cmd/dbtool/airport_order_scenario.go`、`frontend/src/types/sandbox-game-order.ts`、`frontend/src/types/sandbox-game-admin.ts`、`frontend/src/stores/player-order.ts`、`frontend/src/stores/admin-order.ts`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/player/operating/PlayerOperatingPage.vue`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`docs/test_demo_commands.md`、`docs/airport_order_module_acceptance_checklist.md`、`docs/implementation_plan.md`；偏差说明：本轮完成 `I9-02 ~ I9-10` 首轮实现，订单模块已从固定贵宾订单升级为按当前比赛订单模板驱动；新增机场版 `AIRPORT_V1` 和 `AIRPORT_ORDER_TEMPLATE_V1`，机场订单支持数量配置、市场开关、订单池生成、市场投入、开标、选单、放弃、锁定和市场龙头联调；机场经营页和财报页仍按已确认边界只显示待接入占位，不做完整经营闭环。验证：已通过 `$env:GOCACHE='E:\project\sand box game\.go-build-cache'; go test ./...` 与 `frontend/npm.cmd run build`。下一步：按 `docs/airport_order_module_acceptance_checklist.md` 做页面人工验收，重点验证机场版 4 项投入、28 张上限、扩展字段展示、交付禁用和贵宾/生产不回归。 |
 | 2026-06-12 | 任务状态：✅ 已完成；落点：`docs/order_template_airport_plan.md`、`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/calculation_rule_spec.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md`；偏差说明：本轮仅按用户要求完成“订单模块可插拔 + 机场订单模板”多轮讨论后的文档收口，不进入代码实现。已确认新增 `AIRPORT_V1` 机场沙盘版，订单模板为国内/国际 × 窄体/宽体，每标段 `0~28`，国内默认开启、国际默认关闭；机场订单按 Excel 公式生成架次、客座率、跑道、航线、单价和总收入，订单金额按 Excel 显示口径四舍五入为整数；机场经营页和财报页 Excel 尚未提供前只做占位，不套用贵宾/生产字段，订单模块可独立联调。下一步：用户确认后从 `I9-02` 后端订单模板注册表开始实现。 |

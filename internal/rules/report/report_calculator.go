@@ -132,7 +132,9 @@ func (c *Calculator) Calculate(ctx calcctx.CalculationContext) (payload.ReportCo
 	reportBestMarketDirectorBaseScore := carryBase.previousBestMarketScore + metrics.marketCultivation
 	reportBestMarketDirectorScore := reportBestMarketDirectorBaseScore + manual.enterpriseCertificationScore
 	reportBestTechnologyDirectorScore := carryBase.previousBestTechScore + metrics.researchCost
-	reportBestSalesDirectorScore := carryBase.previousBestSalesScore + metrics.orderTotal
+	// 销售总监得分按截至当年的累计订单总额整体除以 10；
+	// 上一年得分已经完成缩放，因此递推时只缩放本年新增订单总额。
+	reportBestSalesDirectorScore := carryBase.previousBestSalesScore + metrics.orderTotal/10
 	reportBestCfoBaseScore := 0.0
 	if !ctx.IsDemoYear() {
 		// Excel 的 CFO 黄色分始终以 0 年财报权益为基线；
@@ -144,7 +146,8 @@ func (c *Calculator) Calculate(ctx calcctx.CalculationContext) (payload.ReportCo
 		reportBestTechnologyDirectorScore +
 		manual.productionHumanScore +
 		reportBestSalesDirectorScore +
-		reportBestCfoScore
+		reportBestCfoScore +
+		reportTotalEquity/2
 
 	return payload.ReportComputedPayload{
 		ReportSalesRevenue:                metrics.salesRevenue,

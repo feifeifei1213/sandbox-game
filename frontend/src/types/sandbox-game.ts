@@ -396,12 +396,14 @@ export function buildReportComputedPreview(
   const reportTotalLiabilityEquity = base.reportTotalLiability + reportTotalEquity
   const reportBestMarketDirectorScore = base.reportBestMarketDirectorBaseScore + enterpriseCertificationScore
   const reportBestCfoScore = base.reportBestCfoBaseScore + closingSpeedScore
+  // 销售总监得分已由后端按跨年累计规则完成缩放，财报手工预览只需复用该结果。
   const reportBestCeoScore =
     reportBestMarketDirectorScore +
     base.reportBestTechnologyDirectorScore +
     productionHumanScore +
     base.reportBestSalesDirectorScore +
-    reportBestCfoScore
+    reportBestCfoScore +
+    reportTotalEquity / 2
 
   return {
     ...base,
