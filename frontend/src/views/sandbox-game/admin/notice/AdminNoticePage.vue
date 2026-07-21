@@ -69,24 +69,12 @@
             </select>
           </label>
 
-          <div class="two-col-grid">
-            <label class="field">
-              <span>年份</span>
-              <select v-model.number="store.adjustmentForm.yearNo">
-                <option v-for="item in yearOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>季度</span>
-              <select v-model="store.adjustmentForm.stageCode">
-                <option value="Q1">Q1</option>
-                <option value="Q2">Q2</option>
-                <option value="Q3">Q3</option>
-                <option value="Q4">Q4</option>
-              </select>
-            </label>
-          </div>
+          <label class="field">
+            <span>年份</span>
+            <select v-model.number="store.adjustmentForm.yearNo">
+              <option v-for="item in yearOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+            </select>
+          </label>
 
           <div class="two-col-grid">
             <label class="field">
@@ -117,8 +105,8 @@
           </label>
 
           <div class="form-actions">
-            <button type="button" class="btn primary" :disabled="sendingAdjustment" @click="handleSendAdjustment">
-              {{ sendingAdjustment ? '下发中...' : '下发奖惩' }}
+            <button type="button" class="btn primary" :disabled="previewingAdjustment || sendingAdjustment" @click="handlePreviewAdjustment">
+              {{ previewingAdjustment ? '计算中...' : '预览影响' }}
             </button>
           </div>
         </div>
@@ -174,12 +162,14 @@
                 <th>类型</th>
                 <th>金额</th>
                 <th>原因</th>
+                <th>状态</th>
                 <th>发送人</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="adjustments.length === 0">
-                <td colspan="8" class="empty-row">当前还没有奖惩下发记录。</td>
+                <td colspan="10" class="empty-row">当前还没有奖惩下发记录。</td>
               </tr>
               <tr v-for="item in adjustments" :key="item.id">
                 <td>{{ formatDateTime(item.publishedAt) }}</td>
@@ -189,10 +179,62 @@
                 <td>{{ item.adjustmentType === 'REWARD' ? '奖励' : '罚款' }}</td>
                 <td class="number-cell">{{ formatAmount(item.amount) }}</td>
                 <td class="content-cell">{{ item.reason }}</td>
+                <td><span class="status-pill" :class="item.status.toLowerCase()">{{ formatAdjustmentStatus(item.status) }}</span></td>
                 <td>{{ item.operatorName }}</td>
+                <td>
+                  <button v-if="item.canVoid" type="button" class="btn small danger" :disabled="previewingAdjustment" @click="handlePreviewVoid(item.id)">作废</button>
+                  <span v-else class="muted">--</span>
+                </td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="impactPreview" class="modal-backdrop" @click.self="closeImpactPreview">
+      <section class="impact-dialog" role="dialog" aria-modal="true" aria-labelledby="impact-dialog-title">
+        <div class="panel-head dialog-head">
+          <div>
+            <strong id="impact-dialog-title">{{ previewOperation === 'CREATE' ? '确认下发奖惩' : '确认作废奖惩' }}</strong>
+            <span>系统已按目标组最新保存数据重新计算</span>
+          </div>
+          <button type="button" class="btn small" @click="closeImpactPreview">关闭</button>
+        </div>
+
+        <div class="impact-body">
+          <div v-if="impactPreview.willBankrupt" class="bankruptcy-warning">
+            本次操作将使所得税后现金小于 0。确认后会立即生成只读破产快照并将该组永久标记为破产。
+          </div>
+
+          <dl class="impact-grid">
+            <div><dt>系统归属阶段</dt><dd>{{ impactPreview.resolvedStageCode }}</dd></div>
+            <div><dt>计算依据时间</dt><dd>{{ impactPreview.calculationBasisSavedAt ? formatDateTime(impactPreview.calculationBasisSavedAt) : '尚无草稿保存时间' }}</dd></div>
+            <div><dt>税后现金（调整前）</dt><dd>{{ formatAmount(impactPreview.cashBefore) }}</dd></div>
+            <div><dt>税后现金（调整后）</dt><dd :class="{ negative: impactPreview.cashAfter < 0 }">{{ formatAmount(impactPreview.cashAfter) }}</dd></div>
+            <div><dt>税前利润（调整后）</dt><dd>{{ formatAmount(impactPreview.preTaxProfitAfter) }}</dd></div>
+            <div><dt>所得税（调整后）</dt><dd>{{ formatAmount(impactPreview.incomeTaxAfter) }}</dd></div>
+            <div><dt>净利润（调整后）</dt><dd>{{ formatAmount(impactPreview.netProfitAfter) }}</dd></div>
+            <div><dt>所有者权益（调整后）</dt><dd>{{ formatAmount(impactPreview.totalEquityAfter) }}</dd></div>
+          </dl>
+
+          <label v-if="previewOperation === 'VOID'" class="field">
+            <span>作废原因</span>
+            <textarea v-model="voidReason" rows="3" placeholder="请填写本次作废原因"></textarea>
+          </label>
+
+          <div class="dialog-actions">
+            <button type="button" class="btn" @click="closeImpactPreview">取消</button>
+            <button
+              type="button"
+              class="btn primary"
+              :class="{ danger: impactPreview.willBankrupt }"
+              :disabled="sendingAdjustment || voidingAdjustment || (previewOperation === 'VOID' && !voidReason.trim())"
+              @click="handleConfirmImpact"
+            >
+              {{ confirmButtonText }}
+            </button>
+          </div>
         </div>
       </section>
     </div>
@@ -200,17 +242,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useAdminNoticeStore } from '@/stores/admin-notice'
 import { hasFractionInput } from '@/utils/manual-integer'
+import type { AdjustmentImpactResult, AdjustmentRecordStatus } from '@/types/sandbox-game-admin'
 
 const shellStore = useAdminShellStore()
 const store = useAdminNoticeStore()
 const { config } = storeToRefs(shellStore)
-const { groups, generalNotices, adjustments, loading, sendingGeneral, sendingAdjustment, pageMessage } = storeToRefs(store)
+const { groups, generalNotices, adjustments, loading, sendingGeneral, sendingAdjustment, previewingAdjustment, voidingAdjustment, pageMessage } = storeToRefs(store)
+const impactPreview = ref<AdjustmentImpactResult | null>(null)
+const previewOperation = ref<'CREATE' | 'VOID'>('CREATE')
+const previewAdjustmentId = ref<number | null>(null)
+const voidReason = ref('')
 
 const yearOptions = computed(() => {
   const currentOpenYear = Math.max(config.value?.currentOpenYear ?? 0, 0)
@@ -218,6 +265,11 @@ const yearOptions = computed(() => {
     value: index,
     label: `${index}年`,
   }))
+})
+
+const confirmButtonText = computed(() => {
+  const action = previewOperation.value === 'CREATE' ? '下发' : '作废'
+  return impactPreview.value?.willBankrupt ? `确认${action}并执行破产判定` : `确认${action}`
 })
 
 onMounted(async () => {
@@ -256,12 +308,45 @@ async function handleSendGeneral() {
   }
 }
 
-async function handleSendAdjustment() {
+async function handlePreviewAdjustment() {
   try {
-    await store.sendAdjustmentNotice()
+    impactPreview.value = await store.previewAdjustmentNotice()
+    previewOperation.value = 'CREATE'
+    previewAdjustmentId.value = null
+    voidReason.value = ''
   } catch {
     // 页面消息由 store 统一处理。
   }
+}
+
+async function handlePreviewVoid(adjustmentId: number) {
+  try {
+    impactPreview.value = await store.previewVoidAdjustment(adjustmentId)
+    previewOperation.value = 'VOID'
+    previewAdjustmentId.value = adjustmentId
+    voidReason.value = ''
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleConfirmImpact() {
+  try {
+    if (previewOperation.value === 'CREATE') {
+      await store.sendAdjustmentNotice()
+    } else if (previewAdjustmentId.value) {
+      await store.voidAdjustmentNotice(previewAdjustmentId.value, voidReason.value.trim())
+    }
+    closeImpactPreview()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+function closeImpactPreview() {
+  impactPreview.value = null
+  previewAdjustmentId.value = null
+  voidReason.value = ''
 }
 
 function formatDateTime(value: string) {
@@ -281,6 +366,12 @@ function formatNoticeTarget(scope: string, groupName: string | null) {
 
 function formatAmount(value: number) {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function formatAdjustmentStatus(value: AdjustmentRecordStatus) {
+  if (value === 'EFFECTIVE') return '有效'
+  if (value === 'VOIDED') return '已作废'
+  return '快照失效'
 }
 </script>
 
@@ -480,6 +571,120 @@ function formatAmount(value: number) {
   color: var(--muted);
 }
 
+.btn.small {
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.btn.danger,
+.btn.primary.danger {
+  color: #ffffff;
+  border-color: #b42318;
+  background: #b42318;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.status-pill {
+  display: inline-flex;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill.effective {
+  color: #067647;
+  background: #ecfdf3;
+}
+
+.status-pill.voided,
+.status-pill.snapshot_inactive {
+  color: #667085;
+  background: #f2f4f7;
+}
+
+.modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.impact-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.24);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.impact-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.bankruptcy-warning {
+  border: 1px solid #f04438;
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #b42318;
+  background: #fef3f2;
+  line-height: 1.6;
+}
+
+.impact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.impact-grid > div {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.impact-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.impact-grid dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.impact-grid .negative {
+  color: #b42318;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 @media (max-width: 1200px) {
   .page-grid {
     grid-template-columns: 1fr;
@@ -493,6 +698,10 @@ function formatAmount(value: number) {
   }
 
   .two-col-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .impact-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -17,4 +17,5 @@ type PlayerNoticeItem struct {
 	YearNo      *int      `json:"yearNo,omitempty"`
 	StageCode   *string   `json:"stageCode,omitempty"`
 	Amount      *float64  `json:"amount,omitempty"`
+	Status      *string   `json:"status,omitempty"`
 }

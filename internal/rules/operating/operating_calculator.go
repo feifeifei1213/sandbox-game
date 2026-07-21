@@ -281,11 +281,11 @@ func extractAnnualMetrics(value payload.OperatingPayload) annualOperatingMetrics
 		),
 		extraExpensePenalty: firstNonZero(
 			lookupAnyNumber(derived, "extraExpensePenalty", "o57"),
-			sumQuarterMetric(value.Extra.IncomeAndPenalty, false, "extraExpensePenalty", "penalty", "fine", "o57"),
+			sumAdjustmentMetric(value.Extra.IncomeAndPenalty, false, "extraExpensePenalty", "penalty", "fine", "o57"),
 		),
 		extraIncomeReward: firstNonZero(
 			lookupAnyNumber(derived, "extraIncomeReward", "o58"),
-			sumQuarterMetric(value.Extra.IncomeAndPenalty, false, "extraIncomeReward", "reward", "bonus", "o58"),
+			sumAdjustmentMetric(value.Extra.IncomeAndPenalty, false, "extraIncomeReward", "reward", "bonus", "o58"),
 		),
 	}
 }
@@ -489,6 +489,11 @@ func sumQuarterMetric(source payload.OperatingQuarterMap, allowFallbackTotal boo
 		total += quarterMetric(source, quarter, allowFallbackTotal, keys...)
 	}
 	return total
+}
+
+func sumAdjustmentMetric(source payload.OperatingQuarterMap, allowFallbackTotal bool, keys ...string) float64 {
+	return sumQuarterMetric(source, allowFallbackTotal, keys...) +
+		quarterMetric(source, "YEAR_END", allowFallbackTotal, keys...)
 }
 
 func quarterMetric(source payload.OperatingQuarterMap, quarter string, allowFallbackTotal bool, keys ...string) float64 {

@@ -162,6 +162,8 @@ func writeAdminRollbackError(c *gin.Context, err error, fallback string) {
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusUnprocessableEntity, enum.UnprocessableEntityCode, "请填写确认文本：确认恢复", err))
 	case errors.Is(err, service.ErrRollbackSnapshotScopeUnsupported):
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusUnprocessableEntity, enum.UnprocessableEntityCode, "首版只支持单组快照恢复", err))
+	case errors.Is(err, service.ErrRollbackSnapshotNotRestorable):
+		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusUnprocessableEntity, enum.UnprocessableEntityCode, "该快照仅用于审计留存，不能用于恢复", err))
 	case errors.Is(err, service.ErrRollbackTargetInvalid):
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusUnprocessableEntity, enum.UnprocessableEntityCode, "回退目标不合法", err))
 	case errors.Is(err, service.ErrRollbackStateChanged), errors.Is(err, service.ErrRollbackGroupWriteLocked):

@@ -28,6 +28,8 @@
         {{ activePageMessage.text }}
       </section>
 
+      <div v-if="!previewMode && adjustmentSyncMessage" class="adjustment-sync-toast">{{ adjustmentSyncMessage }}</div>
+
       <div class="workspace">
         <main class="main-panel">
           <section class="status-banner">
@@ -157,6 +159,7 @@ const {
   submitting,
   dirty,
   pageMessage,
+  adjustmentSyncMessage,
   previewComputedPayload: storePreviewComputedPayload,
   balanceGap,
   balancePassed,
@@ -183,6 +186,7 @@ const previewPageMessage = ref<PageMessage | null>(null)
 
 let initialized = false
 let autoSaveTimer = 0
+let adjustmentSyncTimer = 0
 
 const previewMode = computed(() => {
   const raw = Array.isArray(route.query.preview) ? route.query.preview[0] : route.query.preview
@@ -320,6 +324,7 @@ const previewView = computed<PlayerReportView>(() => ({
   },
   lastDraftSavedAt: previewLastDraftSavedAt.value,
   noticeBoard: buildPreviewNoticeBoard(previewYear.value),
+  adjustmentRevision: 0,
 }))
 
 const activeConfig = computed(() => (previewMode.value ? previewConfig.value : currentConfig.value))
@@ -384,6 +389,8 @@ onMounted(async () => {
       // 自动保存失败时，store 内部会保留页面消息。
     }
   }, AUTO_SAVE_INTERVAL)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  startAdjustmentSync()
 })
 
 watch(
@@ -413,8 +420,27 @@ onBeforeUnmount(() => {
   if (autoSaveTimer) {
     window.clearInterval(autoSaveTimer)
   }
+  stopAdjustmentSync()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   dictionaryStore.stopSilentSync()
 })
+
+function startAdjustmentSync() {
+  if (previewMode.value || document.visibilityState !== 'visible' || adjustmentSyncTimer) return
+  void store.syncAdjustments()
+  adjustmentSyncTimer = window.setInterval(() => void store.syncAdjustments(), 3000)
+}
+
+function stopAdjustmentSync() {
+  if (!adjustmentSyncTimer) return
+  window.clearInterval(adjustmentSyncTimer)
+  adjustmentSyncTimer = 0
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') startAdjustmentSync()
+  else stopAdjustmentSync()
+}
 
 function readRouteYear() {
   const raw = Array.isArray(route.query.yearNo) ? route.query.yearNo[0] : route.query.yearNo
@@ -528,6 +554,19 @@ async function handleLogout() {
 </script>
 
 <style scoped>
+.adjustment-sync-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 900;
+  max-width: min(360px, calc(100vw - 32px));
+  border: 1px solid #86b7a5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #175c45;
+  background: #effaf5;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+}
 .player-page {
   min-height: 100vh;
   padding: 20px;

@@ -14,8 +14,22 @@ type AdminNoticeSendGeneralRequest struct {
 type AdminNoticeSendAdjustmentRequest struct {
 	GroupID        *int64   `json:"groupId" binding:"required"`
 	YearNo         *int     `json:"yearNo" binding:"required"`
-	StageCode      string   `json:"stageCode"`
 	AdjustmentType string   `json:"adjustmentType"`
 	Amount         *float64 `json:"amount" binding:"required"`
 	Reason         string   `json:"reason"`
+}
+
+type AdminNoticePreviewAdjustmentRequest struct {
+	Operation      string   `json:"operation"`
+	AdjustmentID   *int64   `json:"adjustmentId"`
+	GroupID        *int64   `json:"groupId"`
+	YearNo         *int     `json:"yearNo"`
+	AdjustmentType string   `json:"adjustmentType"`
+	Amount         *float64 `json:"amount"`
+	Reason         string   `json:"reason"`
+}
+
+type AdminNoticeVoidAdjustmentRequest struct {
+	AdjustmentID *int64 `json:"adjustmentId" binding:"required"`
+	Reason       string `json:"reason"`
 }

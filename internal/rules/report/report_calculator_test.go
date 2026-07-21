@@ -127,6 +127,32 @@ func TestCalculateUsesInitialBaselineForDemoYear(t *testing.T) {
 	assertFloatEquals(t, result.BalanceGap(), 0)
 }
 
+func TestCalculateIncludesYearEndAdjustmentInTaxAndEquity(t *testing.T) {
+	t.Parallel()
+	operatingPayload := payload.NewOperatingPayload()
+	operatingPayload.Extra.IncomeAndPenalty = payload.OperatingQuarterMap{
+		"q1":       {"extraIncomeReward": 5.0},
+		"year_end": {"extraExpensePenalty": 20.0, "discountExpense": 999.0},
+	}
+	taxRate := 0.25
+	manual := payload.ReportManualPayload{IncomeTaxRate: &taxRate}
+	ctx := newReportCalculationContext(0).
+		WithInitialBaseline(&payload.BaselinePayload{BaselineCash: 100, BaselineShareCapital: 50}).
+		WithOperatingPayload(&operatingPayload).
+		WithReportManualPayload(&manual)
+	result, err := NewCalculator().Calculate(ctx)
+	if err != nil {
+		t.Fatalf("calculate report year-end adjustment: %v", err)
+	}
+	assertFloatEquals(t, result.ReportExtraIncomeExpense, -15)
+	assertFloatEquals(t, result.ReportFinanceIncomeExpense, 0)
+	assertFloatEquals(t, result.ReportPreTaxProfit, -15)
+	assertFloatEquals(t, result.ReportIncomeTax, 0)
+	assertFloatEquals(t, result.ReportNetProfit, -15)
+	assertFloatEquals(t, result.ReportPostTaxCash, 85)
+	assertFloatEquals(t, result.ReportTotalEquity, 35)
+}
+
 func TestCalculateUsesPreviousReportForFormalYear(t *testing.T) {
 	t.Parallel()
 

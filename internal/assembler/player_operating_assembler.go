@@ -39,6 +39,7 @@ type PlayerOperatingView struct {
 	PeriodEndCash           float64                               `json:"periodEndCash"`
 	CarryForward            *carryforwardrules.CarryForwardResult `json:"carryForward,omitempty"`
 	NoticeBoard             *PlayerNoticeBoard                    `json:"noticeBoard"`
+	AdjustmentRevision      int64                                 `json:"adjustmentRevision"`
 }
 
 type PlayerOperatingStageSubmitHistory struct {

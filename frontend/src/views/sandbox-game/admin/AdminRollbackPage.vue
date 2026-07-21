@@ -210,6 +210,7 @@
             </div>
           </div>
           <div v-if="snapshotDetail" class="detail-panel">
+            <div v-if="!snapshotDetail.snapshot.canRestore" class="readonly-warning">该快照仅用于审计留存，不能用于恢复。</div>
             <dl>
               <div v-for="item in detailRows" :key="item.label">
                 <dt>{{ item.label }}</dt>
@@ -227,7 +228,7 @@
             <button
               type="button"
               class="danger-btn full"
-              :disabled="operating || snapshotDetail.snapshot.snapshotScope !== 'GROUP'"
+              :disabled="operating || !snapshotDetail.snapshot.canRestore"
               @click="handleRestoreSnapshot"
             >
               恢复单组快照
@@ -403,6 +404,14 @@ function formatDateTime(value?: string | null) {
 </script>
 
 <style scoped>
+.readonly-warning {
+  margin-bottom: 12px;
+  border: 1px solid #fdb022;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #93370d;
+  background: #fffaeb;
+}
 .page-content {
   display: grid;
   gap: 16px;

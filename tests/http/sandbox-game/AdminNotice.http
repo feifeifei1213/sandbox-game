@@ -1,84 +1,117 @@
 @host = http://127.0.0.1:8080
 @baseUrl = {{host}}/api/v1/sandbox-game
-@adminToken = <admin-token>
-@groupToken = <group-token>
 
-### ¹ÜÀíÔ±£º²é¿´Í¨ÖªÓë½±³Í×î½ü¼ÇÂ¼
+@adminRole = ADMIN
+@adminUserId = 1
+@adminUsername = admin
+
+@groupRole = GROUP
+@groupUserId = 101
+@groupUsername = group01
+@groupId = 1
+
+@yearNo = 0
+@adjustmentId = 1
+@knownRevision = 0
+
+### ç®¡ç†å‘˜ï¼šæŸ¥çœ‹é€šçŸ¥ä¸å¥–ç½šè®°å½•
 GET {{baseUrl}}/admin-notice/get-records?limit=20
-Authorization: Bearer {{adminToken}}
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
 
-### ¹ÜÀíÔ±£º·¢ËÍÈ«ÌåÆÕÍ¨Í¨Öª
+### ç®¡ç†å‘˜ï¼šå‘é€å…¨ä½“æ™®é€šé€šçŸ¥
 POST {{baseUrl}}/admin-notice/send-general
-Authorization: Bearer {{adminToken}}
 Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
 
 {
   "targetScope": "ALL",
-  "content": "Ö÷³ÖÈËÌáĞÑ£ºÇë¸÷×é¾¡¿ìÍê³É±¾Äê¾­ÓªÓë²Æ±¨Ìá½»¡£",
+  "content": "æ¯”èµ›è¿›åº¦æé†’ï¼šè¯·å„ç»„å°½å¿«å®Œæˆæœ¬é˜¶æ®µç»è¥ä¸è´¢æŠ¥æäº¤ã€‚",
   "pinned": true
 }
 
-### ¹ÜÀíÔ±£ºÏòµ¥×é·¢ËÍÆÕÍ¨Í¨Öª
-POST {{baseUrl}}/admin-notice/send-general
-Authorization: Bearer {{adminToken}}
+### ç®¡ç†å‘˜ï¼šé¢„è§ˆä¸‹å‘å¥–åŠ±
+### æœåŠ¡ç«¯æŒ‰ç›®æ ‡ç»„å½“å‰çŠ¶æ€è‡ªåŠ¨è¿”å› resolvedStageCodeï¼Œä¸æ¥æ”¶ stageCode
+POST {{baseUrl}}/admin-notice/preview-adjustment
 Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
 
 {
-  "targetScope": "GROUP",
-  "targetGroupId": 3,
-  "content": "µÚÈı×éÇëºË¶Ô±¾Äê¾­ÓªÊı¾İ¡£",
-  "pinned": false
-}
-
-### ¹ÜÀíÔ±£ºÏòµ¥×éÏÂ·¢½±Àø
-### Ç°Ìá£ºÄ¿±êÄê·İÒÑ¿ª·Å£¬Ä¿±ê¼¾¶ÈÉĞÎ´Ëø¶¨
-POST {{baseUrl}}/admin-notice/send-adjustment
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-  "groupId": 3,
-  "yearNo": 0,
-  "stageCode": "Q1",
+  "operation": "CREATE",
+  "groupId": {{groupId}},
+  "yearNo": {{yearNo}},
   "adjustmentType": "REWARD",
   "amount": 88,
-  "reason": "Ö÷³ÖÈËÏÖ³¡½±Àø²âÊÔ"
+  "reason": "ç°åœºç»è¥è¡¨ç°å¥–åŠ±"
 }
 
-### ¹ÜÀíÔ±£ºÏòµ¥×éÏÂ·¢·£¿î
-### Ç°Ìá£ºÄ¿±êÄê·İÒÑ¿ª·Å£¬Ä¿±ê¼¾¶ÈÉĞÎ´Ëø¶¨
+### ç®¡ç†å‘˜ï¼šæ­£å¼ä¸‹å‘å¥–åŠ±
+### æ­£å¼æ‰§è¡Œä¼šæŒ‰æœ€æ–°è‰ç¨¿å’ŒçŠ¶æ€å†æ¬¡æƒå¨é‡ç®—
 POST {{baseUrl}}/admin-notice/send-adjustment
-Authorization: Bearer {{adminToken}}
 Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
 
 {
-  "groupId": 3,
-  "yearNo": 0,
-  "stageCode": "Q1",
-  "adjustmentType": "PENALTY",
-  "amount": 66,
-  "reason": "Ö÷³ÖÈËÏÖ³¡·£¿î²âÊÔ"
+  "groupId": {{groupId}},
+  "yearNo": {{yearNo}},
+  "adjustmentType": "REWARD",
+  "amount": 88,
+  "reason": "ç°åœºç»è¥è¡¨ç°å¥–åŠ±"
 }
 
-### ¹ÜÀíÔ±£ºÑéÖ¤Ëø¶¨¼¾¶È½±³ÍÀ¹½Ø
-### Ô¤ÆÚ£º·µ»Ø 422
-POST {{baseUrl}}/admin-notice/send-adjustment
-Authorization: Bearer {{adminToken}}
+### ç©å®¶ï¼šæ£€æŸ¥å¥–ç½š revision
+### knownRevision ä¸æœåŠ¡ç«¯ä¸€è‡´æ—¶è¿”å› notModified=true
+GET {{baseUrl}}/player-notice/get-adjustment-sync?yearNo={{yearNo}}&knownRevision={{knownRevision}}
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupUserId}}
+X-Username: {{groupUsername}}
+X-Group-Id: {{groupId}}
+
+### ç®¡ç†å‘˜ï¼šé¢„è§ˆä½œåºŸå¥–ç½š
+POST {{baseUrl}}/admin-notice/preview-adjustment
 Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
 
 {
-  "groupId": 1,
-  "yearNo": 0,
-  "stageCode": "Q1",
-  "adjustmentType": "PENALTY",
-  "amount": 50,
-  "reason": "Ëø¶¨¼¾¶È²»¿ÉÖ±½Ó¸Ä½±³Í"
+  "operation": "VOID",
+  "adjustmentId": {{adjustmentId}}
 }
 
-### Íæ¼Ò£º¶ÁÈ¡¾­ÓªÒ³£¬È·ÈÏÓÒ²àÍ¨ÖªÇøÓë½±³ÍÖ»¶ÁÖµ
-GET {{baseUrl}}/player-operating/get-year-view?yearNo=0
-Authorization: Bearer {{groupToken}}
+### ç®¡ç†å‘˜ï¼šæ­£å¼ä½œåºŸå¥–ç½š
+### ä»…å¯ä½œåºŸæœªç ´äº§å°ç»„ã€å¯ç¼–è¾‘å¹´ä»½ä¸­çš„æœ‰æ•ˆå¥–ç½š
+POST {{baseUrl}}/admin-notice/void-adjustment
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
 
-### Íæ¼Ò£º¶ÁÈ¡²Æ±¨Ò³£¬È·ÈÏÓÒ²àÍ¨ÖªÇø¿É¼û
-GET {{baseUrl}}/player-report/get-view?yearNo=0
-Authorization: Bearer {{groupToken}}
+{
+  "adjustmentId": {{adjustmentId}},
+  "reason": "ç®¡ç†å‘˜ç¡®è®¤åŸå¥–ç½šå½•å…¥æœ‰è¯¯"
+}
+
+### ç®¡ç†å‘˜ï¼šé¢„è§ˆé«˜é¢ç½šæ¬¾çš„ç ´äº§é£é™©
+### è‹¥ willBankrupt=trueï¼Œåªåœ¨æ¼”ç»ƒåº“ç»§ç»­æ‰§è¡Œæ­£å¼ä¸‹å‘
+POST {{baseUrl}}/admin-notice/preview-adjustment
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "operation": "CREATE",
+  "groupId": {{groupId}},
+  "yearNo": {{yearNo}},
+  "adjustmentType": "PENALTY",
+  "amount": 1000,
+  "reason": "ç ´äº§é£é™©è”è°ƒæ ·ä¾‹"
+}

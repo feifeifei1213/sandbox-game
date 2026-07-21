@@ -57,7 +57,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 
 	authService := service.NewAuthService(accountRepo, groupRepo, cfg.Auth)
 	authHandler := handler.NewAuthHandler(authService)
-	playerNoticeService := service.NewPlayerNoticeService(noticeRepo, adjustmentRepo)
+	playerNoticeService := service.NewPlayerNoticeService(noticeRepo, adjustmentRepo, repository.NewGroupAdjustmentRevisionRepository(db))
 	orderLinkService := service.NewOrderOperatingLinkService(
 		marketBidRepo,
 		marketStateRepo,
@@ -117,6 +117,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		playerReportQueryService,
 		playerReportCommandService,
 	)
+	playerNoticeHandler := handler.NewPlayerNoticeHandler(service.NewPlayerAdjustmentSyncService(db, playerNoticeService))
 	playerOrderQueryService := service.NewPlayerOrderQueryService(
 		gameConfigRepo,
 		groupRepo,
@@ -188,6 +189,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		noticeRepo,
 		adjustmentRepo,
 		groupRepo,
+		repository.NewGroupAdjustmentRevisionRepository(db),
 	)
 	adminNoticeCommandService := service.NewAdminNoticeCommandService(db)
 	adminNoticeHandler := handler.NewAdminNoticeHandler(
@@ -252,6 +254,9 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		playerReport.PUT("/save-draft", playerReportHandler.SaveDraft)
 		playerReport.POST("/submit", playerReportHandler.Submit)
 
+		playerNotice := protected.Group("/player-notice")
+		playerNotice.GET("/get-adjustment-sync", playerNoticeHandler.GetAdjustmentSync)
+
 		playerOrder := protected.Group("/player-order")
 		playerOrder.GET("/get-year-view", playerOrderHandler.GetYearView)
 		playerOrder.GET("/get-market-forecast", playerOrderHandler.GetMarketForecast)
@@ -302,6 +307,8 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminNotice.GET("/get-records", adminNoticeHandler.GetRecords)
 		adminNotice.POST("/send-general", adminNoticeHandler.SendGeneral)
 		adminNotice.POST("/send-adjustment", adminNoticeHandler.SendAdjustment)
+		adminNotice.POST("/preview-adjustment", adminNoticeHandler.PreviewAdjustment)
+		adminNotice.POST("/void-adjustment", adminNoticeHandler.VoidAdjustment)
 
 		adminOrder := protected.Group("/admin-order")
 		adminOrder.GET("/get-forecast-control", adminOrderHandler.GetForecastControl)

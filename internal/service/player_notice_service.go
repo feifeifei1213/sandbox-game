@@ -17,16 +17,30 @@ const playerNoticeRecentLimit = 8
 type PlayerNoticeService struct {
 	noticeRepo     *repository.NoticeRepository
 	adjustmentRepo *repository.GroupAdjustmentRepository
+	revisionRepo   *repository.GroupAdjustmentRevisionRepository
 }
 
 func NewPlayerNoticeService(
 	noticeRepo *repository.NoticeRepository,
 	adjustmentRepo *repository.GroupAdjustmentRepository,
+	revisionRepos ...*repository.GroupAdjustmentRevisionRepository,
 ) *PlayerNoticeService {
+	var revisionRepo *repository.GroupAdjustmentRevisionRepository
+	if len(revisionRepos) > 0 {
+		revisionRepo = revisionRepos[0]
+	}
 	return &PlayerNoticeService{
 		noticeRepo:     noticeRepo,
 		adjustmentRepo: adjustmentRepo,
+		revisionRepo:   revisionRepo,
 	}
+}
+
+func (s *PlayerNoticeService) GetRevision(ctx context.Context, groupID int64, yearNo int) (int64, error) {
+	if s.revisionRepo == nil {
+		return 0, nil
+	}
+	return s.revisionRepo.Get(ctx, groupID, yearNo)
 }
 
 func (s *PlayerNoticeService) OverlayAdjustments(
@@ -49,7 +63,7 @@ func (s *PlayerNoticeService) BuildBoard(ctx context.Context, groupID int64, yea
 		return nil, fmt.Errorf("list notices for group: %w", err)
 	}
 
-	adjustments, err := s.adjustmentRepo.ListByGroupIDAndYear(ctx, groupID, yearNo)
+	adjustments, err := s.adjustmentRepo.ListAllByGroupIDAndYear(ctx, groupID, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list adjustments for board: %w", err)
 	}
@@ -63,16 +77,10 @@ func overlayAdjustmentValues(
 ) payload.OperatingPayload {
 	normalized := operatingPayload.Normalize()
 	rewardByQuarter := map[string]float64{
-		"q1": 0,
-		"q2": 0,
-		"q3": 0,
-		"q4": 0,
+		"q1": 0, "q2": 0, "q3": 0, "q4": 0, "year_end": 0,
 	}
 	penaltyByQuarter := map[string]float64{
-		"q1": 0,
-		"q2": 0,
-		"q3": 0,
-		"q4": 0,
+		"q1": 0, "q2": 0, "q3": 0, "q4": 0, "year_end": 0,
 	}
 
 	for _, item := range adjustments {
@@ -85,7 +93,7 @@ func overlayAdjustmentValues(
 		}
 	}
 
-	for _, quarterKey := range []string{"q1", "q2", "q3", "q4"} {
+	for _, quarterKey := range []string{"q1", "q2", "q3", "q4", "year_end"} {
 		normalized.Extra.IncomeAndPenalty[quarterKey] = ensureQuarterValueMap(normalized.Extra.IncomeAndPenalty[quarterKey])
 		normalized.Extra.IncomeAndPenalty[quarterKey]["extraIncomeReward"] = rewardByQuarter[quarterKey]
 		normalized.Extra.IncomeAndPenalty[quarterKey]["extraExpensePenalty"] = penaltyByQuarter[quarterKey]
@@ -150,6 +158,7 @@ func buildAdjustmentNoticeItem(item entity.GroupAdjustment) assembler.PlayerNoti
 	stageCode := item.StageCode
 	yearNo := item.YearNo
 	amount := item.Amount
+	status := adjustmentRecordStatus(item)
 	title := fmt.Sprintf("%d年 %s %s", item.YearNo, item.StageCode, translateAdjustmentType(item.AdjustmentType))
 
 	return assembler.PlayerNoticeItem{
@@ -162,7 +171,18 @@ func buildAdjustmentNoticeItem(item entity.GroupAdjustment) assembler.PlayerNoti
 		YearNo:      &yearNo,
 		StageCode:   &stageCode,
 		Amount:      &amount,
+		Status:      &status,
 	}
+}
+
+func adjustmentRecordStatus(item entity.GroupAdjustment) string {
+	if item.Effective {
+		return "EFFECTIVE"
+	}
+	if item.VoidedAt != nil {
+		return "VOIDED"
+	}
+	return "SNAPSHOT_INACTIVE"
 }
 
 func ensureQuarterValueMap(source map[string]any) map[string]any {

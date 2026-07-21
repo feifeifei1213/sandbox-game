@@ -560,29 +560,32 @@
             <td class="section-band band-misc" rowspan="4">其他收支</td>
             <td class="group-title" rowspan="4">额外收入 / 罚款</td>
             <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`extra-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
+            <td v-for="period in extraPeriodList" :key="`extra-head-${period.key}`" class="note-cell center">{{ period.label }}</td>
             <td class="note-cell center">总计</td>
-            <td class="empty-cell" colspan="2"></td>
+            <td class="empty-cell"></td>
           </tr>
           <tr v-for="(field, index) in extraFields" :key="`extra-${field.key}`">
             <th class="row-head">{{ 61 + index }}</th>
             <td class="note-cell">{{ field.label }}</td>
-            <td v-for="quarter in quarterList" :key="`extra-${field.key}-${quarter.key}`" :class="extraCellClass(field.key, quarter.scope)">
-              <template v-if="isAdminIssuedExtraField(field.key)">
-                <span class="cell-readonly-value">{{ displayExtraReadonlyCell(quarter.key, field.key) }}</span>
+            <td v-for="period in extraPeriodList" :key="`extra-${field.key}-${period.key}`" :class="extraCellClass(field.key, period.scope)">
+              <template v-if="field.key === 'discountExpense' && period.key === 'year_end'">
+                <span class="cell-readonly-value">--</span>
+              </template>
+              <template v-else-if="isAdminIssuedExtraField(field.key)">
+                <span class="cell-readonly-value">{{ displayExtraReadonlyCell(period.key, field.key) }}</span>
               </template>
               <template v-else>
                 <input
-                  :value="displayCell(getQuarterFieldValue('incomeAndPenalty', quarter.key, field.key))"
-                  :disabled="!isScopeEditable(quarter.scope)"
+                  :value="displayCell(getQuarterFieldValue('incomeAndPenalty', period.key, field.key))"
+                  :disabled="!isScopeEditable(period.scope)"
                   inputmode="numeric"
                   pattern="[0-9-]*"
-                  @input="updateQuarterField('incomeAndPenalty', quarter.key, field.key, $event)"
+                  @input="updateQuarterField('incomeAndPenalty', period.key, field.key, $event)"
                 />
               </template>
             </td>
-            <td class="result-cell">{{ formatNumber(getQuarterRowTotal('incomeAndPenalty', field.key)) }}</td>
-            <td class="empty-cell" colspan="2"></td>
+            <td class="result-cell">{{ formatNumber(getExtraRowTotal(field.key)) }}</td>
+            <td class="empty-cell"></td>
           </tr>
 
           <tr>
@@ -690,6 +693,10 @@ const quarterList = [
   { key: 'q2', label: '第二季度', scope: 'Q2' },
   { key: 'q3', label: '第三季度', scope: 'Q3' },
   { key: 'q4', label: '第四季度', scope: 'Q4' },
+] as const
+const extraPeriodList = [
+  ...quarterList,
+  { key: 'year_end', label: '年末', scope: 'YEAR_END' },
 ] as const
 
 const shortTermLoanFields = [
@@ -824,6 +831,9 @@ function isAdminIssuedExtraField(fieldKey: string) {
 }
 
 function extraCellClass(fieldKey: string, scope: string) {
+  if (fieldKey === 'discountExpense' && scope === 'YEAR_END') {
+    return 'not-applicable-cell'
+  }
   if (isAdminIssuedExtraField(fieldKey)) {
     return 'admin-issued-cell'
   }
@@ -1034,6 +1044,12 @@ function getQuarterFieldValue(source: string, quarterKey: string, fieldKey: stri
 
 function getQuarterRowTotal(source: string, fieldKey: string) {
   return quarterList.reduce((total, quarter) => total + toNumber(getQuarterFieldValue(source, quarter.key, fieldKey)), 0)
+}
+
+function getExtraRowTotal(fieldKey: string) {
+  const quarterTotal = getQuarterRowTotal('incomeAndPenalty', fieldKey)
+  if (!isAdminIssuedExtraField(fieldKey)) return quarterTotal
+  return quarterTotal + toNumber(getQuarterFieldValue('incomeAndPenalty', 'year_end', fieldKey))
 }
 
 function getQuarterGroupQuarterTotal(source: string, fieldKeys: readonly string[], quarterKey: string) {
@@ -1328,6 +1344,14 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   color: #526175;
   font-weight: 700;
   padding: 8px 10px;
+}
+
+.not-applicable-cell {
+  background: #f4f6f8;
+  color: #8491a6;
+  font-weight: 700;
+  padding: 8px 10px;
+  text-align: center;
 }
 
 .cell-readonly-value {

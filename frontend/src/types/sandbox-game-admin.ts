@@ -341,18 +341,27 @@ export interface AdminGeneralNoticeRecord {
   operatorName: string
 }
 
+export type AdjustmentStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEAR_END'
+export type AdjustmentRecordStatus = 'EFFECTIVE' | 'VOIDED' | 'SNAPSHOT_INACTIVE'
+
 export interface AdminAdjustmentRecord {
   id: number
   groupId: number
   groupNo: number
   groupName: string
   yearNo: number
-  stageCode: 'Q1' | 'Q2' | 'Q3' | 'Q4'
+  stageCode: AdjustmentStageCode
   adjustmentType: AdjustmentType
   amount: number
   reason: string
   publishedAt: string
   operatorName: string
+  status: AdjustmentRecordStatus
+  canVoid: boolean
+  adjustmentRevision: number
+  voidedByName: string | null
+  voidReason: string | null
+  voidedAt: string | null
 }
 
 export interface AdminNoticeRecordsResult {
@@ -379,9 +388,29 @@ export interface SendAdminGeneralNoticeResult {
 export interface SendAdminAdjustmentRequest {
   groupId: number
   yearNo: number
-  stageCode: 'Q1' | 'Q2' | 'Q3' | 'Q4'
   adjustmentType: AdjustmentType
   amount: number
+  reason: string
+}
+
+export interface AdjustmentImpactResult {
+  resolvedStageCode: AdjustmentStageCode
+  cashBefore: number
+  cashAfter: number
+  preTaxProfitAfter: number
+  incomeTaxAfter: number
+  netProfitAfter: number
+  totalEquityAfter: number
+  willBankrupt: boolean
+  calculationBasisSavedAt: string | null
+}
+
+export type PreviewAdminAdjustmentRequest =
+  | ({ operation: 'CREATE' } & SendAdminAdjustmentRequest)
+  | { operation: 'VOID'; adjustmentId: number }
+
+export interface VoidAdminAdjustmentRequest {
+  adjustmentId: number
   reason: string
 }
 
@@ -389,11 +418,22 @@ export interface SendAdminAdjustmentResult {
   adjustmentId: number
   groupId: number
   yearNo: number
-  stageCode: 'Q1' | 'Q2' | 'Q3' | 'Q4'
+  stageCode: AdjustmentStageCode
   adjustmentType: AdjustmentType
   amount: number
   reason: string
   publishedAt: string
+  adjustmentRevision: number
+  impact: AdjustmentImpactResult
+}
+
+export interface VoidAdminAdjustmentResult {
+  adjustmentId: number
+  groupId: number
+  yearNo: number
+  adjustmentRevision: number
+  voidedAt: string
+  impact: AdjustmentImpactResult
 }
 
 export interface SnapshotSummary {
@@ -410,6 +450,7 @@ export interface SnapshotSummary {
   payloadHash: string
   createdByName: string
   createdAt: string
+  canRestore: boolean
 }
 
 export interface SnapshotListResult {

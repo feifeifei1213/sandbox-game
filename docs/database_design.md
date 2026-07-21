@@ -146,7 +146,8 @@
 
 说明：
 
-- 若异常解锁回收了导致破产的那一年结果，应同步把 `business_status` 暂时恢复为 `NORMAL`，并清理对应破产标记，待重新提交后再重算。
+- `business_status = BANKRUPT` 为不可撤销覆盖态；异常解锁、恢复快照和奖惩作废均不得清理破产标记或恢复为 `NORMAL`。
+- 奖惩导致破产时，应关联保存破产快照标识或在破产快照载荷中记录 `group_id / year_no / adjustment_id`，便于管理员从组数据页追溯。
 
 ---
 
@@ -527,7 +528,7 @@
 
 #### 4.5.2 `sg_group_adjustment`
 
-用途：按 `组 + 年 + 季` 存储奖励 / 罚款记录。
+用途：按 `组 + 年 + 系统归属阶段` 存储奖励 / 罚款业务事件。
 
 关键字段建议：
 
@@ -536,14 +537,16 @@
 | `id` | BIGINT | 主键 |
 | `group_id` | BIGINT | 目标组 |
 | `year_no` | INT | 目标年份 |
-| `stage_code` | VARCHAR(16) | `Q1 / Q2 / Q3 / Q4` |
+| `stage_code` | VARCHAR(16) | `Q1 / Q2 / Q3 / Q4 / YEAR_END`；由服务端根据目标组当前状态自动写入 |
 | `adjustment_type` | VARCHAR(16) | `REWARD` / `PENALTY` |
 | `amount` | DECIMAL(18,2) | 金额 |
 | `reason` | VARCHAR(500) | 奖惩原因 |
 | `effective` | TINYINT(1) | 是否仍参与经营 / 财报 / 汇总计算 |
-| `invalidated_by_rollback_id` | BIGINT NULL | 被回退置为失效时对应回退日志 |
-| `invalid_reason` | VARCHAR(255) NULL | 失效原因 |
-| `invalidated_at` | DATETIME NULL | 失效时间 |
+| `voided_by_id` | BIGINT NULL | 作废操作管理员；原记录不可编辑或物理删除 |
+| `voided_by_name` | VARCHAR(64) NULL | 作废操作管理员名称 |
+| `void_reason` | VARCHAR(500) NULL | 作废原因 |
+| `voided_at` | DATETIME NULL | 作废时间 |
+| `invalidated_by_rollback_id` | BIGINT NULL | 仅“恢复快照”按快照时点恢复有效状态时记录；普通退回重提不得使奖惩失效 |
 | `published_at` | DATETIME | 发布时间 |
 | `operator_id` | BIGINT | 操作管理员 |
 | `operator_name` | VARCHAR(64) | 操作管理员名称 |
@@ -552,15 +555,42 @@
 关键约束：
 
 - `idx_group_year_stage(group_id, year_no, stage_code)`
-- `idx_published_at(published_at)`
+- `idx_group_year_effective(group_id, year_no, effective)`
 - `idx_adjustment_effective(effective)`
+- `idx_published_at(published_at)`
+
+补充约束：
+
+- 奖惩按税前收入 / 支出口径参与经营与财报计算。
+- 财报填写或财报草稿阶段下发的奖惩统一保存为 `YEAR_END`。
+- 普通退回重提保留全部有效奖惩；恢复快照时按快照载荷恢复 `effective` 状态。
+- 已破产小组禁止新增和作废奖惩；破产不可通过修改奖惩有效状态撤销。
+- 奖惩版本建议按 `group_id + year_no` 维护单调递增 revision，可独立建轻量版本表或使用可靠的事件序列值，不得依赖整页更新时间判断玩家端增量同步。
+
+#### 4.5.3 `sg_group_adjustment_revision`
+
+用途：维护每个小组每个年份的奖惩增量同步版本，避免作废事件无法通过奖惩主表最大 ID 被玩家端发现。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `group_id` | BIGINT | 目标小组 |
+| `year_no` | INT | 目标年份 |
+| `revision` | BIGINT | 单调递增版本，从 `0` 开始 |
+| `updated_at` | DATETIME | 最近一次下发、作废或快照有效状态恢复时间 |
+
+关键约束：
+
+- `uk_adjustment_revision_group_year(group_id, year_no)`
+- 奖惩下发、作废以及恢复快照改变奖惩有效状态时，必须在同一事务内将 revision 加 `1`。
+- 普通退回重提不改变奖惩有效状态，因此不需要增加 revision。
 
 说明：
 
-- 首版允许同一季度存在多条奖惩记录，查询层按季度聚合展示。
-- 奖惩只允许作用于尚未锁定的季度；锁定后如需修正，应走异常解锁。
-- 经营页、财报页和汇总口径只读取当前有效年份状态对应的奖惩聚合结果。
-- 单组快照回退后，目标节点之后的奖惩记录不删除，改为 `effective=0`；如仍需要生效，由管理员重新发送。
+- 同一生效阶段允许存在多条奖惩记录，查询层按阶段和类型聚合展示。
+- Q1 至 Q4、年末经营和财报草稿阶段允许奖惩；财报正式提交或年份完成后必须先退回，已破产小组永久禁止。
+- 经营页、财报页和汇总口径只读取 `effective=1` 的奖惩事件。
+- 普通退回重提不改变奖惩；恢复快照时按快照载荷恢复有效状态，并同步增加 revision。
 
 ---
 
@@ -628,7 +658,7 @@
 | `id` | BIGINT | 主键 |
 | `snapshot_scope` | VARCHAR(16) | `GROUP` / `GLOBAL` |
 | `snapshot_type` | VARCHAR(16) | `AUTO` / `MANUAL` / `SAFETY` |
-| `trigger_code` | VARCHAR(64) | 触发节点，例如 `STAGE_SUBMITTED`、`REPORT_SUBMITTED`、`ORDER_POOL_CONFIRMED`、`SEGMENT_COMPLETED`、`OPEN_NEXT_YEAR`、`BEFORE_ROLLBACK` |
+| `trigger_code` | VARCHAR(64) | 触发节点，例如 `STAGE_SUBMITTED`、`REPORT_SUBMITTED`、`ADJUSTMENT_BANKRUPTCY`、`ORDER_POOL_CONFIRMED`、`SEGMENT_COMPLETED`、`OPEN_NEXT_YEAR`、`BEFORE_ROLLBACK` |
 | `target_group_id` | BIGINT NULL | 单组快照所属组；全局快照为空 |
 | `target_year_no` | INT NULL | 快照对应年份 |
 | `target_stage_code` | VARCHAR(32) NULL | 快照对应阶段 |
@@ -648,6 +678,7 @@
 说明：
 
 - 单组快照用于恢复某个小组的阶段级状态。
+- `ADJUSTMENT_BANKRUPTCY` 为只读审计快照，不提供恢复入口；载荷至少包含关联奖惩、玩家最新已保存草稿、经营结果、财报预览、调整前后现金、破产时间和原因。
 - 全局快照用于记录订单池确认、标段完成、开放下一年等全局流程节点，首版只用于审计和后续扩展，不提供自动全局恢复。
 - 快照在本场比赛内不自动清理。
 
@@ -1071,6 +1102,7 @@
 - `sg_group` 1:N `sg_group_summary_snapshot`
 - `sg_group` 1:N `sg_notice`（按目标范围读取）
 - `sg_group` 1:N `sg_group_adjustment`
+- `sg_group` 1:N `sg_group_adjustment_revision`
 - `sg_group` 1:N `sg_group_market_bid`
 - `sg_group` 1:N `sg_market_selection_order`
 - `sg_group` 1:N `sg_group_order_selection`
@@ -1100,7 +1132,8 @@
 - `sg_group_report_submission`：`uk_group_year_report_version`
 - `sg_group_summary_snapshot`：`uk_group_year_summary`、`idx_year_no`
 - `sg_notice`：`idx_target_scope_group`、`idx_published_at`、`idx_pinned`
-- `sg_group_adjustment`：`idx_group_year_stage`、`idx_published_at`
+- `sg_group_adjustment`：`idx_group_year_stage`、`idx_group_year_effective`、`idx_adjustment_effective`、`idx_published_at`
+- `sg_group_adjustment_revision`：`uk_adjustment_revision_group_year`
 - `sg_order_generation_config`：`uk_order_generation_config`、`idx_year_market`
 - `sg_order_market_config`：`uk_order_market_config`、`idx_order_market_enabled`
 - `sg_order_pool`：`idx_order_pool_year_market`、`idx_order_pool_status`

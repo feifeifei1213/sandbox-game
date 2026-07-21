@@ -169,7 +169,12 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 		return nil, fmt.Errorf("build report notice board: %w", err)
 	}
 
-	return s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission, noticeBoard), nil
+	view := s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission, noticeBoard)
+	view.AdjustmentRevision, err = s.playerNoticeService.GetRevision(ctx, groupID, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("load adjustment revision: %w", err)
+	}
+	return view, nil
 }
 
 func (s *PlayerReportQueryService) loadReportDraftPayload(
@@ -218,6 +223,10 @@ func (s *PlayerReportQueryService) buildRetainedReportDraftView(
 		return nil, fmt.Errorf("build report notice board: %w", err)
 	}
 	view := s.assembler.Build(calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission, noticeBoard)
+	view.AdjustmentRevision, err = s.playerNoticeService.GetRevision(ctx, calcContext.Group.ID, calcContext.YearState.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("load adjustment revision: %w", err)
+	}
 	view.HasInvalidDraft = true
 	return view, nil
 }

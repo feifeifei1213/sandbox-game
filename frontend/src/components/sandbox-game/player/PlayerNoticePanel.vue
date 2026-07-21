@@ -23,7 +23,7 @@
         <strong class="notice-title">{{ resolveNoticeTitle(item) }}</strong>
         <p class="notice-content">{{ item.content || '无补充说明' }}</p>
         <p v-if="item.amount !== null && item.amount !== undefined" class="notice-meta">
-          金额：{{ formatAmount(item.amount) }}
+          金额：{{ formatAmount(item.amount) }}<span v-if="item.status"> · {{ formatAdjustmentStatus(item.status) }}</span>
         </p>
       </li>
     </ul>
@@ -82,6 +82,13 @@ function formatTime(value: string) {
 
 function formatAmount(value: number) {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+function formatAdjustmentStatus(value: string) {
+  if (value === 'EFFECTIVE') return '有效'
+  if (value === 'VOIDED') return '已作废'
+  if (value === 'SNAPSHOT_INACTIVE') return '快照失效'
+  return value
 }
 </script>
 

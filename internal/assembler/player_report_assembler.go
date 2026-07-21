@@ -31,6 +31,7 @@ type PlayerReportView struct {
 	ManualFieldOptions      PlayerReportManualFieldOptions `json:"manualFieldOptions"`
 	LastDraftSavedAt        *time.Time                     `json:"lastDraftSavedAt"`
 	NoticeBoard             *PlayerNoticeBoard             `json:"noticeBoard"`
+	AdjustmentRevision      int64                          `json:"adjustmentRevision"`
 }
 
 type PlayerReportAssembler struct{}

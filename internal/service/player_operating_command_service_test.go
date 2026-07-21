@@ -315,6 +315,17 @@ func ensureIntegrationNoticeTables(t *testing.T, db *gorm.DB) {
 			t.Fatalf("ensure I2 tables: %v", err)
 		}
 	}
+	for _, column := range []string{"VoidedByID", "VoidedByName", "VoidReason", "VoidedAt"} {
+		if db.Migrator().HasColumn(&entity.GroupAdjustment{}, column) {
+			continue
+		}
+		if err := db.Migrator().AddColumn(&entity.GroupAdjustment{}, column); err != nil {
+			t.Fatalf("ensure adjustment lifecycle column %s: %v", column, err)
+		}
+	}
+	if err := db.AutoMigrate(&entity.GroupAdjustmentRevision{}); err != nil {
+		t.Fatalf("ensure adjustment revision table: %v", err)
+	}
 }
 
 func ensureIntegrationOrderTables(t *testing.T, db *gorm.DB) {

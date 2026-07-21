@@ -10,4 +10,5 @@ var (
 	ErrRollbackConfirmRequired          = errors.New("rollback confirm required")
 	ErrRollbackStateChanged             = errors.New("rollback state changed")
 	ErrRollbackGroupWriteLocked         = errors.New("rollback group write locked")
+	ErrRollbackSnapshotNotRestorable    = errors.New("rollback snapshot not restorable")
 )

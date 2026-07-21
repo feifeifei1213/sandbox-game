@@ -700,7 +700,6 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		txAdminUnlockLogRepo := repository.NewAdminUnlockLogRepository(tx)
 		txAdminActionLogRepo := repository.NewAdminActionLogRepository(tx)
 		txRollbackLogRepo := repository.NewRollbackLogRepository(tx)
-		txAdjustmentRepo := repository.NewGroupAdjustmentRepository(tx)
 		txOrderSelectionRepo := repository.NewGroupOrderSelectionRepository(tx)
 
 		gameConfig, err := txGameConfigRepo.GetCurrent(ctx)
@@ -723,16 +722,6 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		}
 
 		businessRecovered := false
-		if shouldRecoverFromBankrupt(group, cmd.YearNo) {
-			recovered, recoverErr := txGroupRepo.RecoverFromBankrupt(ctx, cmd.GroupID, cmd.YearNo, operatorName)
-			if recoverErr != nil {
-				return fmt.Errorf("recover group from bankrupt: %w", recoverErr)
-			}
-			if recovered {
-				businessRecovered = true
-				nextState.BusinessStatus = enum.BusinessStatusNormal
-			}
-		}
 
 		stateBeforeJSON, err := json.Marshal(state.BuildSnapshot(currentState))
 		if err != nil {
@@ -791,9 +780,6 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		}
 		if err := txRollbackLogRepo.Create(ctx, rollbackLogItem); err != nil {
 			return fmt.Errorf("create unlock rollback log: %w", err)
-		}
-		if _, err := txAdjustmentRepo.MarkInvalidAfterTarget(ctx, cmd.GroupID, cmd.YearNo, rollbackTargetStageCode, rollbackLogItem.ID, reason, operatorName, now); err != nil {
-			return fmt.Errorf("invalidate adjustments after unlock: %w", err)
 		}
 		if _, err := txOrderSelectionRepo.InvalidateDeliveryAfterTarget(ctx, cmd.GroupID, cmd.YearNo, rollbackTargetStageCode, rollbackLogItem.ID, operatorName, now); err != nil {
 			return fmt.Errorf("invalidate order delivery after unlock: %w", err)

@@ -4,8 +4,10 @@ import { reactive, ref } from 'vue'
 import { listAdminGroups } from '@/api/sandbox-game/admin-group-data'
 import {
   getAdminNoticeRecords,
+  previewAdminAdjustment,
   sendAdminAdjustment,
   sendAdminGeneralNotice,
+  voidAdminAdjustment,
 } from '@/api/sandbox-game/admin-notice'
 import type {
   AdminAdjustmentRecord,
@@ -30,6 +32,8 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
   const loading = ref(false)
   const sendingGeneral = ref(false)
   const sendingAdjustment = ref(false)
+  const previewingAdjustment = ref(false)
+  const voidingAdjustment = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
 
   const generalForm = reactive({
@@ -42,7 +46,6 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
   const adjustmentForm = reactive({
     groupId: null as number | null,
     yearNo: 0,
-    stageCode: 'Q1' as 'Q1' | 'Q2' | 'Q3' | 'Q4',
     adjustmentType: 'REWARD' as AdjustmentType,
     amount: '',
     reason: '',
@@ -103,13 +106,7 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
   }
 
   async function sendAdjustmentNotice() {
-    if (hasFractionInput(adjustmentForm.amount)) {
-      pageMessage.value = {
-        type: 'error',
-        text: '奖惩金额必须填写整数',
-      }
-      return
-    }
+    validateAdjustmentAmount()
     sendingAdjustment.value = true
     pageMessage.value = null
     try {
@@ -117,7 +114,6 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
       const result = await sendAdminAdjustment({
         groupId: adjustmentForm.groupId ?? 0,
         yearNo: adjustmentForm.yearNo,
-        stageCode: adjustmentForm.stageCode,
         adjustmentType: adjustmentForm.adjustmentType,
         amount,
         reason: adjustmentForm.reason,
@@ -137,6 +133,70 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
     }
   }
 
+  async function previewAdjustmentNotice() {
+    validateAdjustmentAmount()
+    previewingAdjustment.value = true
+    pageMessage.value = null
+    try {
+      return await previewAdminAdjustment({
+        operation: 'CREATE',
+        groupId: adjustmentForm.groupId ?? 0,
+        yearNo: adjustmentForm.yearNo,
+        adjustmentType: adjustmentForm.adjustmentType,
+        amount: Number(adjustmentForm.amount),
+        reason: adjustmentForm.reason,
+      })
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '预览奖惩影响失败')
+      throw error
+    } finally {
+      previewingAdjustment.value = false
+    }
+  }
+
+  async function previewVoidAdjustment(adjustmentId: number) {
+    previewingAdjustment.value = true
+    pageMessage.value = null
+    try {
+      return await previewAdminAdjustment({ operation: 'VOID', adjustmentId })
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '预览作废影响失败')
+      throw error
+    } finally {
+      previewingAdjustment.value = false
+    }
+  }
+
+  async function voidAdjustmentNotice(adjustmentId: number, reason: string) {
+    voidingAdjustment.value = true
+    pageMessage.value = null
+    try {
+      const result = await voidAdminAdjustment({ adjustmentId, reason })
+      await refreshRecords({ silent: true })
+      pageMessage.value = { type: 'success', text: `奖惩已作废，时间 ${formatDateTime(result.voidedAt)}` }
+      return result
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '作废奖惩失败')
+      throw error
+    } finally {
+      voidingAdjustment.value = false
+    }
+  }
+
+  function validateAdjustmentAmount() {
+    const raw = adjustmentForm.amount
+    if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) <= 0) {
+      const error = new Error('奖惩金额必须填写大于 0 的整数')
+      pageMessage.value = toErrorMessage(error, error.message)
+      throw error
+    }
+    if (hasFractionInput(raw)) {
+      const error = new Error('奖惩金额必须填写整数')
+      pageMessage.value = toErrorMessage(error, error.message)
+      throw error
+    }
+  }
+
   return {
     groups,
     generalNotices,
@@ -144,6 +204,8 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
     loading,
     sendingGeneral,
     sendingAdjustment,
+    previewingAdjustment,
+    voidingAdjustment,
     pageMessage,
     generalForm,
     adjustmentForm,
@@ -151,6 +213,9 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
     refreshRecords,
     sendGeneral,
     sendAdjustmentNotice,
+    previewAdjustmentNotice,
+    previewVoidAdjustment,
+    voidAdjustmentNotice,
   }
 })
 

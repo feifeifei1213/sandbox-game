@@ -11,6 +11,10 @@ type GroupAdjustment struct {
 	Amount                  float64    `gorm:"column:amount"`
 	Reason                  string     `gorm:"column:reason"`
 	Effective               bool       `gorm:"column:effective"`
+	VoidedByID              *int64     `gorm:"column:voided_by_id"`
+	VoidedByName            *string    `gorm:"column:voided_by_name"`
+	VoidReason              *string    `gorm:"column:void_reason"`
+	VoidedAt                *time.Time `gorm:"column:voided_at"`
 	InvalidatedByRollbackID *int64     `gorm:"column:invalidated_by_rollback_id"`
 	InvalidReason           *string    `gorm:"column:invalid_reason"`
 	InvalidatedAt           *time.Time `gorm:"column:invalidated_at"`

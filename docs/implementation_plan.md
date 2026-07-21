@@ -25,7 +25,7 @@
 - 部分完成：`0`
 - 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I11-01 ~ I11-03 总监得分公式调整已完成文档、后端权威公式、历史重建、前端预览与测试收口`
+- 当前状态：`I12-01 ~ I12-06 已完成；待用户按验收清单继续业务场景复测`
 
 ---
 
@@ -82,7 +82,7 @@
 | Q1/Q2/Q3/Q4/年末分别提交 | P0 | ??? | 用户确认 | 在状态机和按钮行为里落地 |
 | 经营页自动保存草稿，提交为单独动作 | P0 | ??? | 用户确认；采用每 5 分钟自动保存草稿的轻量方案 | 后续只需在正式需求中写清“草稿保存 vs 正式提交”的区别 |
 | 经营页展示黄色“季末现金核对”区域，供玩家线下自行核对 | P0 | ??? | 用户确认 + 最新版 Excel 已体现 | 在正式需求、接口说明和前端 demo 中保持一致口径 |
-| 玩家端通知区置于右侧工作栏顶部；普通通知由管理员发送；奖励/罚款改为管理员按组/年/季下发，玩家只读 | P0 | ??? | 用户确认（2026-03-31）；后端、前端、迁移与测试已落地 | 后续只做细节迭代，不再作为首版阻塞项 |
+| 玩家端通知区置于右侧工作栏顶部；普通通知由管理员发送；奖励/罚款由管理员按组/年下发，系统自动归属阶段，玩家只读 | P0 | ✅ | `I12-01 ~ I12-06` 已完成 | 按 `docs/adjustment_module_acceptance_checklist.md` 做业务场景复测 |
 
 ### 2.3 玩家端财报页
 
@@ -374,7 +374,7 @@
   - 下一步：在 `M2-12` 中把“查看组数据 + 异常解锁”串成完整管理操作流。
 - `M2-06`：已完成
   - 落点：`internal/http/dto/admin_control_dto.go`、`internal/http/handler/admin_control_handler.go`、`internal/service/admin_control_command_service.go`、`internal/repository/admin_unlock_log_repository.go`、`internal/repository/group_repository.go`、`internal/repository/report_repository.go`、`internal/repository/summary_snapshot_repository.go`、`internal/app/router.go`、`internal/service/admin_control_command_service_test.go`
-  - 偏差说明：本轮已补齐 `admin-control/unlock-year` 首版闭环，服务端会校验“下一年是否已开放、原因是否为空、当前年份是否仍处于可编辑态”；解锁时会回收财报提交状态、撤回汇总快照，并在命中破产年份时恢复该组 `NORMAL` 状态，同时写入 `sg_admin_unlock_log` 与 `sg_admin_action_log`。当前仍不支持“回滚到某个历史季度快照”的精细回退，只支持最小结果回收后由玩家重新提交。
+  - 偏差说明：本轮当时已补齐 `admin-control/unlock-year` 首版闭环，既有代码在命中破产年份时会恢复该组 `NORMAL` 状态；该历史实现已被 2026-07-20 的 `I12-01` 新口径取代，后续 `I12-02 ~ I12-06` 必须移除破产恢复路径，改为不可撤销破产。其余财报提交回收、汇总撤回与审计日志能力继续复用。
   - 下一步：在 `M2-12` 中把解锁弹窗、组数据页和操作反馈联调到正式前端。
 - `M2-07`：已完成
   - 落点：`frontend/package.json`、`frontend/src/router/index.ts`、`frontend/src/stores/player-operating.ts`、`frontend/src/views/sandbox-game/player/operating/PlayerOperatingPage.vue`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/OperatingSidebar.vue`
@@ -515,13 +515,13 @@
 
 | Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
 |---|---|---|---|---|---|---|---|
-| I7-01 | 明确回退与快照正式规则口径 | P0 | 已完成 | 用户 2026-05-27 确认、`I1` 异常解锁、订单模块已落地口径 | `docs/requirements_spec.md`、`docs/minimal_state_machine.md`、`docs/api_design.md`、`docs/database_design.md`、`docs/calculation_rule_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/implementation_plan.md` | 已明确管理员端统一 `回退与修正` 入口，包含 `退回重提` 和 `恢复快照`；首版只做单组阶段级快照恢复，不做字段级回退，不做系统自动全局恢复；回退保留旧经营页和财报页数据为失效草稿；订单不释放、不重排、不重算龙头；奖惩和汇总按目标节点之后失效；普通通知不回退；存在回退补提 / 待重提小组时不能开放下一年 | 已完成文档沉淀，本轮不进入代码实现 |
+| I7-01 | 明确回退与快照正式规则口径 | P0 | 已完成 | 用户 2026-05-27 确认、`I1` 异常解锁、订单模块已落地口径 | `docs/requirements_spec.md`、`docs/minimal_state_machine.md`、`docs/api_design.md`、`docs/database_design.md`、`docs/calculation_rule_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/implementation_plan.md` | 已明确管理员端统一 `回退与修正` 入口及单组阶段级快照恢复；2026-07-20 奖惩和破产子口径由 `I12-01` 更新为“普通退回保留奖惩、快照恢复奖惩状态、破产不可撤销”，其余订单、汇总和补提规则保持 | 已完成；奖惩与破产以 I12 最新规则为准 |
 | I7-02 | 建立状态快照、回退日志与失效标记模型 | P0 | 已完成 | `I7-01` | `migrations/mysql/0011_rollback_snapshot.sql`、`cmd/dbtool/main.go`、`scripts/build-competition-package.ps1`、`internal/model/entity/state_snapshot.go`、`internal/model/entity/group_year_state.go`、`internal/model/entity/group_summary_snapshot.go`、`internal/model/entity/group_adjustment.go`、`internal/model/entity/admin_unlock_log.go`、`internal/model/entity/order.go`、`internal/enum/rollback.go`、`internal/repository/rollback_repository.go`、`internal/repository/rollback_stage.go`、相关仓储与测试兜底、`internal/service/rollback_errors.go` | 已新增状态快照主表、快照载荷表、回退日志表；补齐年份状态、汇总、奖惩、订单交付、异常解锁日志的回退/失效字段；`dbtool` 与正式打包脚本已纳入 `0011` 迁移；奖惩和订单交付新增默认生效与失效标记仓储方法；迁移和测试辅助均支持现有测试库补列 | 已通过 `GOCACHE=.go-build-cache go test ./...`；本轮只完成模型层，不实现自动快照生成、恢复服务或管理端页面 |
 | I7-03 | 实现自动快照生成服务 | P0 | 已完成 | `I7-02` | `internal/service/rollback_snapshot_service.go`、自动触发点接入、`internal/model/entity/state_snapshot.go` | 经营阶段提交、财报提交、退回前、订单池确认、标段完成、开放下一年均能生成对应快照；快照载荷可用于审计和单组恢复 | 已通过 `go test ./...` 与前端构建 |
 | I7-04 | 实现单组快照恢复服务 | P0 | 已完成 | `I7-02`、`I7-03` | `internal/service/admin_rollback_service.go`、`internal/http/handler/admin_rollback_handler.go`、`internal/http/dto/admin_rollback_dto.go`、`internal/app/router.go` | 管理员可选择单组快照恢复到目标阶段；系统生成安全快照，目标节点之后结果失效但保留；订单归属不释放；回退日志与待重提状态落库 | 已通过 `go test ./...` |
 | I7-05 | 实现管理员端“回退与修正”页面 | P1 | 已完成 | `I7-04` | `frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`frontend/src/stores/admin-rollback.ts`、`frontend/src/api/sandbox-game/admin-rollback.ts`、管理员路由与导航 | 管理员可在统一页面执行退回重提、查询快照、创建手动快照、恢复单组快照，并看到风险提示与操作结果 | 已通过 `npm run build` |
 | I7-06 | 接入年度控制阻断、玩家提示与汇总待重提展示 | P0 | 已完成 | `I7-04`、`I7-05` | `internal/service/admin_control_query_service.go`、`internal/service/admin_summary_query_service.go`、玩家经营/财报视图、汇总页 | 存在回退补提 / 待重提小组时管理员不能开放下一年；玩家端提示被回退到的年份阶段；汇总页对失效结果显示 `待重提` 且不计入排名 | 已通过 `go test ./...` 与 `npm run build` |
-| I7-07 | 回归测试与人工验收清单 | P0 | 已完成 | `I7-02` ~ `I7-06` | `docs/rollback_module_acceptance_checklist.md`、服务层与前端构建验证 | 覆盖本年退回重提、跨年单组快照恢复、订单不释放、奖惩失效、汇总待重提、破产恢复、开放下一年阻断等关键场景 | 已补人工验收清单 |
+| I7-07 | 回归测试与人工验收清单 | P0 | 已完成 | `I7-02` ~ `I7-06` | `docs/rollback_module_acceptance_checklist.md`、服务层与前端构建验证 | 覆盖本年退回重提、跨年单组快照恢复、订单不释放、汇总待重提、开放下一年阻断；奖惩保留/快照恢复与破产不可撤销的新回归已由 `I12-06` 补齐 | 无 |
 
 ### 9.10 I8：赛前配置中心与业务显示字典
 
@@ -568,10 +568,23 @@
 | I11-02 | 修改后端权威公式并兼容历史重建、回退重提 | P0 | 已完成 | `I11-01` | `internal/rules/report/report_calculator.go`、`internal/rules/report/report_calculator_test.go`、`internal/service/player_report_command_service_test.go` | `0年` 与跨年销售得分均只缩放一次；CEO 使用当年 `reportTotalEquity / 2`；历史查询、后续承接、管理员只读查看和回退重提均按新公式计算；无需数据库迁移 | 已通过规则层与历史递归重建回归；旧财报 JSON 保持不改写 |
 | I11-03 | 同步前端实时预览并完成公式回归 | P0 | 已完成 | `I11-02` | `frontend/src/types/sandbox-game.ts`、后端单元/集成测试、前端构建 | 前端不对后端销售总监得分二次除以 `10`，CEO 预览加入实时权益的一半；覆盖负权益、奇数权益小数、跨年递推、历史重建与旧数据不改写；前端构建和相关 Go 测试通过 | 完整 `go test ./...` 仍仅既有订单市场龙头用例失败；排除该无关用例后全量通过 |
 
+### 9.14 I12：奖罚任意时段、年末重算与不可撤销破产
+
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I12-01 | 冻结奖罚阶段归属、作废、静默同步与破产口径 | P0 | 已完成 | 用户 2026-07-20 确认、现有通知奖惩与回退链路 | `docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/minimal_state_machine.md`、`docs/api_design.md`、`docs/database_design.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md` | 已明确系统自动归属当前季度或 `YEAR_END`、财报草稿阶段可下发、正式提交后需先退回、折现费无年末字段、税前重算、下发/作废影响预览、3 秒静默局部同步、普通退回保留奖罚、快照恢复奖罚状态、破产快照不算正式财报且破产不可撤销 | 无 |
+| I12-02 | 扩展奖罚事件存储、阶段解析与作废能力 | P0 | 已完成 | `I12-01` | `migrations/mysql/0015_adjustment_lifecycle.sql`、奖罚 Entity/Repository、`sg_group_adjustment_revision`、阶段解析与动作日志 | 已支持 `YEAR_END`、有效/已作废状态、完整作废审计和按组年单调 revision；阶段仅按服务端当前状态解析，忽略旧调用方传入阶段 | 无 |
+| I12-03 | 实现影响预览、下发/作废权威重算与破产快照 | P0 | 已完成 | `I12-02`、经营/财报规则层、状态机 | `adjustment_impact_service.go`、`adjustment_bankruptcy_service.go`、preview/send/void 接口与破产快照载荷 | 下发与作废均可预览且正式执行再次权威重算；税后现金小于 `0` 时同事务标记不可撤销破产并生成 `ADJUSTMENT_BANKRUPTCY` 非正式只读快照 | 无 |
+| I12-04 | 扩展经营/财报计算与玩家只读展示 | P0 | 已完成 | `I12-03` | operating/report calculator、玩家 DTO、`OperatingSheet.vue`、通知明细 | `YEAR_END` 只进入年度总计、年末现金和财报，不改变 Q1~Q4 季末现金；折现费年末为 `--`；奖罚汇总和有效/已作废/快照失效状态只读展示 | 无 |
+| I12-05 | 实现管理员交互与玩家静默局部同步 | P0 | 已完成 | `I12-03`、`I12-04` | `AdminNoticePage.vue`、管理员 API/store、`PlayerAdjustmentSyncService`、玩家经营/财报局部同步 | 管理员支持下发/作废预览和破产警告；玩家页面可见时每 3 秒检查，隐藏暂停、恢复立即检查；只合并奖罚和派生结果，不调用整页刷新 | 无 |
+| I12-06 | 补奖罚、回退、破产与用户体验专项回归 | P0 | 已完成 | `I12-02 ~ I12-05` | Go 专项测试、`tests/http/sandbox-game/AdminNotice.http`、`docs/adjustment_module_acceptance_checklist.md`、前端构建与页面验收 | 自动化覆盖阶段归属、正式提交锁定、revision、作废审计、普通退回保留、快照恢复、下发/作废破产、只读快照、破产冻结；浏览器验证预览弹窗、年末列、折现费 `--`、3 秒轮询不改变焦点/滚动/路由，控制台无错误 | 无；正式下发破产奖罚未在共享演练库点击确认，破产事务由集成测试覆盖 |
+
 ### 12.1 本轮新增记录
 
 | 日期 | 记录 |
 |---|---|
+| 2026-07-21 | 任务状态：✅ 已完成；落点：`migrations/mysql/0015_adjustment_lifecycle.sql`、奖罚生命周期 Entity/Repository、`internal/service/adjustment_*`、`internal/service/player_adjustment_sync_service.go`、管理员通知与玩家经营/财报前端、`tests/http/sandbox-game/AdminNotice.http`、`docs/adjustment_module_acceptance_checklist.md`、`docs/testing_guide.md`；偏差说明：`I12-02 ~ I12-06` 已按冻结口径完成。实现包括服务端自动阶段归属、下发/作废前影响预览与执行时再次权威重算、税前奖罚重算、`YEAR_END` 年末列、作废审计、组年 revision、3 秒玩家局部同步、不可恢复的 `ADJUSTMENT_BANKRUPTCY` 破产快照、普通退回保留奖罚、快照恢复奖罚状态且破产不可撤销。验证：`go test ./... -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`frontend/npm.cmd run build` 通过，`git diff --check` 通过；未排除时仍仅既有订单市场龙头用例失败，与 I12 无关。浏览器已验证管理员页无季度选择、Q1 自动归属、完整影响预览和破产警告，玩家经营页年末列/折现费 `--`，3 秒轮询后焦点、值、滚动、路由与年份保持不变，玩家财报通知区正常且控制台无错误。为避免污染共享演练库，未点击会永久破产的正式确认按钮；该事务由下发/作废破产集成测试覆盖。下一步：用户可按 `docs/adjustment_module_acceptance_checklist.md` 在独立演练库继续完整业务场景复测。 |
+| 2026-07-20 | 任务状态：✅ 已完成；落点：`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/minimal_state_machine.md`、`docs/api_design.md`、`docs/database_design.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md`；偏差说明：本轮只完成 `I12-01` 文档收口，不修改代码、数据库迁移或原始 Excel。已确认管理员可在 Q1~Q4、年末经营和财报草稿阶段下发奖罚，系统自动归属当前阶段，财报阶段统一归属 `YEAR_END`；折现费用不增加年末字段；奖罚按税前收入/支出口径重算；下发和作废前均显示影响预览；玩家端采用 3 秒 revision 静默局部同步且不得刷新跳顶或覆盖未保存输入；普通退回保留奖罚，恢复快照按快照恢复有效状态；奖罚导致现金小于 0 时生成不计入正式财报、汇总和排名的破产快照，破产不可撤销且破产后奖罚冻结。下一步：从 `I12-02` 开始扩展存储、阶段解析和作废能力。 |
 | 2026-07-20 | 任务状态：✅ 已完成；落点：`internal/rules/report/report_calculator.go`、`internal/rules/report/report_calculator_test.go`、`internal/service/player_report_command_service_test.go`、`frontend/src/types/sandbox-game.ts`、`docs/implementation_plan.md`；偏差说明：本轮完成 `I11-02 / I11-03`。后端最佳销售总监得分改为“上一年已缩放得分 + 当年订单总额 / 10”，最佳 CEO 得分在五项总监最终得分合计基础上增加当前 `reportTotalEquity / 2`；前端财报实时预览直接复用后端销售总监得分，仅给 CEO 增加实时预览权益的一半。新增规则层回归覆盖 `0年`、跨年不重复缩放、负权益扣分与小数保留；新增服务层历史重建测试验证旧 `0年` 财报 JSON 不物理改写、`1年` 查询仍按 `100/10 + 140/10 = 24` 返回新销售得分。验证：针对性规则层与历史重建测试通过，`go test ./internal/rules/report ./internal/service -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`go test ./... -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`frontend/npm.cmd run build` 通过；未排除时仍仅既有订单市场龙头集成用例失败，失败内容与本次财报公式无关。下一步：页面人工验收 `0年 / 1年` 销售得分、负权益 CEO 扣分和财报手工项变化时的 CEO 实时预览；确认后可提交本次公式改动。 |
 | 2026-07-20 | 任务状态：✅ 已完成；落点：`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/calculation_rule_spec.md`、`docs/api_design.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md`；偏差说明：本轮按用户要求只完成总监得分公式文档冻结，不修改代码、不改原始 Excel、不新增数据库字段。经只读核验 `1组贵宾.xlsx / 1组（服务）.xlsx`，原 `H27` 为从 `0年` 起累计订单总额，原 `H29` 为总监得分区合计；新规则明确销售总监得分为累计订单总额整体除以 `10`，跨年递推必须使用“上一年已缩放得分 + 当年订单总额 / 10”，CEO 在五项总监最终得分合计基础上增加当前 `K19 / reportTotalEquity` 的 `1/2`；从 `0年` 起追溯，负权益扣分，结果不额外取整，旧提交与快照不物理改写。下一步：进入 `I11-02 / I11-03` 修改后端权威公式、前端预览并补充跨年/历史/回退测试。 |
 | 2026-07-17 | 任务状态：✅ 已完成；落点：`internal/model/payload/operating_payload.go`、`internal/rules/operating/operating_validator.go`、`internal/service/manual_integer_validation.go`、`internal/http/handler/player_operating_handler.go`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/types/sandbox-game.ts`、`frontend/src/stores/player-operating.ts`、版本化标签/字典、相关测试、规则文档与 HTML 原型；偏差说明：按用户确认将生产版“下新供应链订单”和贵宾版“下新服务订单”从静态提醒改为四类型 × 四季度的非负整数手工留痕，当前季度四项必填、无订单填 `0`、按年独立、不进入公式或正式订单链；现有阶段级退回重提/恢复快照可修改并保留旧提交、安全快照和补提版本，无需数据库迁移。验证：针对性 payload、经营校验、整数校验、计算不受影响和回退补提版本测试通过；`go test ./... -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$'` 全部通过；`frontend/npm.cmd run build` 通过；完整 `go test ./...` 中既有订单市场龙头集成用例仍失败且单独复跑一致，未修改该无关订单逻辑。下一步：在页面分别用 `PRODUCTION_V1 / VIP_SERVICE_V1` 做 Q1 填 `0`、负数拦截、季度锁定和退回 Q1 后修改的人工验收。 |
@@ -663,6 +676,7 @@
 | 2026-06-16 | 任务状态：✅ 已完成；落点：`internal/repository/operating_repository.go`、`internal/repository/report_repository.go`、`internal/service/player_operating_command_service.go`、`internal/service/player_report_command_service.go`、`internal/enum/rollback.go`、`internal/service/player_operating_command_service_test.go`、`internal/service/player_report_command_service_test.go`、`docs/implementation_plan.md`；偏差说明：用户复测回退后重新提交 `1年财报` 时，页面平衡差额为 `0` 但提交接口返回 `500`。排查确认风险点在回退后保留历史提交流水，而年度状态恢复到旧提交版本，重新提交可能撞上 `group/year/version` 唯一键。本轮不删除历史流水，改为经营阶段和财报提交均基于历史最大提交版本递增；当提交前处于 `rollback_pending` 时，自动快照 trigger 改为 `ROLLBACK_STAGE_RESUBMITTED / ROLLBACK_REPORT_RESUBMITTED`，描述显示“回退后重新提交...自动快照”，便于管理员区分首次提交与补提快照。验证：已通过 `GOCACHE=.go-build-cache go test ./internal/service -run "TestSubmit(PlayerReport|OperatingStage)|TestReportViewsForRollback|TestOperatingViewForRollback|TestFindEffective"` 与 `GOCACHE=.go-build-cache go test ./internal/service/...`。下一步：重启后端后复测第二小组从 `1年 Q1` 补提到 `1年财报`，确认接口不再 500，且回退与修正页面能看到补提生成的新自动快照。 |
 | 2026-06-16 | 任务状态：✅ 已完成；落点：`frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`docs/api_design.md`、`docs/rollback_module_acceptance_checklist.md`、`docs/implementation_plan.md`；偏差说明：用户确认回退重提重新提交也需要产生快照，并且页面要能看出是重新提交产生。本轮在管理员 `回退与修正 -> 恢复快照` 列表新增快照说明列，详情中新增生成节点和快照说明；新增 trigger 前端中文映射 `ROLLBACK_STAGE_RESUBMITTED = 回退补提经营`、`ROLLBACK_REPORT_RESUBMITTED = 回退补提财报`，并同步接口文档与验收清单。验证：已通过 `frontend/npm.cmd run build`。下一步：重启前后端后，在回退待重提状态下分别重提经营阶段和财报，确认快照列表显示补提节点与说明。 |
 | 2026-06-17 | 任务状态：✅ 已完成；落点：`frontend/src/views/sandbox-game/admin/group-data/AdminGroupDataPage.vue`、`frontend/src/stores/admin-group-data.ts`、`frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`frontend/src/components/sandbox-game/admin/AdminNav.vue`、`internal/service/admin_control_command_service.go`、`internal/http/handler/admin_control_handler.go`、`docs/implementation_plan.md`；偏差说明：本轮按用户确认统一功能使用位置，组数据页只保留按组 / 年 / 页面类型只读查看，删除原“异常解锁”按钮、侧栏、弹窗和最近解锁记录；退回重提继续统一在 `回退与修正` 页面发起，且无需填写原因，原因为空时仍由后端默认记录为 `管理员退回重提`；同步移除后端未使用的“解锁原因必填”错误口径残留；不改变恢复快照仍需填写原因的规则。验证：已通过 `npm.cmd run build` 与 `GOCACHE=E:\project\sand box game\.go-build-cache go test ./internal/service -run TestEnsureUnlock -count=1`。下一步：重启前后端后，在页面确认组数据页无退回入口、回退与修正页退回重提原因可空。 |
+| 2026-06-18 | 任务状态：✅ 已完成；落点：`frontend/src/views/sandbox-game/player/operating/PlayerOperatingPage.vue`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/components/sandbox-game/player/OperatingSidebar.vue`、`frontend/src/components/sandbox-game/player/ReportSidebar.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`docs/implementation_plan.md`；偏差说明：按用户要求清理玩家端页面中的解释性描述文案，删除经营页、财报页、订单页及侧栏中的说明句，仅保留必要标题、状态与交互控件，不改规则与接口；验证：已通过 `frontend/npm.cmd run build`；下一步：如后续还有同类描述文案，可继续按页面范围批量清理。 |
 
 
 

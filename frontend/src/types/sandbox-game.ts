@@ -12,6 +12,7 @@ export interface PlayerNoticeItem {
   yearNo?: number | null
   stageCode?: string | null
   amount?: number | null
+  status?: 'EFFECTIVE' | 'VOIDED' | 'SNAPSHOT_INACTIVE' | null
 }
 
 export interface PlayerNoticeBoard {
@@ -33,6 +34,21 @@ export interface CurrentGameConfigResult {
   processRuleVersion: string
   dictionaryRevision: number
   demoYearEnabled: boolean
+}
+
+export interface PlayerAdjustmentSyncResult {
+  notModified: boolean
+  adjustmentRevision: number
+  incomeAndPenalty?: QuarterValueMap
+  derivedValues?: Record<string, number>
+  quarterCashChecks?: Record<string, number>
+  periodEndCash?: number
+  reportComputedPayload?: ReportComputedPayload
+  balanceGap?: number
+  balanceCheckPassed?: boolean
+  noticeBoard?: PlayerNoticeBoard | null
+  businessStatus?: string
+  bankrupt?: boolean
 }
 
 export interface YearTabItem {
@@ -126,6 +142,7 @@ export interface PlayerOperatingView {
   periodEndCash: number
   carryForward?: OperatingCarryForward | null
   noticeBoard: PlayerNoticeBoard | null
+  adjustmentRevision: number
 }
 
 export interface SaveDraftRequest {
@@ -273,6 +290,7 @@ export interface PlayerReportView {
   manualFieldOptions: PlayerReportManualFieldOptions
   lastDraftSavedAt: string | null
   noticeBoard: PlayerNoticeBoard | null
+  adjustmentRevision: number
 }
 
 export interface SavePlayerReportDraftRequest {

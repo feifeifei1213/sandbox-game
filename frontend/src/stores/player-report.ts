@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { getCurrentGameConfig, getYearTabs } from '@/api/sandbox-game/game-config'
+import { getPlayerAdjustmentSync } from '@/api/sandbox-game/player-notice'
 import { getPlayerReportView, savePlayerReportDraft, submitPlayerReport } from '@/api/sandbox-game/player-report'
 import { resolveReportRequiredFieldLabels } from '@/configs/sandbox-game-service-labels'
 import { hasFractionInput } from '@/utils/manual-integer'
@@ -12,6 +13,7 @@ import {
   reportBalanceGap,
   type CurrentGameConfigResult,
   type PlayerReportView,
+  type PlayerAdjustmentSyncResult,
   type ReportManualPayload,
   type YearTabItem,
   type YearTabsResult,
@@ -38,6 +40,8 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
   const submitting = ref(false)
   const dirty = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
+  const adjustmentSyncMessage = ref('')
+  let adjustmentSyncMessageTimer: ReturnType<typeof setTimeout> | null = null
 
   const currentTab = computed(() => yearTabs.value.find((item) => item.yearNo === selectedYear.value) ?? null)
   const previewComputedPayload = computed(() =>
@@ -203,6 +207,41 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     pageMessage.value = null
   }
 
+  async function syncAdjustments() {
+    const view = currentView.value
+    const yearNo = selectedYear.value
+    if (!view || yearViewLoading.value) return
+    try {
+      const result = await getPlayerAdjustmentSync(yearNo, view.adjustmentRevision)
+      if (result.notModified || selectedYear.value !== yearNo || currentView.value !== view) return
+      applyAdjustmentSync(result)
+      showAdjustmentSyncMessage(result.bankrupt ? '奖惩已同步，小组已进入破产状态' : '奖惩已更新，财报预览已同步')
+    } catch {
+      // 轮询失败保持静默，下一轮继续检查。
+    }
+  }
+
+  function applyAdjustmentSync(result: PlayerAdjustmentSyncResult) {
+    const view = currentView.value
+    if (!view || !result.reportComputedPayload) return
+    currentView.value = {
+      ...view,
+      adjustmentRevision: result.adjustmentRevision,
+      businessStatus: result.businessStatus ?? view.businessStatus,
+      noticeBoard: result.noticeBoard ?? view.noticeBoard,
+      reportComputedPayload: result.reportComputedPayload,
+    }
+  }
+
+  function showAdjustmentSyncMessage(message: string) {
+    adjustmentSyncMessage.value = message
+    if (adjustmentSyncMessageTimer) clearTimeout(adjustmentSyncMessageTimer)
+    adjustmentSyncMessageTimer = setTimeout(() => {
+      adjustmentSyncMessage.value = ''
+      adjustmentSyncMessageTimer = null
+    }, 5000)
+  }
+
   return {
     currentConfig,
     yearTabs,
@@ -215,6 +254,7 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     submitting,
     dirty,
     pageMessage,
+    adjustmentSyncMessage,
     currentTab,
     previewComputedPayload,
     balanceGap,
@@ -229,6 +269,7 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
     submitCurrentReport,
     refreshTabs,
     clearMessage,
+    syncAdjustments,
   }
 })
 

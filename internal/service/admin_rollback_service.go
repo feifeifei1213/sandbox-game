@@ -35,6 +35,7 @@ type SnapshotSummaryResult struct {
 	PayloadHash   string  `json:"payloadHash"`
 	CreatedByName string  `json:"createdByName"`
 	CreatedAt     string  `json:"createdAt"`
+	CanRestore    bool    `json:"canRestore"`
 }
 
 type SnapshotListResult struct {
@@ -303,6 +304,9 @@ func (s *AdminRollbackCommandService) RestoreGroupSnapshot(ctx context.Context, 
 		if err != nil {
 			return err
 		}
+		if snapshot.TriggerCode == enum.SnapshotTriggerAdjustmentBankruptcy || !snapshotAllowsRestore(envelope) {
+			return ErrRollbackSnapshotNotRestorable
+		}
 		if envelope.GroupState == nil {
 			return ErrRollbackTargetInvalid
 		}
@@ -394,8 +398,8 @@ func (s *AdminRollbackCommandService) RestoreGroupSnapshot(ctx context.Context, 
 		if _, err := summaryRepo.WithdrawByRollbackAfterTarget(ctx, targetGroupID, targetYearNo, rollbackLog.ID, operatorName, now); err != nil {
 			return fmt.Errorf("withdraw summaries after target: %w", err)
 		}
-		if _, err := adjustmentRepo.MarkInvalidAfterTarget(ctx, targetGroupID, targetYearNo, targetStageCode, rollbackLog.ID, reason, operatorName, now); err != nil {
-			return fmt.Errorf("invalidate adjustments after target: %w", err)
+		if err := restoreAdjustmentStatesFromSnapshot(ctx, adjustmentRepo, repository.NewGroupAdjustmentRevisionRepository(tx), targetGroupID, targetYearNo, envelope.GroupState.Adjustments, rollbackLog.ID, reason, operatorName, now); err != nil {
+			return fmt.Errorf("restore adjustments from snapshot: %w", err)
 		}
 		if _, err := orderSelectionRepo.InvalidateDeliveryAfterTarget(ctx, targetGroupID, targetYearNo, targetStageCode, rollbackLog.ID, operatorName, now); err != nil {
 			return fmt.Errorf("invalidate order deliveries after target: %w", err)
@@ -456,11 +460,6 @@ func buildRestoredRuntimeStateFromSnapshot(currentGroup entity.Group, snapshotYe
 	businessStatus := currentGroup.BusinessStatus
 	bankruptYearNo := currentGroup.BankruptYearNo
 	bankruptReason := currentGroup.BankruptReason
-	if currentGroup.BusinessStatus == enum.BusinessStatusBankrupt && currentGroup.BankruptYearNo != nil && *currentGroup.BankruptYearNo >= targetYearNo {
-		businessStatus = enum.BusinessStatusNormal
-		bankruptYearNo = nil
-		bankruptReason = nil
-	}
 	if businessStatus == "" {
 		businessStatus = enum.BusinessStatusNormal
 	}
@@ -478,6 +477,60 @@ func buildRestoredRuntimeStateFromSnapshot(currentGroup entity.Group, snapshotYe
 		GroupBankruptYearNo: bankruptYearNo,
 		GroupBankruptReason: bankruptReason,
 	}, businessStatus, nil
+}
+
+func snapshotAllowsRestore(envelope *SnapshotPayloadEnvelope) bool {
+	if envelope == nil || envelope.Metadata == nil {
+		return true
+	}
+	value, exists := envelope.Metadata["useForRestore"]
+	if !exists {
+		return true
+	}
+	allowed, ok := value.(bool)
+	return ok && allowed
+}
+
+func restoreAdjustmentStatesFromSnapshot(
+	ctx context.Context,
+	adjustmentRepo *repository.GroupAdjustmentRepository,
+	revisionRepo *repository.GroupAdjustmentRevisionRepository,
+	groupID int64,
+	fromYearNo int,
+	snapshotItems []entity.GroupAdjustment,
+	rollbackID int64,
+	reason string,
+	operatorName string,
+	operateTime time.Time,
+) error {
+	desired := make(map[int64]bool, len(snapshotItems))
+	for _, item := range snapshotItems {
+		desired[item.ID] = item.Effective
+	}
+	currentItems, err := adjustmentRepo.ListAllByGroupFromYear(ctx, groupID, fromYearNo)
+	if err != nil {
+		return err
+	}
+	changedYears := map[int]struct{}{}
+	for _, item := range currentItems {
+		effective, existedAtSnapshot := desired[item.ID]
+		if !existedAtSnapshot {
+			effective = false
+		}
+		changed, err := adjustmentRepo.RestoreEffectiveState(ctx, item.ID, effective, rollbackID, reason, operatorName, operateTime)
+		if err != nil {
+			return err
+		}
+		if changed {
+			changedYears[item.YearNo] = struct{}{}
+		}
+	}
+	for yearNo := range changedYears {
+		if _, err := revisionRepo.Increment(ctx, groupID, yearNo, operateTime); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func resolveRollbackTargetStageCode(snapshot *entity.StateSnapshot, payload *SnapshotPayloadEnvelope) string {
@@ -521,5 +574,8 @@ func buildSnapshotSummaryResult(item entity.StateSnapshot, groupNameMap map[int6
 		PayloadHash:   item.PayloadHash,
 		CreatedByName: item.CreatedByName,
 		CreatedAt:     item.CreatedAt.Format(time.RFC3339),
+		CanRestore: item.SnapshotScope == enum.SnapshotScopeGroup &&
+			item.SnapshotType != enum.SnapshotTypeSafety &&
+			item.TriggerCode != enum.SnapshotTriggerAdjustmentBankruptcy,
 	}
 }

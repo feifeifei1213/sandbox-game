@@ -126,6 +126,29 @@ func TestCalculateDemoYearBuildsQuarterCashChecksAndYearEndCash(t *testing.T) {
 	assertFloatEquals(t, mustFloat64(t, result.OperatingPayload.Derived.Values["q4QuarterEndCashCheck"]), 29)
 }
 
+func TestCalculateYearEndAdjustmentAffectsAnnualCashButNotQuarterChecks(t *testing.T) {
+	t.Parallel()
+	operatingPayload := payload.NewOperatingPayload()
+	operatingPayload.Extra.IncomeAndPenalty = payload.OperatingQuarterMap{
+		"q1":       {"extraIncomeReward": 5.0},
+		"year_end": {"extraExpensePenalty": 20.0, "discountExpense": 999.0},
+	}
+	ctx := newOperatingCalculationContext(0, enum.StageStatusYearEndOpen).
+		WithInitialBaseline(&payload.BaselinePayload{BaselineCash: 100}).
+		WithOperatingPayload(&operatingPayload)
+	result, err := NewCalculator().Calculate(ctx)
+	if err != nil {
+		t.Fatalf("calculate year-end adjustment: %v", err)
+	}
+	for _, quarter := range []string{"Q1", "Q2", "Q3", "Q4"} {
+		assertFloatEquals(t, result.QuarterCashChecks[quarter], 105)
+	}
+	assertFloatEquals(t, result.DerivedValues["extraIncomeReward"], 5)
+	assertFloatEquals(t, result.DerivedValues["extraExpensePenalty"], 20)
+	assertFloatEquals(t, result.DerivedValues["discountExpense"], 0)
+	assertFloatEquals(t, result.PeriodEndCash, 85)
+}
+
 func TestCalculateFormalYearUsesPreviousReportCarryForwardAndCurrentStageCash(t *testing.T) {
 	t.Parallel()
 

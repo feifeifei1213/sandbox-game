@@ -103,7 +103,7 @@ func TestOpenNextYearOpensFormalYearForNormalGroupsOnly(t *testing.T) {
 	}
 }
 
-func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *testing.T) {
+func TestUnlockYearInvalidatesSubmittedArtifactsButPreservesBankruptGroup(t *testing.T) {
 	db := openIntegrationMySQL(t)
 
 	tx := db.Begin()
@@ -123,6 +123,15 @@ func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *test
 	createDetailedGroupYearState(t, ctx, tx, groupID, 1, enum.YearTypeFormal, enum.YearStatusCompleted, enum.StageStatusYearEndOpen, enum.ReportStatusSubmitted, true, 5, 1)
 	createPreviousFormalReportRecord(t, ctx, tx, groupID, 1, time.Now())
 	createSummarySnapshotFixture(t, ctx, tx, groupID, 1, 0, 0, 69, enum.BusinessStatusBankrupt, 69, true, 1)
+	adjustment := entity.GroupAdjustment{
+		GroupID: groupID, YearNo: 1, StageCode: state.StageCodeQ2,
+		AdjustmentType: adjustmentTypeReward, Amount: 50, Reason: "rollback must preserve",
+		Effective: true, PublishedAt: time.Now(), OperatorID: 90012, OperatorName: "integration-admin",
+		BaseEntity: entity.BaseEntity{Creator: "integration-admin", CreateTime: time.Now(), Updater: "integration-admin", UpdateTime: time.Now()},
+	}
+	if err := tx.WithContext(ctx).Create(&adjustment).Error; err != nil {
+		t.Fatalf("create adjustment before unlock: %v", err)
+	}
 
 	service := NewAdminControlCommandService(tx)
 	result, err := service.UnlockYear(ctx, UnlockYearCommand{
@@ -159,8 +168,8 @@ func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *test
 	if result.SummaryEffective {
 		t.Fatalf("expected summaryEffective false after unlock")
 	}
-	if result.BusinessStatus != enum.BusinessStatusNormal {
-		t.Fatalf("expected business status recovered to NORMAL, got %s", result.BusinessStatus)
+	if result.BusinessStatus != enum.BusinessStatusBankrupt {
+		t.Fatalf("expected irreversible BANKRUPT status, got %s", result.BusinessStatus)
 	}
 	if result.UnlockLogID <= 0 {
 		t.Fatalf("expected unlock log id to be generated, got %d", result.UnlockLogID)
@@ -171,11 +180,11 @@ func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *test
 	if err != nil {
 		t.Fatalf("reload group: %v", err)
 	}
-	if group.BusinessStatus != enum.BusinessStatusNormal {
-		t.Fatalf("expected group business status NORMAL after recovery, got %s", group.BusinessStatus)
+	if group.BusinessStatus != enum.BusinessStatusBankrupt {
+		t.Fatalf("expected group business status BANKRUPT after rollback, got %s", group.BusinessStatus)
 	}
-	if group.BankruptYearNo != nil {
-		t.Fatalf("expected bankrupt year to be cleared, got %v", *group.BankruptYearNo)
+	if group.BankruptYearNo == nil || *group.BankruptYearNo != bankruptYearNo {
+		t.Fatalf("expected bankrupt year %d to be preserved, got %#v", bankruptYearNo, group.BankruptYearNo)
 	}
 
 	groupYearRepo := repository.NewGroupYearStateRepository(tx)
@@ -207,6 +216,13 @@ func TestUnlockYearInvalidatesSubmittedArtifactsAndRecoversBankruptGroup(t *test
 	}
 	if summary.SummaryEffective {
 		t.Fatalf("expected summary snapshot to be withdrawn after unlock")
+	}
+	reloadedAdjustment, err := repository.NewGroupAdjustmentRepository(tx).GetByID(ctx, adjustment.ID)
+	if err != nil {
+		t.Fatalf("reload adjustment after unlock: %v", err)
+	}
+	if !reloadedAdjustment.Effective {
+		t.Fatalf("ordinary unlock must preserve effective adjustment, got %#v", reloadedAdjustment)
 	}
 
 	var unlockLogCount int64

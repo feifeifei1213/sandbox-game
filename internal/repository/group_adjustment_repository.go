@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"sandbox-game/internal/model/entity"
 )
@@ -21,6 +22,24 @@ func (r *GroupAdjustmentRepository) Create(ctx context.Context, item *entity.Gro
 	return r.db.WithContext(ctx).Create(item).Error
 }
 
+func (r *GroupAdjustmentRepository) GetByID(ctx context.Context, adjustmentID int64) (*entity.GroupAdjustment, error) {
+	var item entity.GroupAdjustment
+	if err := r.db.WithContext(ctx).First(&item, adjustmentID).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GroupAdjustmentRepository) GetByIDForUpdate(ctx context.Context, adjustmentID int64) (*entity.GroupAdjustment, error) {
+	var item entity.GroupAdjustment
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&item, adjustmentID).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *GroupAdjustmentRepository) ListByGroupIDAndYear(ctx context.Context, groupID int64, yearNo int) ([]entity.GroupAdjustment, error) {
 	items := make([]entity.GroupAdjustment, 0)
 	err := r.db.WithContext(ctx).
@@ -32,6 +51,54 @@ func (r *GroupAdjustmentRepository) ListByGroupIDAndYear(ctx context.Context, gr
 		return nil, err
 	}
 	return items, nil
+}
+
+func (r *GroupAdjustmentRepository) ListAllByGroupIDAndYear(ctx context.Context, groupID int64, yearNo int) ([]entity.GroupAdjustment, error) {
+	items := make([]entity.GroupAdjustment, 0)
+	err := r.db.WithContext(ctx).
+		Where("group_id = ? AND year_no = ?", groupID, yearNo).
+		Order("published_at DESC").
+		Order("id DESC").
+		Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *GroupAdjustmentRepository) Void(ctx context.Context, adjustmentID int64, operatorID int64, operatorName string, reason string, operateTime time.Time) (bool, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&entity.GroupAdjustment{}).
+		Where("id = ? AND effective = ?", adjustmentID, true).
+		Updates(map[string]any{
+			"effective":      false,
+			"voided_by_id":   operatorID,
+			"voided_by_name": operatorName,
+			"void_reason":    reason,
+			"voided_at":      operateTime,
+			"updater":        operatorName,
+			"update_time":    operateTime,
+		})
+	return tx.RowsAffected > 0, tx.Error
+}
+
+// RestoreEffectiveState 按快照恢复单条奖惩的有效状态。作废与既有回退审计字段不会被物理清除。
+func (r *GroupAdjustmentRepository) RestoreEffectiveState(ctx context.Context, adjustmentID int64, effective bool, rollbackID int64, reason string, operatorName string, operateTime time.Time) (bool, error) {
+	updates := map[string]any{
+		"effective":   effective,
+		"updater":     operatorName,
+		"update_time": operateTime,
+	}
+	if !effective {
+		updates["invalidated_by_rollback_id"] = rollbackID
+		updates["invalid_reason"] = reason
+		updates["invalidated_at"] = operateTime
+	}
+	tx := r.db.WithContext(ctx).
+		Model(&entity.GroupAdjustment{}).
+		Where("id = ? AND effective <> ?", adjustmentID, effective).
+		Updates(updates)
+	return tx.RowsAffected > 0, tx.Error
 }
 
 func (r *GroupAdjustmentRepository) ListAllByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupAdjustment, error) {

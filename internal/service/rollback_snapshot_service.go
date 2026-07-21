@@ -36,6 +36,7 @@ type CreateGroupSnapshotCommand struct {
 	OperatorName  string
 	OperateTime   time.Time
 	UseForRestore bool
+	Metadata      map[string]any
 }
 
 type CreateGlobalSnapshotCommand struct {
@@ -324,10 +325,19 @@ func buildGroupSnapshotPayload(ctx context.Context, db *gorm.DB, cmd CreateGroup
 		GroupState:      groupState,
 		StateSummary:    buildGroupSnapshotStateSummary(*group, *targetYearState, targetStageCode),
 		PayloadPreview:  buildGroupSnapshotPayloadPreview(groupState),
-		Metadata: map[string]any{
-			"useForRestore": cmd.UseForRestore,
-		},
+		Metadata:        mergeSnapshotMetadata(cmd.Metadata, map[string]any{"useForRestore": cmd.UseForRestore}),
 	}, nil
+}
+
+func mergeSnapshotMetadata(source map[string]any, required map[string]any) map[string]any {
+	result := make(map[string]any, len(source)+len(required))
+	for key, value := range source {
+		result[key] = value
+	}
+	for key, value := range required {
+		result[key] = value
+	}
+	return result
 }
 
 func buildGlobalSnapshotPayload(ctx context.Context, db *gorm.DB, cmd CreateGlobalSnapshotCommand) (*SnapshotPayloadEnvelope, error) {

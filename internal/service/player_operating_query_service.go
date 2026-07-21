@@ -175,7 +175,7 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 		}
 	}
 
-	return s.assembler.Build(
+	view := s.assembler.Build(
 		calculationContext,
 		draft,
 		stageSubmissions,
@@ -183,7 +183,12 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 		permission,
 		carryForward,
 		noticeBoard,
-	), nil
+	)
+	view.AdjustmentRevision, err = s.playerNoticeService.GetRevision(ctx, groupID, yearNo)
+	if err != nil {
+		return nil, fmt.Errorf("load adjustment revision: %w", err)
+	}
+	return view, nil
 }
 
 func (s *PlayerOperatingQueryService) buildOperatingViewCalculation(

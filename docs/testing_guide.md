@@ -175,9 +175,18 @@
 - 管理员可发送全体普通通知与单组普通通知
 - 管理员可查看最近普通通知与最近奖惩记录
 - 目标年份未开放时，下发奖惩返回 `422`
-- 目标季度已锁定时，下发奖惩返回 `422`
-- 奖励 / 罚款会叠加到玩家经营页的只读值中
+- Q1、Q2、Q3、Q4、年末经营中均可下发，阶段由系统按当前状态自动归属
+- 财报填写或草稿阶段可下发并归属 `YEAR_END`；财报正式提交或年份完成时必须先退回
+- 下发和作废影响预览返回调整前后现金、利润、所得税、权益及破产风险
+- 奖励 / 罚款按税前口径叠加到玩家经营页只读值和财报预览；`YEAR_END` 不改变 Q1 至 Q4 季末现金
+- 折现费用无年末字段，页面年末位置显示 `--`
+- 未破产小组可作废奖惩且保留原记录、作废人、时间和原因；破产后禁止下发和作废
+- 奖罚导致现金小于 `0` 时生成破产快照，快照不算正式财报、不进入正常汇总和排名，破产不可撤销
+- 普通退回保留奖罚，恢复快照按快照恢复奖罚有效状态
+- 玩家页面可见时每 `3` 秒静默检查 revision，隐藏时暂停；同步不覆盖未保存输入、不改变焦点和滚动位置、不跳回顶部
 - 玩家经营页与财报页右侧通知区都能看到对应通知
+- I12 接口样例见 `tests/http/sandbox-game/AdminNotice.http`
+- I12 完整人工验收见 `docs/adjustment_module_acceptance_checklist.md`
 
 ---
 
@@ -235,6 +244,7 @@ SHOW TABLES LIKE 'sg_group_report_submission';
 SHOW TABLES LIKE 'sg_group_summary_snapshot';
 SHOW TABLES LIKE 'sg_notice';
 SHOW TABLES LIKE 'sg_group_adjustment';
+SHOW TABLES LIKE 'sg_group_adjustment_revision';
 SHOW TABLES LIKE 'sg_admin_unlock_log';
 
 DESC sg_group_year_state;
@@ -243,6 +253,7 @@ DESC sg_group_report_submission;
 DESC sg_group_summary_snapshot;
 DESC sg_notice;
 DESC sg_group_adjustment;
+DESC sg_group_adjustment_revision;
 ```
 
 判定标准：
