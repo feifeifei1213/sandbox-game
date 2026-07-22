@@ -61,7 +61,11 @@
           <tr v-for="(region, index) in marketRegions" :key="region.key">
             <th class="row-head">{{ 4 + index }}</th>
             <td class="note-cell center">{{ region.label }}</td>
-            <td v-for="field in marketProductFields" :key="`${region.key}-${field.key}`" :class="editableCellClass('YEAR_START', marketBidRows[index][field.key])">
+            <td
+              v-for="field in marketProductFields"
+              :key="`${region.key}-${field.key}`"
+              :class="marketBidReadonly ? 'linked-order-cell' : editableCellClass('YEAR_START', marketBidRows[index][field.key])"
+            >
               <input
                 :value="displayCell(marketBidRows[index][field.key])"
                 :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
@@ -72,7 +76,11 @@
             </td>
             <td class="result-cell">{{ formatNumber(getMarketRowTotal(index)) }}</td>
             <td v-if="index === 0" class="result-cell" :rowspan="marketRegions.length">{{ formatNumber(marketOrderTotal) }}</td>
-            <td v-if="index === 0" :class="editableCellClass('YEAR_START', marketInvestmentTotal)" :rowspan="marketRegions.length">
+            <td
+              v-if="index === 0"
+              :class="marketBidReadonly ? 'linked-order-cell' : editableCellClass('YEAR_START', marketInvestmentTotal)"
+              :rowspan="marketRegions.length"
+            >
               <input
                 :value="displayCell(marketInvestmentTotal)"
                 :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
@@ -1326,9 +1334,14 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   background: #fff1dc;
 }
 
+.linked-order-cell {
+  background: var(--calc-bg);
+}
+
 .input-cell input,
 .locked-cell input,
-.invalid-draft-cell input {
+.invalid-draft-cell input,
+.linked-order-cell input {
   width: 100%;
   border: none;
   background: transparent;
@@ -1364,6 +1377,10 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 
 .invalid-draft-cell input {
   color: #8a5a17;
+}
+
+.linked-order-cell input {
+  color: inherit;
 }
 
 .manual-integer-invalid-cell {
