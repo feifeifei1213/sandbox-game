@@ -50,7 +50,6 @@
           {{ submitting ? '提交中...' : `提交${view?.currentStageCode ? formatStageCode(view.currentStageCode) : ''}` }}
         </button>
       </div>
-      <p class="hint">阶段提交成功后，会提醒玩家关注贷款更新。</p>
     </section>
 
     <section class="panel">

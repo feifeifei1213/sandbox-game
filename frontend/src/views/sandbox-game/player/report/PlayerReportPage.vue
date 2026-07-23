@@ -3,9 +3,7 @@
     <div class="shell">
       <header class="page-header">
         <div>
-          <p class="eyebrow">Sandbox Game / Player</p>
           <h1>玩家财报页</h1>
-          <p class="subtext">本年经营结束后开放，黄色区域自动计算，绿色区域由玩家填写或确认。</p>
         </div>
         <div class="header-pills">
           <span class="pill">组别：{{ activeView?.groupId ?? '--' }}</span>

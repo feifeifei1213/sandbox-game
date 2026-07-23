@@ -3,9 +3,7 @@
     <div class="shell">
       <header class="page-header">
         <div>
-          <p class="eyebrow">Sandbox Game / Player</p>
           <h1>玩家经营页</h1>
-          <p class="subtext">正式前端工程版本，当前已接入真实年份标签与经营页查询 / 保存 / 提交接口。</p>
         </div>
         <div class="header-pills">
           <span class="pill">组别：{{ activeView?.groupId ?? '--' }}</span>

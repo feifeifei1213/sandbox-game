@@ -31,7 +31,6 @@
             <th class="row-head">1</th>
             <td class="sheet-title" colspan="8">
               <div class="title-main">年度财报表</div>
-              <div class="title-sub">黄色单元格为系统计算结果，绿色单元格为玩家手工填写项</div>
             </td>
           </tr>
           <tr>
@@ -140,7 +139,7 @@
             <td class="label-cell footer-label">差额</td>
             <td :class="balanceValueCellClass">{{ formatNumber(balanceGap) }}</td>
             <td class="spacer-cell"></td>
-            <td class="note-cell" colspan="2">税率仅允许选择 0.25 / 0.15 / 0，绿色得分项需显式填写</td>
+            <td class="note-cell" colspan="2"></td>
           </tr>
         </tbody>
       </table>

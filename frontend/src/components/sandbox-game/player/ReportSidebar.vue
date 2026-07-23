@@ -49,7 +49,6 @@
       <ul class="text-list">
         <li v-for="item in taxRateOptions" :key="item">{{ formatTaxRate(item) }}</li>
       </ul>
-      <p class="hint">首版财报页中，所得税税率只能通过下拉框选择，不允许自由输入。</p>
     </section>
 
     <section class="panel">
@@ -62,12 +61,10 @@
           {{ submitting ? '提交中...' : '提交财报' }}
         </button>
       </div>
-      <p class="hint">绿色单元格为手工项，黄色单元格为系统计算结果。</p>
       <p v-if="view?.hasInvalidDraft" class="warning">当前为失效草稿状态，不能直接提交或进入汇总。</p>
       <p v-if="missingFields.length" class="warning">待填写：{{ missingFields.join('、') }}</p>
       <p v-else-if="integerIssues.length" class="warning">必须为整数：{{ integerIssues.join('、') }}</p>
       <p v-else-if="!balancePassed" class="warning">当前资产负债尚未平衡，不能提交。</p>
-      <p v-else-if="!view?.canEdit" class="hint">当前年份财报未开放或已提交，页面为只读状态。</p>
     </section>
   </aside>
 </template>
