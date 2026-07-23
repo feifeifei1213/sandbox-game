@@ -210,8 +210,10 @@
                   <span v-if="visibleSegment.currentRoundNo">当前第 {{ visibleSegment.currentRoundNo }} 轮</span>
                   <span v-if="visibleSegment.nextRoundNo">下一轮：第 {{ visibleSegment.nextRoundNo }} 轮</span>
                   <span>{{ formatSelectionStatus(visibleSegment.selfRoundStatus) }}</span>
-                  <span>可选 {{ visibleSegment.availableOrders.length }} 单</span>
-                  <span>已锁定 {{ visibleSegment.lockedOrders.length }} 单</span>
+                  <template v-if="visibleSegment.ordersVisible">
+                    <span>可选 {{ visibleSegment.availableOrders.length }} 单</span>
+                    <span>已锁定 {{ visibleSegment.lockedOrders.length }} 单</span>
+                  </template>
                 </div>
 
                 <div class="sequence-list">
@@ -228,7 +230,7 @@
                   </article>
                 </div>
 
-                <div v-if="visibleSegment.selectedOrders.length" class="selected-order">
+                <div v-if="visibleSegment.ordersVisible && visibleSegment.selectedOrders.length" class="selected-order">
                   <strong>本组已选订单</strong>
                   <div v-for="order in visibleSegment.selectedOrders" :key="order.orderId" class="selected-order-row">
                     <span>第 {{ order.roundNo }} 轮 · {{ formatOrderNo(order) }} · 金额 {{ formatIntegerAmount(order.orderAmount) }} · 账期 {{ order.accountTerm }} 季度</span>
@@ -236,7 +238,7 @@
                   </div>
                 </div>
 
-                <section class="order-grid">
+                <section v-if="visibleSegment.ordersVisible" class="order-grid">
                   <article
                     v-for="order in visibleSegment.availableOrders"
                     :key="order.orderId"
@@ -274,7 +276,7 @@
                   </article>
                 </section>
 
-                <div class="action-line">
+                <div v-if="visibleSegment.ordersVisible" class="action-line">
                   <button
                     type="button"
                     class="btn danger"
@@ -288,7 +290,7 @@
               </template>
             </section>
 
-            <section class="delivery-panel">
+            <section v-if="hasVisibleOrderDetails" class="delivery-panel">
               <div class="panel-head">
                 <div>
                   <strong>本组待交付订单</strong>
@@ -425,6 +427,9 @@ const currentSegmentTitle = computed(() => {
   }
   return `${visibleSegment.value.marketName} · ${visibleSegment.value.orderTypeName}`
 })
+const hasVisibleOrderDetails = computed(() =>
+  markets.value.some((market) => market.segments.some((segment) => segment.ordersVisible)),
+)
 const pollingText = computed(() => {
   const seconds = currentView.value?.pollingIntervalSeconds ?? 3
   return `${seconds} 秒`

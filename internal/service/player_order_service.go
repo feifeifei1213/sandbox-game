@@ -206,6 +206,7 @@ type PlayerOrderSegmentView struct {
 	CurrentRoundNo        int                       `json:"currentRoundNo"`
 	NextRoundNo           *int                      `json:"nextRoundNo,omitempty"`
 	SelfRoundStatus       string                    `json:"selfRoundStatus"`
+	OrdersVisible         bool                      `json:"ordersVisible"`
 	SelectionOrder        []PlayerOrderSequenceView `json:"selectionOrder"`
 	CurrentGroupID        *int64                    `json:"currentGroupId"`
 	AvailableOrders       []PlayerOrderPoolItem     `json:"availableOrders"`
@@ -1933,11 +1934,15 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 					}
 				}
 			}
-			pools, err := poolRepo.ListBySegment(ctx, state.YearNo, state.MarketCode, state.OrderType)
-			if err != nil {
-				return nil, err
+			pools := []entity.OrderPool(nil)
+			if playerSegmentOrdersVisible(state.SegmentStatus) {
+				var err error
+				pools, err = poolRepo.ListBySegment(ctx, state.YearNo, state.MarketCode, state.OrderType)
+				if err != nil {
+					return nil, err
+				}
+				pools = filterOrderPoolsByTemplate(pools, template)
 			}
-			pools = filterOrderPoolsByTemplate(pools, template)
 			segment := buildPlayerSegmentView(groupID, state, bid, bidSubmitted, marketConfig.InvestmentLimit, sequenceMap[key], selfSeq, hasSelfSeq, selectedMap[key], pools, groupNames, template)
 			canSelectMarket = canSelectMarket || segment.CanSelectOrder
 			segments = append(segments, segment)
@@ -1985,44 +1990,48 @@ func allMarketStatesDisabled(states []entity.MarketBiddingState) bool {
 }
 
 func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid entity.GroupMarketBid, bidSubmitted bool, marketInvestmentLimit *float64, sequences []entity.MarketSelectionOrder, selfSequence entity.MarketSelectionOrder, hasSelfSequence bool, selected []entity.GroupOrderSelection, pools []entity.OrderPool, groupNames map[int64]string, template OrderTemplateDefinition) PlayerOrderSegmentView {
+	ordersVisible := playerSegmentOrdersVisible(state.SegmentStatus)
 	available := make([]PlayerOrderPoolItem, 0)
 	locked := make([]PlayerOrderPoolItem, 0)
 	var selectedOrder *PlayerOrderPoolItem
-	selectedOrders := make([]PlayerOrderPoolItem, 0, len(selected))
-	selectedByOrderID := make(map[int64]entity.GroupOrderSelection, len(selected))
-	for _, item := range selected {
-		selectedByOrderID[item.OrderID] = item
-	}
-	for _, pool := range pools {
-		payload := map[string]any(nil)
-		if len(pool.OrderPayloadJSON) > 0 {
-			_ = json.Unmarshal(pool.OrderPayloadJSON, &payload)
+	selectedOrders := make([]PlayerOrderPoolItem, 0)
+	if ordersVisible {
+		selectedOrders = make([]PlayerOrderPoolItem, 0, len(selected))
+		selectedByOrderID := make(map[int64]entity.GroupOrderSelection, len(selected))
+		for _, item := range selected {
+			selectedByOrderID[item.OrderID] = item
 		}
-		item := PlayerOrderPoolItem{
-			OrderID:         pool.ID,
-			BusinessOrderNo: formatBusinessOrderNo(pool),
-			CardSequenceNo:  pool.CardSequenceNo,
-			OrderAmount:     pool.OrderAmount,
-			OrderQuantity:   pool.OrderQuantity,
-			UnitPrice:       pool.UnitPrice,
-			AccountTerm:     pool.AccountTerm,
-			PoolStatus:      pool.PoolStatus,
-			OrderPayload:    payload,
-		}
-		if pool.PoolStatus == enum.OrderPoolStatusAvailable {
-			available = append(available, item)
-		} else {
-			locked = append(locked, item)
-		}
-		if selection, ok := selectedByOrderID[pool.ID]; ok {
-			copyItem := item
-			copyItem.RoundNo = selection.RoundNo
-			copyItem.DeliveryStatus = selection.DeliveryStatus
-			copyItem.DeliveredStageCode = selection.DeliveredStageCode
-			selectedOrders = append(selectedOrders, copyItem)
-			if selectedOrder == nil {
-				first := copyItem
-				selectedOrder = &first
+		for _, pool := range pools {
+			payload := map[string]any(nil)
+			if len(pool.OrderPayloadJSON) > 0 {
+				_ = json.Unmarshal(pool.OrderPayloadJSON, &payload)
+			}
+			item := PlayerOrderPoolItem{
+				OrderID:         pool.ID,
+				BusinessOrderNo: formatBusinessOrderNo(pool),
+				CardSequenceNo:  pool.CardSequenceNo,
+				OrderAmount:     pool.OrderAmount,
+				OrderQuantity:   pool.OrderQuantity,
+				UnitPrice:       pool.UnitPrice,
+				AccountTerm:     pool.AccountTerm,
+				PoolStatus:      pool.PoolStatus,
+				OrderPayload:    payload,
+			}
+			if pool.PoolStatus == enum.OrderPoolStatusAvailable {
+				available = append(available, item)
+			} else {
+				locked = append(locked, item)
+			}
+			if selection, ok := selectedByOrderID[pool.ID]; ok {
+				copyItem := item
+				copyItem.RoundNo = selection.RoundNo
+				copyItem.DeliveryStatus = selection.DeliveryStatus
+				copyItem.DeliveredStageCode = selection.DeliveredStageCode
+				selectedOrders = append(selectedOrders, copyItem)
+				if selectedOrder == nil {
+					first := copyItem
+					selectedOrder = &first
+				}
 			}
 		}
 	}
@@ -2041,7 +2050,7 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 		})
 	}
 	deliveryStatus := ""
-	if len(selected) > 0 {
+	if ordersVisible && len(selected) > 0 {
 		deliveryStatus = selected[len(selected)-1].DeliveryStatus
 	}
 	canAct := state.SegmentStatus == enum.OrderSegmentStatusSelecting && state.CurrentGroupID != nil && *state.CurrentGroupID == groupID && hasSelfSequence && selfSequence.SelectionStatus == enum.OrderSelectionStatusCurrent
@@ -2064,6 +2073,7 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 		CurrentRoundNo:        state.CurrentRoundNo,
 		NextRoundNo:           nextRoundNo,
 		SelfRoundStatus:       selfRoundStatus,
+		OrdersVisible:         ordersVisible,
 		SelectionOrder:        sequenceViews,
 		CurrentGroupID:        state.CurrentGroupID,
 		AvailableOrders:       available,
@@ -2073,6 +2083,15 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 		DeliveryStatus:        deliveryStatus,
 		CanSelectOrder:        canAct && len(available) > 0,
 		CanPassSegment:        canAct,
+	}
+}
+
+func playerSegmentOrdersVisible(segmentStatus string) bool {
+	switch segmentStatus {
+	case enum.OrderSegmentStatusSelecting, enum.OrderSegmentStatusRoundReady, enum.OrderSegmentStatusCompleted:
+		return true
+	default:
+		return false
 	}
 }
 

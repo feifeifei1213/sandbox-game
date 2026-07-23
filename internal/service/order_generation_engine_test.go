@@ -28,6 +28,144 @@ func TestPlayerOrderYearViewForDemoYearDoesNotRequireOrders(t *testing.T) {
 	}
 }
 
+func TestPlayerSegmentOrdersVisibleStatusPolicy(t *testing.T) {
+	visibleStatuses := []string{
+		enum.OrderSegmentStatusSelecting,
+		enum.OrderSegmentStatusRoundReady,
+		enum.OrderSegmentStatusCompleted,
+	}
+	for _, status := range visibleStatuses {
+		if !playerSegmentOrdersVisible(status) {
+			t.Fatalf("expected status %s to expose player order details after release", status)
+		}
+	}
+
+	hiddenStatuses := []string{
+		enum.OrderSegmentStatusMarketDisabled,
+		enum.OrderSegmentStatusNoOrderConfig,
+		enum.OrderSegmentStatusWaitingInvestment,
+		enum.OrderSegmentStatusBidOpen,
+		enum.OrderSegmentStatusBidClosed,
+		enum.OrderSegmentStatusSequenceReady,
+		enum.OrderSegmentStatusWaitingRelease,
+		enum.OrderSegmentStatusSkipped,
+		"",
+	}
+	for _, status := range hiddenStatuses {
+		if playerSegmentOrdersVisible(status) {
+			t.Fatalf("expected status %s to hide player order details before release", status)
+		}
+	}
+}
+
+func TestBuildPlayerSegmentViewHidesOrderDetailsBeforeRelease(t *testing.T) {
+	template := MustResolveOrderTemplateVersion(OrderTemplateVersionVIPServiceV1)
+	groupID := int64(101)
+	currentGroupID := groupID
+	selectedOrderID := int64(9001)
+	now := time.Now()
+	deliveredStageCode := "Q1"
+	bid := entity.GroupMarketBid{
+		GroupID:          groupID,
+		YearNo:           2,
+		MarketCode:       enum.MarketCodeLocal,
+		OrderType:        enum.OrderTypeAgencyInspection,
+		MarketInvestment: 9,
+		BidStatus:        enum.OrderBidStatusSubmitted,
+	}
+	sequences := []entity.MarketSelectionOrder{
+		{
+			YearNo:          2,
+			MarketCode:      enum.MarketCodeLocal,
+			OrderType:       enum.OrderTypeAgencyInspection,
+			RoundNo:         1,
+			SequenceNo:      1,
+			GroupID:         groupID,
+			SelectionStatus: enum.OrderSelectionStatusCurrent,
+			IsMarketLeader:  true,
+		},
+	}
+	selectedOrders := []entity.GroupOrderSelection{
+		{
+			GroupID:            groupID,
+			YearNo:             2,
+			MarketCode:         enum.MarketCodeLocal,
+			OrderType:          enum.OrderTypeAgencyInspection,
+			RoundNo:            1,
+			OrderID:            selectedOrderID,
+			SelectionStatus:    enum.OrderSelectionStatusSelected,
+			DeliveryStatus:     enum.OrderDeliveryStatusSelected,
+			DeliveredStageCode: &deliveredStageCode,
+			DeliveryEffective:  true,
+			SelectedAt:         now,
+		},
+	}
+	pools := []entity.OrderPool{
+		{
+			ID:                   selectedOrderID,
+			OrderTemplateVersion: template.TemplateVersion,
+			YearNo:               2,
+			MarketCode:           enum.MarketCodeLocal,
+			OrderType:            enum.OrderTypeAgencyInspection,
+			CardSequenceNo:       1,
+			BusinessOrderNo:      "I13-09-SELECTED",
+			OrderAmount:          100,
+			OrderQuantity:        2,
+			UnitPrice:            50,
+			AccountTerm:          2,
+			PoolStatus:           enum.OrderPoolStatusSelected,
+			OrderPayloadJSON:     []byte(`{"secret":"visible-only"}`),
+		},
+		{
+			ID:                   9002,
+			OrderTemplateVersion: template.TemplateVersion,
+			YearNo:               2,
+			MarketCode:           enum.MarketCodeLocal,
+			OrderType:            enum.OrderTypeAgencyInspection,
+			CardSequenceNo:       2,
+			BusinessOrderNo:      "I13-09-AVAILABLE",
+			OrderAmount:          80,
+			OrderQuantity:        1,
+			UnitPrice:            80,
+			AccountTerm:          1,
+			PoolStatus:           enum.OrderPoolStatusAvailable,
+		},
+	}
+
+	hiddenState := entity.MarketBiddingState{
+		YearNo:            2,
+		MarketCode:        enum.MarketCodeLocal,
+		OrderType:         enum.OrderTypeAgencyInspection,
+		ReleaseSequenceNo: 1,
+		SegmentStatus:     enum.OrderSegmentStatusSequenceReady,
+		CurrentRoundNo:    1,
+	}
+	hiddenView := buildPlayerSegmentView(groupID, hiddenState, bid, true, nil, sequences, sequences[0], true, selectedOrders, pools, map[int64]string{groupID: "I13-09"}, template)
+	if hiddenView.OrdersVisible {
+		t.Fatalf("expected sequence-ready segment to keep order details hidden")
+	}
+	if len(hiddenView.AvailableOrders) != 0 || len(hiddenView.LockedOrders) != 0 || len(hiddenView.SelectedOrders) != 0 || hiddenView.SelectedOrder != nil || hiddenView.DeliveryStatus != "" {
+		t.Fatalf("expected hidden view to redact all order details, got %#v", hiddenView)
+	}
+	if hiddenView.CanSelectOrder || hiddenView.CanPassSegment {
+		t.Fatalf("expected hidden view to disable order actions, got %#v", hiddenView)
+	}
+
+	visibleState := hiddenState
+	visibleState.SegmentStatus = enum.OrderSegmentStatusSelecting
+	visibleState.CurrentGroupID = &currentGroupID
+	visibleView := buildPlayerSegmentView(groupID, visibleState, bid, true, nil, sequences, sequences[0], true, selectedOrders, pools, map[int64]string{groupID: "I13-09"}, template)
+	if !visibleView.OrdersVisible {
+		t.Fatalf("expected selecting segment to expose order details after release")
+	}
+	if len(visibleView.AvailableOrders) != 1 || len(visibleView.LockedOrders) != 1 || len(visibleView.SelectedOrders) != 1 || visibleView.SelectedOrder == nil || visibleView.DeliveryStatus != enum.OrderDeliveryStatusSelected {
+		t.Fatalf("expected visible view to include order details, got %#v", visibleView)
+	}
+	if !visibleView.CanSelectOrder || !visibleView.CanPassSegment {
+		t.Fatalf("expected visible current group to be allowed to select or pass, got %#v", visibleView)
+	}
+}
+
 func TestValidateForecastControlCommandEnforcesOrderCountAndReleaseSequence(t *testing.T) {
 	valid := UpdateOrderControlConfigCommand{
 		YearNo: 1,

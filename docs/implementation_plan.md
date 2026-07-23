@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-07-20
+> 更新日期：2026-07-23
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -14,18 +14,18 @@
 ## 任务总览（需求沉淀层当前基线）
 
 - 总任务数：`82`
-- 已完成：`79`
+- 已完成：`80`
 - 部分完成：`4`
-- 未开始：`1`
+- 未开始：`0`
 
 ## 开发执行层任务总览
 
-- 总任务数：`67`
-- 已完成：`67`
-- 部分完成：`0`
+- 总任务数：`76`
+- 已完成：`75`
+- 部分完成：`1`
 - 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I12-01 ~ I12-06 已完成；待用户按验收清单继续业务场景复测`
+- 当前状态：`I13-02 ~ I13-07、I13-09 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善；等待用户按订单验收清单复测`
 
 ---
 
@@ -579,10 +579,32 @@
 | I12-05 | 实现管理员交互与玩家静默局部同步 | P0 | 已完成 | `I12-03`、`I12-04` | `AdminNoticePage.vue`、管理员 API/store、`PlayerAdjustmentSyncService`、玩家经营/财报局部同步 | 管理员支持下发/作废预览和破产警告；玩家页面可见时每 3 秒检查，隐藏暂停、恢复立即检查；只合并奖罚和派生结果，不调用整页刷新 | 无 |
 | I12-06 | 补奖罚、回退、破产与用户体验专项回归 | P0 | 已完成 | `I12-02 ~ I12-05` | Go 专项测试、`tests/http/sandbox-game/AdminNotice.http`、`docs/adjustment_module_acceptance_checklist.md`、前端构建与页面验收 | 自动化覆盖阶段归属、正式提交锁定、revision、作废审计、普通退回保留、快照恢复、下发/作废破产、只读快照、破产冻结；浏览器验证预览弹窗、年末列、折现费 `--`、3 秒轮询不改变焦点/滚动/路由，控制台无错误 | 无；正式下发破产奖罚未在共享演练库点击确认，破产事务由集成测试覆盖 |
 
+### 9.15 I13：订单模块多轮选单升级
+
+> 最新口径以 `docs/order_multi_round_upgrade_design.md` 为主；本迭代覆盖贵宾服务版、生产制造版四轮资格和全部模板固定订单数量上限移除。机场版暂时保持单轮，造数命令最后单独升级。
+
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I13-01 | 冻结多轮资格、龙头、订单池、回退与页面口径 | P0 | 已完成 | 用户 2026-07-21 多轮讨论确认、现有订单与回退模块 | `docs/order_multi_round_upgrade_design.md`、`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/minimal_state_machine.md`、`docs/database_design.md`、`docs/order_module_acceptance_checklist.md`、`docs/airport_order_module_acceptance_checklist.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md` | 已明确贵宾/生产固定 `3/6/9` 最多四轮、机场单轮、每市场每年一个龙头且投入 `0` 无资格、基础顺序只生成一次、固定订单池、后续轮手动开启、订单池选空结束、剩余订单过期、破产自动失去后续资格、回退不影响投入与竞标事实、全部模板取消固定数量上限 | 无；本任务只写文档，不修改代码或造数命令 |
+| I13-02 | 扩展多轮数据模型并移除固定订单数量上限 | P0 | 已完成 | `I13-01` | `migrations/mysql/0016_order_multi_round.sql`、订单枚举/Entity/Repository、模板注册表、生成器、测试建表兜底、`cmd/dbtool/main.go`、打包脚本 | 已增加 `ROUND_READY/current_round_no/completion_reason/round_no/selection_order_id/UNSELECTED_EXPIRED`，调整轮次唯一索引；模板元数据以 `0` 表示无固定数量上限；生成器已验证可生成 `54` 张并拒绝负数 | 无；正式环境迁移执行留到统一部署流程 |
+| I13-03 | 重构基础顺序、市场龙头与全部轮次一次生成 | P0 | 已完成 | `I13-02` | `internal/service/player_order_service.go`、`internal/service/order_template_registry.go`、订单仓储与现有订单工作流集成测试 | 已按当前标段投入生成资格轮次；同市场每年只计算一次龙头；零投入龙头被排除；同一基础顺序过滤生成全部有效轮次；机场模板仍返回单轮 | 无；更完整的 `0/1/3/6/9/10` 参数化测试并入 `I13-07` |
+| I13-04 | 重构轮次推进、选单、放弃、跳过、选空和破产处理 | P0 | 已完成 | `I13-03` | `player_order_service.go`、`order_bankruptcy_service.go`、Repository、DTO/Handler/Router | 已实现第一轮自动开始、后续轮手动开启、当前轮选择/放弃/管理员跳过、空轮自动跳过、订单池选空结束、剩余池过期；经营提交/财报提交/管理员奖惩触发破产时只失效未完成轮次，当前组破产自动推进且已选订单保留 | 已补正常结束过期、放弃后续轮、破产完成原因和重复请求幂等测试；定序、释放和轮次状态查询使用事务锁 |
+| I13-05 | 改造管理员端四轮顺序与控制区 | P0 | 已完成 | `I13-04` | 管理员订单类型、API、store、`AdminOrderPage.vue` | 已接入“开启下一轮”；按轮次纵向展示全部顺序；显示当前/下一轮、理论机会、剩余订单和订单池不足警告；无限数量输入不再被 `max=0` 限制 | 已通过浏览器验收管理员四轮纵向区、当前/下一轮状态和统一开启按钮；无资格轮次显示“本轮无参与小组” |
+| I13-06 | 改造玩家端本组轮次状态与静默同步 | P0 | 已完成 | `I13-04` | 玩家订单类型、store、`PlayerOrderPage.vue` | 已展示本组当前轮状态和跨轮已选订单；放弃为“放弃本轮”并增加无原因确认；后端按服务端当前轮返回本组状态；沿用 3 秒静默轮询和滚动位置恢复 | 已通过浏览器验收玩家当前轮、订单卡和放弃入口；轮询后 URL、滚动位置、焦点保持不变，控制台无错误/警告 |
+| I13-07 | 补多轮订单自动化、接口与人工验收 | P0 | 已完成 | `I13-02 ~ I13-06` | Go 单元/集成测试、`tests/http/sandbox-game/AdminOrder.http`、`docs/order_module_acceptance_checklist.md`、浏览器人工验收 | 已覆盖资格 `0/1/3/6/9/10`、基础顺序轮次过滤、机场单轮、放弃后续轮、管理员跳过原因、正常结束 `UNSELECTED_EXPIRED`、破产失效和已选历史保留、重复生成/重复开启幂等；补齐下一轮/放弃 HTTP 样例；`go test ./...`、前端构建和 `git diff --check` 通过；浏览器验收通过 | 无；I13-08 造数命令仍按用户确认延后 |
+| I13-08 | 升级订单专项造数命令 | P1 | 部分完成 | `I13-07` | `cmd/dbtool/order_scenario.go`、`docs/test_demo_commands.md`、`docs/order_module_acceptance_checklist.md` | 已切到手动联调口径：保留 `1年` 龙头历史、预置 `3` 个正常组和 `1` 个破产组、停在 `2年已开放/订单数量与市场投入待手动配置`；后续再按需要补快速复现型停点 | 继续完善手动场景验证与必要的回归说明 |
+| I13-09 | 收口玩家端订单明细可见性 | P0 | 已完成 | 用户 2026-07-23 确认“页面不改、展示分开，只控制展示时机” | `internal/service/player_order_service.go`、`internal/service/order_generation_engine_test.go`、`frontend/src/types/sandbox-game-order.ts`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`docs/order_multi_round_upgrade_design.md`、`docs/requirements_spec.md`、`docs/api_design.md`、`docs/order_module_acceptance_checklist.md`、`docs/implementation_plan.md` | 后端玩家订单视图已新增 `ordersVisible`，仅在 `SELECTING / ROUND_READY / COMPLETED` 返回订单池和本组已选订单明细；市场投入、等待提交、顺序已生成但标段未释放等状态返回空明细；前端保持原页面结构，订单卡片、本组已选订单和交付面板分开展示并统一受 `ordersVisible` 控制；已补服务层状态策略和裁剪测试 | 无；后续由用户按验收清单复测市场投入阶段和标段释放后的页面展示 |
+
 ### 12.1 本轮新增记录
 
 | 日期 | 记录 |
 |---|---|
+| 2026-07-23 | 任务状态：✅ 已完成；落点：`internal/service/player_order_service.go`、`internal/service/order_generation_engine_test.go`、`frontend/src/types/sandbox-game-order.ts`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`docs/order_multi_round_upgrade_design.md`、`docs/implementation_plan.md`；偏差说明：按用户确认不调整玩家订单页结构，只给后端玩家视图新增 `ordersVisible` 并按服务端状态裁剪订单明细；`SEQUENCE_READY` 等未释放状态即使存在订单池和已选订单历史，也不返回订单金额、数量、单价、账期、订单编号和交付状态；`SELECTING / ROUND_READY / COMPLETED` 才返回明细；前端仍分别展示订单卡片、本组已选订单和交付面板。验证：`go test ./internal/service`、`frontend/npm.cmd run build`、`git diff --check` 均通过。下一步：用户按订单验收清单复测“市场投入阶段不可见订单”和“标段释放后可见订单/交付”。 |
+| 2026-07-23 | 任务状态：🟡 部分完成；落点：`docs/order_multi_round_upgrade_design.md`、`docs/requirements_spec.md`、`docs/api_design.md`、`docs/order_module_acceptance_checklist.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认补文档，不修改代码和页面结构。已明确玩家填写市场投入时仍可看市场预测，但不能看到订单卡片、本组已选订单或交付面板；页面上三个区域继续分开展示，不新增统一大模块；后端玩家年度订单视图后续需返回 `ordersVisible`，不可见时不返回具体订单明细，不能只靠前端隐藏。下一步：如用户确认进入开发，则实施 `I13-09` 后端裁剪、前端展示条件和测试。 |
+| 2026-07-22 | 任务状态：🟡 部分完成；落点：`cmd/dbtool/order_scenario.go`、`docs/test_demo_commands.md`、`docs/order_module_acceptance_checklist.md`、`docs/implementation_plan.md`；偏差说明：按用户确认将 `seed-order-scenario` 切为手动联调版，预置 `3` 个正常组和 `1` 个破产组，保留 `1年` 订单历史用于显示 `2年` 市场龙头，停在 `2年已开放、1年龙头历史已写入、2年订单数量/市场投入待手动配置`；验证：`go test ./cmd/dbtool` 通过；下一步：用户按手动流程在前端配置订单数量、市场开启和市场投入，继续观察多轮竞标。 |
+| 2026-07-22 | 任务状态：✅ 已完成；落点：`internal/repository/order_repository.go`、`internal/service/player_order_service.go`、`internal/service/order_generation_engine_test.go`、`internal/service/order_workflow_integration_test.go`、`tests/http/sandbox-game/AdminOrder.http`、`docs/order_module_acceptance_checklist.md`、`docs/implementation_plan.md`；偏差说明：本轮按 `docs/order_multi_round_upgrade_design.md` 完成 `I13-04 ~ I13-07` 收口，新增生成顺序/释放标段的 `FOR UPDATE` 锁，防止并发请求重复重排或重复释放；补充 `0/1/3/6/9/10` 资格边界、机场单轮、基础顺序轮次过滤、放弃后续轮、正常结束剩余订单 `UNSELECTED_EXPIRED`、破产只失效未完成轮次且保留已选历史、重复生成/开启/放弃幂等测试；HTTP 样例增加“开启下一轮”和“放弃当前轮”；浏览器验证管理员四轮纵向展示、统一开启按钮、玩家当前轮/放弃入口及 3 秒静默轮询不跳顶；验证：`go test ./... -count=1`、`frontend/npm.cmd run build`、`git diff --check` 全部通过。`I13-08` 订单专项造数命令继续延后，未修改。下一步：用户可按 `docs/order_module_acceptance_checklist.md` 在独立演练库做完整业务场景复测。 |
+| 2026-07-21 | 任务状态：🟡 部分完成；落点：`migrations/mysql/0016_order_multi_round.sql`、订单枚举/Entity/Repository、`internal/service/player_order_service.go`、`internal/service/order_bankruptcy_service.go`、订单 DTO/Handler/Router、管理员与玩家订单 types/API/store/page、订单测试基础设施；偏差说明：`I13-02 / I13-03` 已完成，`I13-04 ~ I13-07` 已完成主体编码但未宣告验收完成，`I13-08` 按用户要求仍未开始。当前实现包括无固定订单数量上限、固定 `3/6/9` 四轮资格、零投入龙头无资格、同市场单龙头、一次基础顺序过滤、多轮共用订单池、后续轮“开启下一轮”、选空结束、剩余订单过期、破产未完成轮次失效、管理员四轮纵向展示及玩家本组轮次展示。验证：`go test ./internal/service ./internal/repository ./internal/http/handler ./internal/app` 通过，`frontend/npm.cmd run build` 通过。下一步：先补 `I13-07` 专项测试（资格 `0/1/3/6/9/10`、放弃/跳过、过期、破产、机场单轮、并发幂等），再运行 `go test ./...`、`git diff --check` 和浏览器人工验收；验收通过后再开始 `I13-08` 订单专项造数命令。当前工作区尚未提交，续开发时保留无关的既有前端改动，不要回退。 |
+| 2026-07-21 | 任务状态：✅ 已完成；落点：`docs/order_multi_round_upgrade_design.md`、`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/minimal_state_machine.md`、`docs/database_design.md`、`docs/order_module_acceptance_checklist.md`、`docs/airport_order_module_acceptance_checklist.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md`；偏差说明：本轮只完成 `I13-01` 文档收口，不修改代码、迁移或造数命令。已确认贵宾/生产按当前标段投入采用固定 `3/6/9` 最多四轮，机场暂时单轮；每市场每年一个龙头，龙头投入 `0` 无资格；每标段只生成一次基础顺序，后续轮按资格过滤；第一轮随标段释放自动开始，后续轮由管理员点击“开启下一轮”；固定订单池提前选空时立即结束，正常结束后的剩余订单只保留审计；全部模板取消 `15/28` 固定数量上限；回退/快照不修改订单投入和竞标事实；造数命令延后到功能开发完成后。下一步：从 `I13-02` 多轮数据模型和数量上限改造开始开发。 |
 | 2026-07-21 | 任务状态：✅ 已完成；落点：`migrations/mysql/0015_adjustment_lifecycle.sql`、奖罚生命周期 Entity/Repository、`internal/service/adjustment_*`、`internal/service/player_adjustment_sync_service.go`、管理员通知与玩家经营/财报前端、`tests/http/sandbox-game/AdminNotice.http`、`docs/adjustment_module_acceptance_checklist.md`、`docs/testing_guide.md`；偏差说明：`I12-02 ~ I12-06` 已按冻结口径完成。实现包括服务端自动阶段归属、下发/作废前影响预览与执行时再次权威重算、税前奖罚重算、`YEAR_END` 年末列、作废审计、组年 revision、3 秒玩家局部同步、不可恢复的 `ADJUSTMENT_BANKRUPTCY` 破产快照、普通退回保留奖罚、快照恢复奖罚状态且破产不可撤销。验证：`go test ./... -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`frontend/npm.cmd run build` 通过，`git diff --check` 通过；未排除时仍仅既有订单市场龙头用例失败，与 I12 无关。浏览器已验证管理员页无季度选择、Q1 自动归属、完整影响预览和破产警告，玩家经营页年末列/折现费 `--`，3 秒轮询后焦点、值、滚动、路由与年份保持不变，玩家财报通知区正常且控制台无错误。为避免污染共享演练库，未点击会永久破产的正式确认按钮；该事务由下发/作废破产集成测试覆盖。下一步：用户可按 `docs/adjustment_module_acceptance_checklist.md` 在独立演练库继续完整业务场景复测。 |
 | 2026-07-20 | 任务状态：✅ 已完成；落点：`docs/requirements_spec.md`、`docs/requirements_consensus_checklist.md`、`docs/minimal_state_machine.md`、`docs/api_design.md`、`docs/database_design.md`、`game doc/Excel计算规则与跨表联动说明.md`、`docs/implementation_plan.md`；偏差说明：本轮只完成 `I12-01` 文档收口，不修改代码、数据库迁移或原始 Excel。已确认管理员可在 Q1~Q4、年末经营和财报草稿阶段下发奖罚，系统自动归属当前阶段，财报阶段统一归属 `YEAR_END`；折现费用不增加年末字段；奖罚按税前收入/支出口径重算；下发和作废前均显示影响预览；玩家端采用 3 秒 revision 静默局部同步且不得刷新跳顶或覆盖未保存输入；普通退回保留奖罚，恢复快照按快照恢复有效状态；奖罚导致现金小于 0 时生成不计入正式财报、汇总和排名的破产快照，破产不可撤销且破产后奖罚冻结。下一步：从 `I12-02` 开始扩展存储、阶段解析和作废能力。 |
 | 2026-07-20 | 任务状态：✅ 已完成；落点：`internal/rules/report/report_calculator.go`、`internal/rules/report/report_calculator_test.go`、`internal/service/player_report_command_service_test.go`、`frontend/src/types/sandbox-game.ts`、`docs/implementation_plan.md`；偏差说明：本轮完成 `I11-02 / I11-03`。后端最佳销售总监得分改为“上一年已缩放得分 + 当年订单总额 / 10”，最佳 CEO 得分在五项总监最终得分合计基础上增加当前 `reportTotalEquity / 2`；前端财报实时预览直接复用后端销售总监得分，仅给 CEO 增加实时预览权益的一半。新增规则层回归覆盖 `0年`、跨年不重复缩放、负权益扣分与小数保留；新增服务层历史重建测试验证旧 `0年` 财报 JSON 不物理改写、`1年` 查询仍按 `100/10 + 140/10 = 24` 返回新销售得分。验证：针对性规则层与历史重建测试通过，`go test ./internal/rules/report ./internal/service -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`go test ./... -skip '^TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished$' -count=1` 通过，`frontend/npm.cmd run build` 通过；未排除时仍仅既有订单市场龙头集成用例失败，失败内容与本次财报公式无关。下一步：页面人工验收 `0年 / 1年` 销售得分、负权益 CEO 扣分和财报手工项变化时的 CEO 实时预览；确认后可提交本次公式改动。 |

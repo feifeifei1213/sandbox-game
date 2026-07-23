@@ -134,6 +134,7 @@ export interface PlayerOrderSegmentView {
   currentRoundNo: number
   nextRoundNo?: number | null
   selfRoundStatus: OrderSelectionStatus | ''
+  ordersVisible: boolean
   selectionOrder: PlayerOrderSequenceView[]
   currentGroupId: number | null
   availableOrders: PlayerOrderPoolItem[]
