@@ -823,7 +823,7 @@ reportBestCeoScore =
 | `list[].revenue` | 收入 |
 | `list[].profit` | 利润 |
 | `list[].equity` | 权益 |
-| `list[].businessStatus` | 经营状态 |
+| `list[].businessStatus` | 小组当前经营状态，来源于小组主数据当前 `businessStatus`，不使用某年汇总快照中的历史状态 |
 | `list[].ranking` | 若为最终年份，可返回最终排名 |
 
 规则：
@@ -831,6 +831,7 @@ reportBestCeoScore =
 - `0年` 不进入正式汇总
 - 仅 `COMPLETED` 的正式年份计入汇总
 - 被异常解锁且未重提财报的年份，不得出现在正式汇总口径中
+- 年度收入、利润、权益来自对应年份正式汇总快照；`businessStatus` 用于页面行级状态展示，必须反映小组当前经营状态。若小组当前已破产，即使历史年度快照状态为 `NORMAL`，接口也返回 `BANKRUPT`。
 
 #### 6.4.2 获取最终排名
 
@@ -842,6 +843,7 @@ reportBestCeoScore =
 
 - 仅在最终年份结果可用时返回有效排名
 - 排名依据：最终年份 `equity` 倒序
+- 最终排名区的 `businessStatus` 同样显示小组当前经营状态，不显示最终年份快照中的历史状态。
 
 ---
 

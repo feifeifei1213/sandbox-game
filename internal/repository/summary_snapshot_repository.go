@@ -86,7 +86,7 @@ func (r *SummarySnapshotRepository) ListEffectiveByYear(ctx context.Context, yea
 	var items []SummarySnapshotWithGroup
 	if err := r.db.WithContext(ctx).
 		Table("sg_group_summary_snapshot AS s").
-		Select("s.group_id, g.group_no, g.group_name, s.revenue, s.profit, s.equity, s.business_status, s.ranking_value").
+		Select("s.group_id, g.group_no, g.group_name, s.revenue, s.profit, s.equity, g.business_status, s.ranking_value").
 		Joins("INNER JOIN sg_group AS g ON g.id = s.group_id").
 		Where("s.year_no = ? AND s.summary_effective = ?", yearNo, true).
 		Order("g.group_no ASC").
@@ -111,7 +111,7 @@ func (r *SummarySnapshotRepository) ListEffectiveRankingByYear(ctx context.Conte
 	var items []SummarySnapshotWithGroup
 	if err := r.db.WithContext(ctx).
 		Table("sg_group_summary_snapshot AS s").
-		Select("s.group_id, g.group_no, g.group_name, s.revenue, s.profit, s.equity, s.business_status, s.ranking_value").
+		Select("s.group_id, g.group_no, g.group_name, s.revenue, s.profit, s.equity, g.business_status, s.ranking_value").
 		Joins("INNER JOIN sg_group AS g ON g.id = s.group_id").
 		Where("s.year_no = ? AND s.summary_effective = ?", yearNo, true).
 		Order("s.ranking_value DESC, g.group_no ASC").
