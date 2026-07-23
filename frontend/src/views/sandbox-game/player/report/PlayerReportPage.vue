@@ -47,7 +47,7 @@
               <span>经营状态</span>
               <strong>{{ formatBusinessStatus(activeView?.businessStatus) }}</strong>
             </div>
-            <div class="status-item" :class="activeBalancePassed ? 'status-pass' : 'status-fail'">
+            <div v-if="activeView?.canView" class="status-item" :class="activeBalancePassed ? 'status-pass' : 'status-fail'">
               <span>平衡校验</span>
               <strong>{{ activeBalancePassed ? '通过' : '未通过' }}</strong>
             </div>
@@ -62,6 +62,11 @@
           <section v-else-if="airportPendingMode" class="loading-card pending-template-card">
             <strong>机场沙盘版财报页待接入</strong>
             <span>当前仅支持订单模块联调，财报字段和公式将在机场版财报 Excel 给到后接入。</span>
+          </section>
+
+          <section v-else-if="activeView && !activeView.canView" class="loading-card pending-template-card">
+            <strong>{{ activeSelectedYear }}年财报尚未提交</strong>
+            <span>当前年份财报尚未开放或尚未进入提交阶段。完成本年经营后，系统会开放本年财报填写与提交。</span>
           </section>
 
           <ReportSheet

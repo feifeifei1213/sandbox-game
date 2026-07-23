@@ -704,6 +704,10 @@
 - 路径：`/api/v1/sandbox-game/player-report/get-view?yearNo=1`
 - 权限：`sandbox-game:player-report:query`
 
+规则：
+
+- 已开放年份即允许进入财报页路由；若该年份财报尚未开放或尚未提交，接口返回 `200` 和 `canView=false` 的占位视图，包含 `yearNo / yearStatus / reportStatus / businessStatus` 等状态字段，前端在该年份页面展示“本年财报尚未提交 / 尚未开放”，不回退到上一年。
+
 返回应至少包含：
 
 | 字段 | 说明 |

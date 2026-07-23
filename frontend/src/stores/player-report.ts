@@ -42,6 +42,7 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
   const pageMessage = ref<PageMessage | null>(null)
   const adjustmentSyncMessage = ref('')
   let adjustmentSyncMessageTimer: ReturnType<typeof setTimeout> | null = null
+  let latestYearViewRequestId = 0
 
   const currentTab = computed(() => yearTabs.value.find((item) => item.yearNo === selectedYear.value) ?? null)
   const previewComputedPayload = computed(() =>
@@ -109,19 +110,28 @@ export const usePlayerReportStore = defineStore('sandbox-player-report', () => {
   }
 
   async function loadYearView(yearNo: number) {
+    const requestId = ++latestYearViewRequestId
     yearViewLoading.value = true
     pageMessage.value = null
     try {
       const view = await getPlayerReportView(yearNo)
+      if (requestId !== latestYearViewRequestId) {
+        return
+      }
       currentView.value = view
       draftManualPayload.value = cloneReportManualPayload(view.reportManualPayload)
       selectedYear.value = yearNo
       dirty.value = false
     } catch (error) {
+      if (requestId !== latestYearViewRequestId) {
+        return
+      }
       pageMessage.value = toErrorMessage(error, `读取 ${yearNo} 年财报页失败`)
       throw error
     } finally {
-      yearViewLoading.value = false
+      if (requestId === latestYearViewRequestId) {
+        yearViewLoading.value = false
+      }
     }
   }
 

@@ -84,7 +84,7 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 		return nil, err
 	}
 	if !permission.CanView && (!yearState.RollbackPending || !reportLoaded) {
-		return nil, ErrPlayerReportNotOpen
+		return s.buildClosedReportView(ctx, calcContext)
 	}
 	if !permission.CanView && yearState.RollbackPending && reportLoaded {
 		return s.buildRetainedReportDraftView(ctx, calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission)
@@ -173,6 +173,34 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 	view.AdjustmentRevision, err = s.playerNoticeService.GetRevision(ctx, groupID, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("load adjustment revision: %w", err)
+	}
+	return view, nil
+}
+
+func (s *PlayerReportQueryService) buildClosedReportView(
+	ctx context.Context,
+	calcContext calcctx.CalculationContext,
+) (*assembler.PlayerReportView, error) {
+	permission := state.ReportPermission{
+		CanView:   false,
+		CanEdit:   false,
+		CanSubmit: false,
+	}
+	noticeBoard, err := s.playerNoticeService.BuildBoard(ctx, calcContext.Group.ID, calcContext.YearState.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("build closed report notice board: %w", err)
+	}
+	view := s.assembler.Build(
+		calcContext,
+		payload.ReportComputedPayload{},
+		payload.ReportManualPayload{},
+		nil,
+		permission,
+		noticeBoard,
+	)
+	view.AdjustmentRevision, err = s.playerNoticeService.GetRevision(ctx, calcContext.Group.ID, calcContext.YearState.YearNo)
+	if err != nil {
+		return nil, fmt.Errorf("load closed report adjustment revision: %w", err)
 	}
 	return view, nil
 }

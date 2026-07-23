@@ -34,7 +34,13 @@
       <p class="hint warning-hint">上游经营重新提交并重新开放财报后，请回到本页核对绿色手工项，再完成财报提交。</p>
     </section>
 
-    <section class="panel">
+    <section v-if="view && !view.canView" class="panel warning-panel">
+      <h3>财报尚未提交</h3>
+      <p>当前年份财报尚未开放或尚未进入提交阶段。</p>
+      <p class="hint warning-hint">完成本年经营并开放财报后，本页会显示财报表和提交控制。</p>
+    </section>
+
+    <section v-if="view?.canView" class="panel">
       <h3>平衡校验</h3>
       <div class="balance-card" :class="{ pass: balancePassed, fail: !balancePassed }">
         <strong>{{ balancePassed ? '校验通过' : '校验未通过' }}</strong>
@@ -44,14 +50,14 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section v-if="view?.canView" class="panel">
       <h3>税率说明</h3>
       <ul class="text-list">
         <li v-for="item in taxRateOptions" :key="item">{{ formatTaxRate(item) }}</li>
       </ul>
     </section>
 
-    <section class="panel">
+    <section v-if="view?.canView" class="panel">
       <h3>提交控制</h3>
       <div class="action-list">
         <button type="button" class="btn" :disabled="saving || submitting || !view?.canEdit || !dirty" @click="$emit('save')">

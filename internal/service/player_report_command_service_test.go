@@ -215,6 +215,42 @@ func TestSubmitPlayerReportCompletesFormalYearAndWritesSummary(t *testing.T) {
 	}
 }
 
+func TestGetPlayerReportViewReturnsClosedViewBeforeReportOpen(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureGameConfigExists(t, ctx, tx)
+
+	now := time.Now()
+	groupID := createIntegrationGroup(t, ctx, tx, now, "IT_REPORT_CLOSED")
+	createGroupYearStateRecord(t, ctx, tx, groupID, 0, enum.YearTypeDemo, enum.YearStatusCompleted, enum.StageStatusYearEndOpen, enum.ReportStatusSubmitted)
+	createPreviousFormalReportRecord(t, ctx, tx, groupID, 0, now)
+	createGroupYearStateRecord(t, ctx, tx, groupID, 1, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked)
+
+	_, queryService := buildPlayerReportServices(tx)
+	view, err := queryService.GetView(ctx, groupID, 1)
+	if err != nil {
+		t.Fatalf("expected closed report view instead of error before report open: %v", err)
+	}
+	if view.YearNo != 1 || view.YearStatus != enum.YearStatusOperating || view.ReportStatus != enum.ReportStatusLocked {
+		t.Fatalf("unexpected closed report view status: %#v", view)
+	}
+	if view.CanView || view.CanEdit || view.CanSubmit {
+		t.Fatalf("expected closed report view to be non-viewable and readonly, got canView=%v canEdit=%v canSubmit=%v", view.CanView, view.CanEdit, view.CanSubmit)
+	}
+	if view.ReportManualPayload.WorkInProgress != nil {
+		t.Fatalf("expected closed report view to return empty manual payload, got %#v", view.ReportManualPayload)
+	}
+}
+
 func TestGetPlayerReportViewRebuildsHistoricalDirectorScoresWithCurrentFormula(t *testing.T) {
 	db := openIntegrationMySQL(t)
 
