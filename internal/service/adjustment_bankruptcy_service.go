@@ -26,6 +26,9 @@ func markAdjustmentBankrupt(
 	if err := repository.NewGroupRepository(tx).MarkBankrupt(ctx, adjustment.GroupID, adjustment.YearNo, reason, operatorName); err != nil {
 		return fmt.Errorf("mark adjustment bankruptcy: %w", err)
 	}
+	if err := invalidateOrderParticipationAfterBankruptcy(ctx, tx, adjustment.GroupID, adjustment.YearNo, operatorID, operatorName, operateTime); err != nil {
+		return err
+	}
 	_, err := createGroupSnapshot(ctx, tx, CreateGroupSnapshotCommand{
 		GroupID: adjustment.GroupID, YearNo: adjustment.YearNo,
 		StageCode:    impact.ResolvedStageCode,

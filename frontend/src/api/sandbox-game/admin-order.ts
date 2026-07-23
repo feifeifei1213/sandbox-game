@@ -120,6 +120,13 @@ export function releaseNextAdminOrderSegment(payload: { yearNo: number }) {
   })
 }
 
+export function openNextAdminOrderRound(payload: { yearNo: number; marketCode: OrderMarketCode; orderType: OrderTypeCode }) {
+  return request<AdminOrderControlResult>('/api/v1/sandbox-game/admin-order/open-next-round', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function adminSkipCurrentOrderGroup(payload: {
   yearNo: number
   marketCode: OrderMarketCode

@@ -154,6 +154,8 @@ type MarketBiddingState struct {
 	LeaderRule           []byte     `gorm:"column:leader_rule_json"`
 	RandomSeed           *string    `gorm:"column:random_seed"`
 	CurrentGroupID       *int64     `gorm:"column:current_group_id"`
+	CurrentRoundNo       int        `gorm:"column:current_round_no"`
+	CompletionReason     *string    `gorm:"column:completion_reason"`
 	OpenedAt             *time.Time `gorm:"column:opened_at"`
 	ClosedAt             *time.Time `gorm:"column:closed_at"`
 	ReleasedAt           *time.Time `gorm:"column:released_at"`
@@ -188,6 +190,7 @@ type MarketSelectionOrder struct {
 	YearNo                    int        `gorm:"column:year_no"`
 	MarketCode                string     `gorm:"column:market_code"`
 	OrderType                 string     `gorm:"column:order_type"`
+	RoundNo                   int        `gorm:"column:round_no"`
 	SequenceNo                int        `gorm:"column:sequence_no"`
 	GroupID                   int64      `gorm:"column:group_id"`
 	MarketInvestment          float64    `gorm:"column:market_investment"`
@@ -214,6 +217,8 @@ type GroupOrderSelection struct {
 	YearNo                  int        `gorm:"column:year_no"`
 	MarketCode              string     `gorm:"column:market_code"`
 	OrderType               string     `gorm:"column:order_type"`
+	RoundNo                 int        `gorm:"column:round_no"`
+	SelectionOrderID        *int64     `gorm:"column:selection_order_id"`
 	OrderID                 int64      `gorm:"column:order_id"`
 	SelectionStatus         string     `gorm:"column:selection_status"`
 	DeliveryStatus          string     `gorm:"column:delivery_status"`

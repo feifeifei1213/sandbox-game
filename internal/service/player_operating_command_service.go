@@ -358,6 +358,9 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 			if err := txGroupRepo.MarkBankrupt(ctx, cmd.GroupID, cmd.YearNo, bankruptReason, cmd.OperatorName); err != nil {
 				return err
 			}
+			if err := invalidateOrderParticipationAfterBankruptcy(ctx, tx, cmd.GroupID, cmd.YearNo, cmd.SubmitterID, cmd.OperatorName, submitTime); err != nil {
+				return err
+			}
 		}
 		if cmd.YearNo > 0 && cmd.StageCode == state.StageCodeYearEnd {
 			if err := txOrderSelectionRepo.MarkUnfinishedByGroupYear(ctx, cmd.GroupID, cmd.YearNo, cmd.OperatorName, submitTime); err != nil {

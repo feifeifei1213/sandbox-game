@@ -307,6 +307,9 @@ func (s *PlayerReportCommandService) Submit(ctx context.Context, cmd SubmitPlaye
 			if err := txGroupRepo.MarkBankrupt(ctx, cmd.GroupID, cmd.YearNo, bankruptReason, cmd.OperatorName); err != nil {
 				return err
 			}
+			if err := invalidateOrderParticipationAfterBankruptcy(ctx, tx, cmd.GroupID, cmd.YearNo, cmd.SubmitterID, cmd.OperatorName, submitTime); err != nil {
+				return err
+			}
 		}
 		if yearState.RollbackPending {
 			if err := txYearRepo.ClearRollbackPending(ctx, cmd.GroupID, cmd.YearNo, cmd.OperatorName); err != nil {

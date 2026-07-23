@@ -45,10 +45,6 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	createPreviousFormalReportRecord(t, ctx, tx, groupTwoID, previousYearNo, now)
 	createGroupYearStateRecord(t, ctx, tx, groupOneID, yearNo, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked)
 	createGroupYearStateRecord(t, ctx, tx, groupTwoID, yearNo, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked)
-	createSelectedOrderAmountFixture(t, ctx, tx, groupOneID, previousYearNo, enum.MarketCodeLocal, 50)
-	createSelectedOrderAmountFixture(t, ctx, tx, groupTwoID, previousYearNo, enum.MarketCodeLocal, 20)
-	createSelectedOrderAmountFixture(t, ctx, tx, bankruptGroupID, previousYearNo, enum.MarketCodeLocal, 999)
-
 	adminOrderService := NewAdminOrderCommandService(tx)
 	adminControlService := NewAdminOrderControlCommandService(tx)
 	playerOrderService := NewPlayerOrderCommandService(tx)
@@ -121,6 +117,12 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 		t.Fatalf("unexpected confirmed pool result: %#v", confirmed)
 	}
 
+	// 预测配置会重建仍处于预览态的历史年份订单池，因此在当前年份订单池确认后再布置
+	// 上一年已选订单事实，确保本用例验证的是龙头汇总规则而不是预览覆盖行为。
+	createSelectedOrderAmountFixture(t, ctx, tx, groupOneID, previousYearNo, enum.MarketCodeLocal, 50)
+	createSelectedOrderAmountFixture(t, ctx, tx, groupTwoID, previousYearNo, enum.MarketCodeLocal, 20)
+	createSelectedOrderAmountFixture(t, ctx, tx, bankruptGroupID, previousYearNo, enum.MarketCodeLocal, 999)
+
 	if _, err := playerOrderService.SubmitMarketInvestment(ctx, SubmitMarketInvestmentCommand{
 		GroupID: groupOneID,
 		YearNo:  yearNo,
@@ -163,6 +165,11 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	if sequenceResult.AffectedCount != 3 {
 		t.Fatalf("expected configured enabled segments to become ready/skipped, got %#v", sequenceResult)
 	}
+	if _, err := adminControlService.GenerateSelectionSequence(ctx, GenerateSelectionSequenceCommand{
+		YearNo: yearNo, OperatorID: 1, OperatorName: "integration-admin",
+	}); !errors.Is(err, ErrAdminOrderSequenceAlreadyGenerated) {
+		t.Fatalf("expected repeated sequence generation to be rejected without reordering, got %v", err)
+	}
 
 	stateRepo := repository.NewMarketBiddingStateRepository(tx)
 	sequenceRepo := repository.NewMarketSelectionOrderRepository(tx)
@@ -202,15 +209,23 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	if err != nil {
 		t.Fatalf("list local agency sequence: %v", err)
 	}
-	if len(localAgencySequence) != 2 || localAgencySequence[0].GroupID != groupOneID || !localAgencySequence[0].IsMarketLeader {
-		t.Fatalf("expected local leader to be first for local agency, got %#v", localAgencySequence)
+	if len(localAgencySequence) != 8 {
+		t.Fatalf("expected two qualified groups across four local agency rounds, got %#v", localAgencySequence)
+	}
+	for roundNo := 1; roundNo <= 4; roundNo++ {
+		offset := (roundNo - 1) * 2
+		if localAgencySequence[offset].RoundNo != roundNo || localAgencySequence[offset].GroupID != groupOneID || !localAgencySequence[offset].IsMarketLeader ||
+			localAgencySequence[offset+1].RoundNo != roundNo || localAgencySequence[offset+1].GroupID != groupTwoID {
+			t.Fatalf("expected every local agency round to filter the same leader-first base order, got %#v", localAgencySequence)
+		}
 	}
 	localTwoCabinSequence, err := sequenceRepo.ListBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP)
 	if err != nil {
 		t.Fatalf("list local two-cabin sequence: %v", err)
 	}
-	if len(localTwoCabinSequence) != 2 || localTwoCabinSequence[0].GroupID != groupOneID || !localTwoCabinSequence[0].IsMarketLeader {
-		t.Fatalf("expected local leader with zero segment investment to still be first, got %#v", localTwoCabinSequence)
+	if len(localTwoCabinSequence) != 2 || localTwoCabinSequence[0].RoundNo != 1 || localTwoCabinSequence[1].RoundNo != 2 ||
+		localTwoCabinSequence[0].GroupID != groupTwoID || localTwoCabinSequence[0].IsMarketLeader {
+		t.Fatalf("expected zero-investment leader to be excluded and group two to qualify for two rounds, got %#v", localTwoCabinSequence)
 	}
 
 	released, err := adminControlService.ReleaseNextSegment(ctx, ReleaseNextSegmentCommand{
@@ -281,15 +296,45 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	if err != nil {
 		t.Fatalf("reload local agency after skip: %v", err)
 	}
-	if completedAgencyState.SegmentStatus != enum.OrderSegmentStatusCompleted {
-		t.Fatalf("expected one-round segment to complete after sequence is exhausted, got %#v", completedAgencyState)
+	if completedAgencyState.SegmentStatus != enum.OrderSegmentStatusRoundReady || completedAgencyState.CurrentRoundNo != 1 {
+		t.Fatalf("expected first round completion to wait for the administrator to open round two, got %#v", completedAgencyState)
 	}
 	localAgencyOrders, err = poolRepo.ListBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection)
 	if err != nil {
 		t.Fatalf("reload local agency pool: %v", err)
 	}
 	if localAgencyOrders[0].PoolStatus != enum.OrderPoolStatusSelected || localAgencyOrders[1].PoolStatus != enum.OrderPoolStatusAvailable {
-		t.Fatalf("expected selected order locked and unchosen order retained available after one round, got %#v", localAgencyOrders)
+		t.Fatalf("expected selected order locked and unchosen order shared with the next round, got %#v", localAgencyOrders)
+	}
+	openedRound, err := adminControlService.OpenNextRound(ctx, OpenNextOrderRoundCommand{
+		YearNo:       yearNo,
+		MarketCode:   enum.MarketCodeLocal,
+		OrderType:    enum.OrderTypeAgencyInspection,
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	})
+	if err != nil {
+		t.Fatalf("open local agency round two: %v", err)
+	}
+	if openedRound.SegmentStatus != enum.OrderSegmentStatusSelecting || openedRound.CurrentRoundNo != 2 || openedRound.CurrentGroupID == nil || *openedRound.CurrentGroupID != groupOneID {
+		t.Fatalf("expected round two to start from the same leader-first base order, got %#v", openedRound)
+	}
+	if _, err := playerOrderService.SelectOrder(ctx, SelectOrderCommand{
+		GroupID:      groupOneID,
+		YearNo:       yearNo,
+		MarketCode:   enum.MarketCodeLocal,
+		OrderType:    enum.OrderTypeAgencyInspection,
+		OrderID:      localAgencyOrders[1].ID,
+		OperatorName: "group-one",
+	}); err != nil {
+		t.Fatalf("group one select final local agency order in round two: %v", err)
+	}
+	completedAgencyState, err = stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection)
+	if err != nil {
+		t.Fatalf("reload exhausted local agency segment: %v", err)
+	}
+	if completedAgencyState.SegmentStatus != enum.OrderSegmentStatusCompleted || completedAgencyState.CompletionReason == nil || *completedAgencyState.CompletionReason != enum.OrderCompletionReasonPoolExhausted {
+		t.Fatalf("expected order-pool exhaustion to complete the whole segment immediately, got %#v", completedAgencyState)
 	}
 
 	operatingCommandService := buildOrderLinkedOperatingCommandService(tx)
@@ -312,7 +357,7 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	if err != nil {
 		t.Fatalf("release next non-skipped segment: %v", err)
 	}
-	if releasedSecond.MarketCode != enum.MarketCodeLocal || releasedSecond.OrderType != enum.OrderTypeTwoCabinVIP || releasedSecond.CurrentGroupID == nil || *releasedSecond.CurrentGroupID != groupOneID {
+	if releasedSecond.MarketCode != enum.MarketCodeLocal || releasedSecond.OrderType != enum.OrderTypeTwoCabinVIP || releasedSecond.CurrentGroupID == nil || *releasedSecond.CurrentGroupID != groupTwoID {
 		t.Fatalf("expected skipped regional segment to be bypassed and local two-cabin released, got %#v", releasedSecond)
 	}
 	twoCabinOrders, err := poolRepo.ListBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP)
@@ -323,37 +368,21 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 		t.Fatalf("expected one local two-cabin order, got %d", len(twoCabinOrders))
 	}
 	if _, err := playerOrderService.SelectOrder(ctx, SelectOrderCommand{
-		GroupID:      groupOneID,
+		GroupID:      groupTwoID,
 		YearNo:       yearNo,
 		MarketCode:   enum.MarketCodeLocal,
 		OrderType:    enum.OrderTypeTwoCabinVIP,
 		OrderID:      twoCabinOrders[0].ID,
-		OperatorName: "group-one",
+		OperatorName: "group-two",
 	}); err != nil {
-		t.Fatalf("group one select local two-cabin order: %v", err)
+		t.Fatalf("group two select local two-cabin order: %v", err)
 	}
 	twoCabinAfterSelect, err := stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP)
 	if err != nil {
 		t.Fatalf("reload local two-cabin after first selection: %v", err)
 	}
-	if twoCabinAfterSelect.SegmentStatus != enum.OrderSegmentStatusSelecting || twoCabinAfterSelect.CurrentGroupID == nil || *twoCabinAfterSelect.CurrentGroupID != groupTwoID {
-		t.Fatalf("expected order-empty segment to still advance to next group, got %#v", twoCabinAfterSelect)
-	}
-	if _, err := playerOrderService.PassSegment(ctx, PassOrderSegmentCommand{
-		GroupID:      groupTwoID,
-		YearNo:       yearNo,
-		MarketCode:   enum.MarketCodeLocal,
-		OrderType:    enum.OrderTypeTwoCabinVIP,
-		OperatorName: "group-two",
-	}); err != nil {
-		t.Fatalf("group two pass empty local two-cabin segment: %v", err)
-	}
-	twoCabinAfterPass, err := stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeTwoCabinVIP)
-	if err != nil {
-		t.Fatalf("reload local two-cabin after empty pass: %v", err)
-	}
-	if twoCabinAfterPass.SegmentStatus != enum.OrderSegmentStatusCompleted {
-		t.Fatalf("expected segment to complete only after sequence is exhausted, got %#v", twoCabinAfterPass)
+	if twoCabinAfterSelect.SegmentStatus != enum.OrderSegmentStatusCompleted || twoCabinAfterSelect.CompletionReason == nil || *twoCabinAfterSelect.CompletionReason != enum.OrderCompletionReasonPoolExhausted {
+		t.Fatalf("expected the final available order to complete the segment immediately, got %#v", twoCabinAfterSelect)
 	}
 	if completed, err := NewOrderOperatingLinkService(
 		repository.NewGroupMarketBidRepository(tx),
@@ -440,6 +469,201 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	if !unfinishedFound {
 		t.Fatalf("expected unsubmitted selected order to be retained as unfinished, got %#v", finalSelections)
 	}
+}
+
+func TestOrderPassRetainsLaterRoundAndExpiresRemainingPool(t *testing.T) {
+	db := openIntegrationMySQL(t)
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() { _ = tx.Rollback().Error }()
+
+	ctx := context.Background()
+	yearNo := 1
+	ensureIntegrationGameConfig(t, ctx, tx, yearNo, yearNo, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, yearNo)
+	isolateOrderIntegrationGroups(t, ctx, tx)
+	groupID := createOrderIntegrationGroup(t, ctx, tx, "I13 pass later round", enum.BusinessStatusNormal, nil)
+	now := time.Now()
+	template := MustResolveOrderTemplateVersion(OrderTemplateVersionVIPServiceV1)
+	currentGroupID := groupID
+	stateItem := entity.MarketBiddingState{
+		OrderTemplateVersion: template.TemplateVersion,
+		YearNo:               yearNo,
+		MarketCode:           enum.MarketCodeLocal,
+		OrderType:            enum.OrderTypeAgencyInspection,
+		SegmentCode:          enum.MarketCodeLocal + "_" + enum.OrderTypeAgencyInspection,
+		ReleaseSequenceNo:    1,
+		SegmentStatus:        enum.OrderSegmentStatusSelecting,
+		CurrentGroupID:       &currentGroupID,
+		CurrentRoundNo:       1,
+		BaseEntity: entity.BaseEntity{
+			Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now,
+		},
+	}
+	if err := tx.Create(&stateItem).Error; err != nil {
+		t.Fatalf("create round state: %v", err)
+	}
+	sequenceItems := []entity.MarketSelectionOrder{
+		{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, RoundNo: 1, SequenceNo: 1, GroupID: groupID, SelectionStatus: enum.OrderSelectionStatusCurrent, RankBasis: []byte(`{}`), BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}},
+		{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, RoundNo: 2, SequenceNo: 1, GroupID: groupID, SelectionStatus: enum.OrderSelectionStatusWaiting, RankBasis: []byte(`{}`), BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}},
+	}
+	if err := tx.Create(&sequenceItems).Error; err != nil {
+		t.Fatalf("create round sequence: %v", err)
+	}
+	for cardNo := 1; cardNo <= 2; cardNo++ {
+		if err := tx.Create(&entity.OrderPool{
+			OrderTemplateVersion: template.TemplateVersion,
+			YearNo:               yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection,
+			SegmentCode:    enum.MarketCodeLocal + "_" + enum.OrderTypeAgencyInspection,
+			CardSequenceNo: cardNo, BusinessOrderNo: fmt.Sprintf("I13-PASS-%02d", cardNo),
+			OrderAmount: float64(cardNo * 10), OrderQuantity: 1, UnitPrice: float64(cardNo * 10), AccountTerm: 2,
+			PoolStatus: enum.OrderPoolStatusAvailable, SourceSheetName: "integration-test", SourceCell: "A1", SourceRowKey: fmt.Sprintf("I13-PASS-%d", cardNo),
+			BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now},
+		}).Error; err != nil {
+			t.Fatalf("create round pool card %d: %v", cardNo, err)
+		}
+	}
+
+	playerService := NewPlayerOrderCommandService(tx)
+	passed, err := playerService.PassSegment(ctx, PassOrderSegmentCommand{GroupID: groupID, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, OperatorName: "group-pass"})
+	if err != nil {
+		t.Fatalf("pass first round: %v", err)
+	}
+	if passed.RoundNo != 1 || passed.SegmentStatus != enum.OrderSegmentStatusRoundReady {
+		t.Fatalf("expected pass to affect only round one and wait for round two, got %#v", passed)
+	}
+	stateRepo := repository.NewMarketBiddingStateRepository(tx)
+	stateAfterPass, err := stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection)
+	if err != nil {
+		t.Fatalf("reload state after pass: %v", err)
+	}
+	if stateAfterPass.CurrentRoundNo != 1 || stateAfterPass.CurrentGroupID != nil {
+		t.Fatalf("expected round-ready state to clear current group, got %#v", stateAfterPass)
+	}
+	if _, err := playerService.PassSegment(ctx, PassOrderSegmentCommand{GroupID: groupID, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, OperatorName: "group-pass"}); !errors.Is(err, ErrOrderSegmentNotSelecting) {
+		t.Fatalf("expected repeated pass while round is waiting to be rejected, got %v", err)
+	}
+
+	adminService := NewAdminOrderControlCommandService(tx)
+	opened, err := adminService.OpenNextRound(ctx, OpenNextOrderRoundCommand{YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, OperatorID: 1, OperatorName: "integration-admin"})
+	if err != nil {
+		t.Fatalf("open second round after player pass: %v", err)
+	}
+	if opened.CurrentRoundNo != 2 || opened.SegmentStatus != enum.OrderSegmentStatusSelecting || opened.CurrentGroupID == nil || *opened.CurrentGroupID != groupID {
+		t.Fatalf("expected same group to retain second-round eligibility, got %#v", opened)
+	}
+	if _, err := adminService.OpenNextRound(ctx, OpenNextOrderRoundCommand{YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, OperatorID: 1, OperatorName: "integration-admin"}); !errors.Is(err, ErrOrderRoundNotReady) {
+		t.Fatalf("expected repeated next-round opening to be rejected, got %v", err)
+	}
+
+	completed, err := playerService.PassSegment(ctx, PassOrderSegmentCommand{GroupID: groupID, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, OperatorName: "group-pass"})
+	if err != nil {
+		t.Fatalf("pass final round: %v", err)
+	}
+	if completed.SegmentStatus != enum.OrderSegmentStatusCompleted {
+		t.Fatalf("expected final eligible round to complete segment, got %#v", completed)
+	}
+	finalState, err := stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection)
+	if err != nil {
+		t.Fatalf("reload completed state: %v", err)
+	}
+	if finalState.CompletionReason == nil || *finalState.CompletionReason != enum.OrderCompletionReasonAllRoundsCompleted {
+		t.Fatalf("expected normal completion reason, got %#v", finalState.CompletionReason)
+	}
+	var expiredCount int64
+	if err := tx.Model(&entity.OrderPool{}).Where("year_no = ? AND market_code = ? AND order_type = ? AND pool_status = ?", yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection, enum.OrderPoolStatusUnselectedExpired).Count(&expiredCount).Error; err != nil {
+		t.Fatalf("count expired order pool: %v", err)
+	}
+	if expiredCount != 2 {
+		t.Fatalf("expected all remaining pool cards to expire after normal completion, got %d", expiredCount)
+	}
+}
+
+func TestOrderBankruptcyInvalidatesOnlyUnfinishedRounds(t *testing.T) {
+	db := openIntegrationMySQL(t)
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() { _ = tx.Rollback().Error }()
+
+	ctx := context.Background()
+	yearNo := 1
+	ensureIntegrationGameConfig(t, ctx, tx, yearNo, yearNo, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, yearNo)
+	isolateOrderIntegrationGroups(t, ctx, tx)
+	groupID := createOrderIntegrationGroup(t, ctx, tx, "I13 bankrupt round", enum.BusinessStatusBankrupt, ptrIntForOrderTest(yearNo))
+	now := time.Now()
+	template := MustResolveOrderTemplateVersion(OrderTemplateVersionVIPServiceV1)
+	currentGroupID := groupID
+	stateItem := entity.MarketBiddingState{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, SegmentCode: enum.MarketCodeLocal + "_" + enum.OrderTypeAgencyInspection, ReleaseSequenceNo: 1, SegmentStatus: enum.OrderSegmentStatusSelecting, CurrentGroupID: &currentGroupID, CurrentRoundNo: 2, BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}}
+	if err := tx.Create(&stateItem).Error; err != nil {
+		t.Fatalf("create bankruptcy state: %v", err)
+	}
+	selectedSequence := entity.MarketSelectionOrder{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, RoundNo: 1, SequenceNo: 1, GroupID: groupID, SelectionStatus: enum.OrderSelectionStatusSelected, RankBasis: []byte(`{}`), BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}}
+	currentSequence := entity.MarketSelectionOrder{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, RoundNo: 2, SequenceNo: 1, GroupID: groupID, SelectionStatus: enum.OrderSelectionStatusCurrent, RankBasis: []byte(`{}`), BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}}
+	futureSequence := entity.MarketSelectionOrder{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, RoundNo: 3, SequenceNo: 1, GroupID: groupID, SelectionStatus: enum.OrderSelectionStatusWaiting, RankBasis: []byte(`{}`), BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}}
+	if err := tx.Create(&[]entity.MarketSelectionOrder{selectedSequence, currentSequence, futureSequence}).Error; err != nil {
+		t.Fatalf("create bankruptcy sequences: %v", err)
+	}
+	selectedGroupID := groupID
+	selectedAt := now
+	selectedPool := entity.OrderPool{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, SegmentCode: enum.MarketCodeLocal + "_" + enum.OrderTypeAgencyInspection, CardSequenceNo: 1, BusinessOrderNo: "I13-BANKRUPT-SELECTED", OrderAmount: 30, OrderQuantity: 1, UnitPrice: 30, AccountTerm: 2, PoolStatus: enum.OrderPoolStatusSelected, SelectedGroupID: &selectedGroupID, SelectedAt: &selectedAt, SourceSheetName: "integration-test", SourceCell: "A1", SourceRowKey: "I13-BANKRUPT-SELECTED", BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}}
+	if err := tx.Create(&selectedPool).Error; err != nil {
+		t.Fatalf("create selected bankruptcy order: %v", err)
+	}
+	selectedOrderID := selectedPool.ID
+	selectionOrderID := selectedSequence.ID
+	if err := tx.Model(&entity.MarketSelectionOrder{}).Where("id = ?", selectedSequence.ID).Update("selected_order_id", selectedOrderID).Error; err != nil {
+		t.Fatalf("update selected sequence fixture: %v", err)
+	}
+	if err := tx.Create(&entity.GroupOrderSelection{OrderTemplateVersion: template.TemplateVersion, GroupID: groupID, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, RoundNo: 1, SelectionOrderID: &selectionOrderID, OrderID: selectedOrderID, SelectionStatus: enum.OrderSelectionStatusSelected, DeliveryStatus: enum.OrderDeliveryStatusSelected, DeliveryEffective: true, SelectedAt: now, BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}}).Error; err != nil {
+		t.Fatalf("create selected order history: %v", err)
+	}
+	if err := tx.Create(&entity.OrderPool{OrderTemplateVersion: template.TemplateVersion, YearNo: yearNo, MarketCode: enum.MarketCodeLocal, OrderType: enum.OrderTypeAgencyInspection, SegmentCode: enum.MarketCodeLocal + "_" + enum.OrderTypeAgencyInspection, CardSequenceNo: 2, BusinessOrderNo: "I13-BANKRUPT-AVAILABLE", OrderAmount: 20, OrderQuantity: 1, UnitPrice: 20, AccountTerm: 2, PoolStatus: enum.OrderPoolStatusAvailable, SourceSheetName: "integration-test", SourceCell: "A2", SourceRowKey: "I13-BANKRUPT-AVAILABLE", BaseEntity: entity.BaseEntity{Creator: "integration-test", CreateTime: now, Updater: "integration-test", UpdateTime: now}}).Error; err != nil {
+		t.Fatalf("create available bankruptcy order: %v", err)
+	}
+	if err := invalidateOrderParticipationAfterBankruptcy(ctx, tx, groupID, yearNo, 1, "bankruptcy-test", now); err != nil {
+		t.Fatalf("invalidate unfinished bankruptcy rounds: %v", err)
+	}
+	stateRepo := repository.NewMarketBiddingStateRepository(tx)
+	finalState, err := stateRepo.GetBySegment(ctx, yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection)
+	if err != nil {
+		t.Fatalf("reload bankruptcy state: %v", err)
+	}
+	if finalState.SegmentStatus != enum.OrderSegmentStatusCompleted || finalState.CompletionReason == nil || *finalState.CompletionReason != enum.OrderCompletionReasonNoEligibleParticipants {
+		t.Fatalf("expected no-eligible-participants completion after bankruptcy, got %#v", finalState)
+	}
+	var statuses []string
+	if err := tx.Model(&entity.MarketSelectionOrder{}).Where("year_no = ? AND market_code = ? AND order_type = ?", yearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection).Order("round_no ASC").Pluck("selection_status", &statuses).Error; err != nil {
+		t.Fatalf("load bankruptcy sequence statuses: %v", err)
+	}
+	if len(statuses) != 3 || statuses[0] != enum.OrderSelectionStatusSelected || statuses[1] != enum.OrderSelectionStatusBankrupt || statuses[2] != enum.OrderSelectionStatusBankrupt {
+		t.Fatalf("expected selected history preserved and unfinished rounds invalidated, got %#v", statuses)
+	}
+	var selectedHistoryCount int64
+	if err := tx.Model(&entity.GroupOrderSelection{}).Where("group_id = ? AND year_no = ? AND order_id = ? AND delivery_effective = ?", groupID, yearNo, selectedOrderID, true).Count(&selectedHistoryCount).Error; err != nil {
+		t.Fatalf("count selected order history: %v", err)
+	}
+	if selectedHistoryCount != 1 {
+		t.Fatalf("expected previously selected order history to remain effective, got %d", selectedHistoryCount)
+	}
+	var availableCount, expiredCount int64
+	if err := tx.Model(&entity.OrderPool{}).Where("year_no = ? AND pool_status = ?", yearNo, enum.OrderPoolStatusAvailable).Count(&availableCount).Error; err != nil {
+		t.Fatalf("count available bankruptcy orders: %v", err)
+	}
+	if err := tx.Model(&entity.OrderPool{}).Where("year_no = ? AND pool_status = ?", yearNo, enum.OrderPoolStatusUnselectedExpired).Count(&expiredCount).Error; err != nil {
+		t.Fatalf("count expired bankruptcy orders: %v", err)
+	}
+	if availableCount != 0 || expiredCount != 1 {
+		t.Fatalf("expected remaining available pool to expire after bankruptcy, available=%d expired=%d", availableCount, expiredCount)
+	}
+}
+
+func ptrIntForOrderTest(value int) *int {
+	return &value
 }
 
 func TestOrderMarketDisabledRequiresZeroInvestment(t *testing.T) {

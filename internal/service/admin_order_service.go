@@ -1775,7 +1775,7 @@ func validateForecastControlCommandForTemplate(cmd UpdateOrderForecastControlCom
 			!template.IsValidMarketCode(marketCode) ||
 			!template.IsValidOrderType(orderType) ||
 			item.OrderCount < 0 ||
-			item.OrderCount > params.MaxCardCount {
+			(params.MaxCardCount > 0 && item.OrderCount > params.MaxCardCount) {
 			return ErrAdminOrderForecastControlInvalid
 		}
 		key := segmentKey(yearNo, marketCode, orderType)

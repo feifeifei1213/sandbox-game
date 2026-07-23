@@ -12,6 +12,7 @@ import {
   getAdminOrderControlConfig,
   getAdminOrderPool,
   openAdminMarketBidding,
+  openNextAdminOrderRound,
   releaseNextAdminOrderSegment,
   updateAdminOrderControlConfig,
   updateAdminOrderForecastControl,
@@ -77,6 +78,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const silentLoadingSelectionStatus = ref(false)
   const controllingMarket = ref(false)
   const releasingSegment = ref(false)
+  const openingNextRound = ref(false)
   const skippingGroup = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
 
@@ -111,7 +113,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   )
   const marketOptions = computed(() => orderTemplate.value.markets ?? DEFAULT_PLAYER_ORDER_TEMPLATE.markets)
   const orderTypeOptions = computed(() => orderTemplate.value.orderTypes ?? DEFAULT_PLAYER_ORDER_TEMPLATE.orderTypes)
-  const maxCardCount = computed(() => orderTemplate.value.maxCardCount || DEFAULT_PLAYER_ORDER_TEMPLATE.maxCardCount)
+  const maxCardCount = computed(() => orderTemplate.value.maxCardCount ?? DEFAULT_PLAYER_ORDER_TEMPLATE.maxCardCount)
   const segmentCount = computed(() => orderTemplate.value.segmentCount || marketOptions.value.length * orderTypeOptions.value.length)
 
   async function bootstrap(yearNo: number) {
@@ -206,6 +208,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         items: result.items,
         warnings: result.warnings,
       })
+      await loadConfig({ silent: true })
       await loadPool({ silent: true })
       pageMessage.value = {
         type: 'success',
@@ -298,6 +301,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         items: result.items,
         warnings: result.warnings,
       })
+      await loadConfig({ silent: true })
       await loadPool({ silent: true })
       pageMessage.value = {
         type: 'success',
@@ -335,6 +339,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   }
 
   async function confirmPool() {
+    await loadConfig({ silent: true })
     const batchId = config.value?.latestPreviewBatch?.batchId
     if (!batchId) {
       pageMessage.value = {
@@ -494,6 +499,33 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     }
   }
 
+  async function openNextRound() {
+    const segment = currentSegment.value
+    if (!segment || segment.segmentStatus !== 'ROUND_READY' || !segment.nextRoundNo) {
+      pageMessage.value = { type: 'error', text: '当前没有等待开启的下一轮。' }
+      return
+    }
+    openingNextRound.value = true
+    pageMessage.value = null
+    try {
+      const result = await openNextAdminOrderRound({
+        yearNo: selectedYearNo.value,
+        marketCode: segment.marketCode,
+        orderType: segment.orderType,
+      })
+      await loadSelectionStatus({ silent: true })
+      pageMessage.value = {
+        type: 'success',
+        text: `已开启第 ${result.currentRoundNo ?? segment.nextRoundNo} 轮。`,
+      }
+    } catch (error) {
+      pageMessage.value = toErrorMessage(error, '开启下一轮失败')
+      throw error
+    } finally {
+      openingNextRound.value = false
+    }
+  }
+
   async function skipCurrentGroup() {
     const segment = currentSegment.value
     if (!segment?.currentGroupId) {
@@ -584,6 +616,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     loadingSelectionStatus,
     controllingMarket,
     releasingSegment,
+    openingNextRound,
     skippingGroup,
     pageMessage,
     poolFilter,
@@ -620,6 +653,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     openMarket,
     closeMarket,
     releaseNextSegment,
+    openNextRound,
     skipCurrentGroup,
     setYear,
     setControlMarket,

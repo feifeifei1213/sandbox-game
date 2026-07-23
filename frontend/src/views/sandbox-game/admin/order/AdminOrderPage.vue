@@ -101,7 +101,7 @@
                       :value="getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0"
                       type="number"
                       min="0"
-                      :max="maxCardCount"
+                      :max="maxCardCount > 0 ? maxCardCount : undefined"
                       step="1"
                       class="compact-input"
                       :class="{ invalid: hasFractionInput(getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0) }"
@@ -204,43 +204,44 @@
     <section class="panel-card">
       <div class="panel-head">
         <div>
-          <strong>标段数量与释放顺序</strong>
+          <strong>标段释放顺序</strong>
         </div>
         <button type="button" class="btn primary" :disabled="savingConfig || !config?.canUpdateConfig" @click="handleSaveConfig">
-          {{ savingConfig ? '保存中...' : '保存配置' }}
+          {{ savingConfig ? '保存中...' : '保存顺序' }}
         </button>
       </div>
 
       <div class="table-scroll">
-        <table class="config-table">
+        <table class="config-table release-sequence-table">
+          <colgroup>
+            <col class="release-order-col">
+            <col>
+            <col>
+            <col class="generated-col">
+            <col class="status-col">
+          </colgroup>
           <thead>
             <tr>
               <th>释放顺序</th>
               <th>市场</th>
               <th>订单类型</th>
-              <th>订单数量</th>
-              <th>可生成上限</th>
               <th>已生成</th>
               <th>状态</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="sortedItems.length === 0">
-              <td colspan="7" class="empty-row">暂无订单配置。</td>
+              <td colspan="5" class="empty-row">暂无订单配置。</td>
             </tr>
             <tr v-for="item in sortedItems" :key="`${item.marketCode}-${item.orderType}`" :class="{ 'row-disabled': !item.marketEnabled }">
               <td>
-                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" inputmode="numeric" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input" :class="{ invalid: hasFractionInput(item.releaseSequenceNo) }">
+                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" inputmode="numeric" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input release-sequence-input" :class="{ invalid: hasFractionInput(item.releaseSequenceNo) }">
               </td>
               <td>
                 {{ item.marketName }}
                 <span v-if="!item.marketEnabled" class="muted-inline">市场未开启</span>
               </td>
               <td>{{ item.orderTypeName }}</td>
-              <td>
-                <span class="readonly-number">{{ item.orderCount }}</span>
-              </td>
-              <td class="number-cell">{{ item.marketEnabled ? item.availableCount : 0 }}</td>
               <td class="number-cell">{{ item.generatedCount }}</td>
               <td>
                 <span v-if="!item.marketEnabled" class="status-tag muted">市场未开启</span>
@@ -324,6 +325,14 @@
           <button type="button" class="btn primary" :disabled="releasingSegment" @click="handleReleaseNextSegment">
             {{ releasingSegment ? '释放中...' : '释放下一个标段' }}
           </button>
+          <button
+            type="button"
+            class="btn primary"
+            :disabled="currentSegment?.segmentStatus !== 'ROUND_READY' || !currentSegment.nextRoundNo || openingNextRound"
+            @click="handleOpenNextRound"
+          >
+            {{ openingNextRound ? '开启中...' : '开启下一轮' }}
+          </button>
         </div>
       </div>
 
@@ -345,6 +354,19 @@
           <span>当前小组</span>
           <strong>{{ currentGroupName }}</strong>
         </article>
+        <article class="status-mini">
+          <span>当前 / 下一轮</span>
+          <strong>{{ currentSegment?.currentRoundNo ? `第 ${currentSegment.currentRoundNo} 轮` : '--' }}</strong>
+          <em v-if="currentSegment?.nextRoundNo">下一轮：第 {{ currentSegment.nextRoundNo }} 轮</em>
+        </article>
+        <article class="status-mini">
+          <span>理论机会 / 剩余订单</span>
+          <strong>{{ selectedSequenceSegment?.theoreticalMaxSelections ?? 0 }} / {{ selectedSequenceSegment?.availableCount ?? 0 }}</strong>
+        </article>
+      </div>
+
+      <div v-if="selectedSequenceSegment?.warnings?.length" class="warning-list">
+        <span v-for="warning in selectedSequenceSegment.warnings" :key="warning">{{ warning }}</span>
       </div>
 
       <div class="skip-row">
@@ -409,18 +431,26 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-if="!selectedSequenceSegment || selectedSequenceSegment.selectionOrder.length === 0">
+            <tr v-if="!selectedSequenceSegment">
               <td colspan="7" class="empty-row">当前选中标段暂无选单顺序，请先生成选单顺序。</td>
             </tr>
-            <tr v-for="item in selectedSequenceSegment?.selectionOrder ?? []" :key="item.groupId">
-              <td>#{{ item.sequenceNo }}</td>
-              <td>{{ item.groupName }}</td>
-              <td class="number-cell">{{ formatAmount(item.marketInvestment) }}</td>
-              <td class="number-cell">{{ formatIntegerAmount(item.previousMarketOrderAmount) }}</td>
-              <td>{{ item.isMarketLeader ? '是' : '否' }}</td>
-              <td>{{ formatSelectionStatus(item.selectionStatus) }}</td>
-              <td>{{ item.selectedOrderNo || (item.selectedOrderId ? `#${item.selectedOrderId}` : '--') }}</td>
-            </tr>
+            <template v-for="roundNo in selectionRoundNumbers" :key="roundNo">
+              <tr class="round-title-row">
+                <td colspan="7">第 {{ roundNo }} 轮选单顺序</td>
+              </tr>
+              <tr v-if="roundSelectionItems(roundNo).length === 0">
+                <td colspan="7" class="empty-row">本轮无参与小组</td>
+              </tr>
+              <tr v-for="item in roundSelectionItems(roundNo)" :key="`${item.roundNo}-${item.groupId}`">
+                <td>#{{ item.sequenceNo }}</td>
+                <td>{{ item.groupName }}</td>
+                <td class="number-cell">{{ formatAmount(item.marketInvestment) }}</td>
+                <td class="number-cell">{{ formatIntegerAmount(item.previousMarketOrderAmount) }}</td>
+                <td>{{ item.isMarketLeader ? '是' : '否' }}</td>
+                <td>{{ formatSelectionStatus(item.selectionStatus) }}</td>
+                <td>{{ item.selectedOrderNo || (item.selectedOrderId ? `#${item.selectedOrderId}` : '--') }}</td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -533,6 +563,7 @@ const {
   loadingPool,
   loadingSelectionStatus,
   releasingSegment,
+  openingNextRound,
   skippingGroup,
   pageMessage,
   marketSelectionStatus,
@@ -595,6 +626,10 @@ const selectedSequenceSegment = computed(() => {
     ?? segments.find((item) => item.selectionOrder.length > 0 && item.segmentStatus === 'SEQUENCE_READY')
     ?? segments.find((item) => item.selectionOrder.length > 0)
     ?? null
+})
+const selectionRoundNumbers = computed(() => {
+  const maxRounds = Math.max(1, Number(selectedSequenceSegment.value ? store.orderTemplate.maxSelectionRounds : 1) || 1)
+  return Array.from({ length: maxRounds }, (_, index) => index + 1)
 })
 const marketLeaderOrder = computed(() => selectedSequenceSegment.value?.selectionOrder.find((item) => item.isMarketLeader) ?? null)
 const marketLeaderText = computed(() => {
@@ -786,7 +821,8 @@ function forecastYearLockReason(yearNo: number) {
 function handleForecastCountInput(yearNo: number, marketCode: string, orderType: string, event: Event) {
   const input = event.target as HTMLInputElement
   const raw = Number(input.value)
-  const value = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), maxCardCount.value) : 0
+  const nonNegative = Number.isFinite(raw) ? Math.max(raw, 0) : 0
+  const value = maxCardCount.value > 0 ? Math.min(nonNegative, maxCardCount.value) : nonNegative
   const item = getForecastItem(yearNo, marketCode, orderType)
   if (item) {
     item.orderCount = value
@@ -860,6 +896,18 @@ async function handleReleaseNextSegment() {
   } catch {
     // 页面消息由 store 统一处理。
   }
+}
+
+async function handleOpenNextRound() {
+  try {
+    await store.openNextRound()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+function roundSelectionItems(roundNo: number) {
+  return selectedSequenceSegment.value?.selectionOrder.filter((item) => item.roundNo === roundNo) ?? []
 }
 
 async function handleSkipCurrentGroup() {
@@ -1023,6 +1071,7 @@ function formatGenerationStatus(value?: string) {
     PREVIEW_GENERATED: '预览已生成',
     POOL_CONFIRMED: '订单池已确认',
     SELECTING: '选单中',
+    ROUND_READY: '下一轮待开启',
     COMPLETED: '已完成',
   }
   return value ? map[value] ?? value : '--'
@@ -1052,6 +1101,7 @@ function formatSelectionStatus(value: string) {
     SELECTED: '已选择',
     PASSED: '已放弃',
     ADMIN_SKIPPED: '管理员跳过',
+    INELIGIBLE_BANKRUPT: '已破产，本轮无资格',
   }
   return map[value] ?? value
 }
@@ -1312,6 +1362,11 @@ function formatGroupName(groupId?: number | null) {
   border-collapse: collapse;
 }
 
+.release-sequence-table {
+  min-width: 720px;
+  table-layout: fixed;
+}
+
 .config-table th,
 .config-table td,
 .pool-table th,
@@ -1327,6 +1382,30 @@ function formatGroupName(groupId?: number | null) {
 .pool-table th,
 .forecast-control-table th {
   background: #f4f6f9;
+  text-align: center;
+}
+
+.release-sequence-table th,
+.release-sequence-table td {
+  padding: 8px 10px;
+}
+
+.release-sequence-table .release-order-col {
+  width: 108px;
+}
+
+.release-sequence-table .generated-col {
+  width: 92px;
+}
+
+.release-sequence-table .status-col {
+  width: 128px;
+}
+
+.release-sequence-input {
+  width: 68px;
+  padding: 6px 8px;
+  border-radius: 8px;
   text-align: center;
 }
 
@@ -1723,6 +1802,13 @@ function formatGroupName(groupId?: number | null) {
   width: 100%;
   min-width: 760px;
   border-collapse: collapse;
+}
+
+.round-title-row td {
+  background: #eef4fb;
+  color: var(--text);
+  font-weight: 700;
+  text-align: left;
 }
 
 .selection-table th,

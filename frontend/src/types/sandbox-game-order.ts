@@ -1,6 +1,6 @@
 export type OrderMarketCode = string
 export type OrderTypeCode = string
-export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'VOID'
+export type OrderPoolStatus = 'AVAILABLE' | 'SELECTED' | 'UNSELECTED_EXPIRED' | 'VOID'
 export type OrderForecastStageCode = 'YEAR_1_3' | 'YEAR_4_5' | 'YEAR_6_8' | string
 export type OrderSegmentStatus =
   | 'MARKET_DISABLED'
@@ -11,6 +11,7 @@ export type OrderSegmentStatus =
   | 'SEQUENCE_READY'
   | 'WAITING_RELEASE'
   | 'SELECTING'
+  | 'ROUND_READY'
   | 'COMPLETED'
   | 'SKIPPED'
   | string
@@ -21,6 +22,7 @@ export type OrderSelectionStatus =
   | 'SELECTED'
   | 'PASSED'
   | 'ADMIN_SKIPPED'
+  | 'INELIGIBLE_BANKRUPT'
   | string
 export type OrderDeliveryStatus = 'SELECTED' | 'DELIVERED' | 'UNFINISHED' | string
 export type OrderDeliveryStageCode = 'Q1' | 'Q2' | 'Q3' | 'Q4'
@@ -52,6 +54,7 @@ export interface OrderTemplateMeta {
   formulaVersion: string
   segmentCount: number
   maxCardCount: number
+  maxSelectionRounds: number
   deliveryEnabled: boolean
   markets: OrderTemplateMarket[]
   orderTypes: OrderTemplateOrderType[]
@@ -102,6 +105,7 @@ export interface PlayerOrderPoolItem {
   unitPrice: number
   accountTerm: number
   poolStatus: OrderPoolStatus
+  roundNo?: number
   deliveryStatus?: OrderDeliveryStatus
   deliveredStageCode?: string | null
   orderPayload?: Record<string, unknown>
@@ -127,11 +131,15 @@ export interface PlayerOrderSegmentView {
   investmentSubmitted: boolean
   releaseSequenceNo: number
   segmentStatus: OrderSegmentStatus
+  currentRoundNo: number
+  nextRoundNo?: number | null
+  selfRoundStatus: OrderSelectionStatus | ''
   selectionOrder: PlayerOrderSequenceView[]
   currentGroupId: number | null
   availableOrders: PlayerOrderPoolItem[]
   lockedOrders: PlayerOrderPoolItem[]
   selectedOrder: PlayerOrderPoolItem | null
+  selectedOrders: PlayerOrderPoolItem[]
   deliveryStatus: OrderDeliveryStatus | ''
   canSelectOrder: boolean
   canPassSegment: boolean
@@ -192,6 +200,7 @@ export interface SelectOrderResult {
   selectedOrderId: number
   marketCode: OrderMarketCode
   orderType: OrderTypeCode
+  roundNo: number
   selectionSequenceNo: number
   nextGroupId: number | null
   segmentStatus: OrderSegmentStatus
@@ -233,6 +242,7 @@ export interface AdminOrderControlResult {
   orderTypeName?: string
   segmentStatus?: OrderSegmentStatus
   currentGroupId?: number | null
+  currentRoundNo?: number
   affectedCount: number
   operatedAt: string
   operatedBy: string
@@ -248,6 +258,7 @@ export interface AdminMarketBidView {
 }
 
 export interface AdminSelectionOrderView {
+  roundNo: number
   sequenceNo: number
   groupId: number
   groupName: string
@@ -267,9 +278,14 @@ export interface AdminOrderSegmentStatus {
   releaseSequenceNo: number
   segmentStatus: OrderSegmentStatus
   currentGroupId: number | null
+  currentRoundNo: number
+  nextRoundNo?: number | null
+  completionReason?: string | null
   selectionOrder: AdminSelectionOrderView[]
   availableCount: number
   selectedCount: number
+  theoreticalMaxSelections: number
+  warnings: string[]
 }
 
 export interface AdminMarketSelectionStatus {

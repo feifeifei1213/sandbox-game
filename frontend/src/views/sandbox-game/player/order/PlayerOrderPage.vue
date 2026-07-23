@@ -3,9 +3,7 @@
     <div class="shell">
       <header class="page-header">
         <div>
-          <p class="eyebrow">Sandbox Game / Player</p>
           <h1>玩家订单页</h1>
-          <p class="subtext">按管理员释放的市场标段提交投入、查看顺序并选择订单。</p>
         </div>
         <div class="header-pills">
           <span class="pill">组别：{{ currentView?.groupId ?? '--' }}</span>
@@ -170,11 +168,8 @@
               <div class="panel-head compact">
                 <div>
                   <strong>{{ selectedMarket.marketName }}状态</strong>
-                  <span>{{ selectedMarket.isMarketLeader ? '本组为该市场龙头' : '按标段投入决定参与资格' }}</span>
+                  <span v-if="selectedMarket.isMarketLeader">本组为该市场龙头</span>
                 </div>
-              </div>
-              <div class="investment-box">
-                <p class="hint">{{ selectedMarket.investmentSubmitted ? `该市场 ${selectedMarket.segments.length} 个标段投入合计 ${formatAmount(selectedMarket.marketInvestment)}` : `等待年度 ${orderSegmentCount} 项投入提交。` }}</p>
               </div>
 
               <div class="sequence-box">
@@ -212,6 +207,9 @@
                 <div class="segment-summary">
                   <span>释放顺序 #{{ visibleSegment.releaseSequenceNo }}</span>
                   <span>{{ formatSegmentStatus(visibleSegment.segmentStatus) }}</span>
+                  <span v-if="visibleSegment.currentRoundNo">当前第 {{ visibleSegment.currentRoundNo }} 轮</span>
+                  <span v-if="visibleSegment.nextRoundNo">下一轮：第 {{ visibleSegment.nextRoundNo }} 轮</span>
+                  <span>{{ formatSelectionStatus(visibleSegment.selfRoundStatus) }}</span>
                   <span>可选 {{ visibleSegment.availableOrders.length }} 单</span>
                   <span>已锁定 {{ visibleSegment.lockedOrders.length }} 单</span>
                 </div>
@@ -230,30 +228,12 @@
                   </article>
                 </div>
 
-                <div v-if="visibleSegment.selectedOrder" class="selected-order">
-                  <div>
-                    <strong>本组已选订单</strong>
-                    <span>{{ formatOrderNo(visibleSegment.selectedOrder) }} · 金额 {{ formatIntegerAmount(visibleSegment.selectedOrder.orderAmount) }} · 账期 {{ visibleSegment.selectedOrder.accountTerm }} 季度 · {{ formatDeliveryStatus(visibleSegment.deliveryStatus) }}</span>
+                <div v-if="visibleSegment.selectedOrders.length" class="selected-order">
+                  <strong>本组已选订单</strong>
+                  <div v-for="order in visibleSegment.selectedOrders" :key="order.orderId" class="selected-order-row">
+                    <span>第 {{ order.roundNo }} 轮 · {{ formatOrderNo(order) }} · 金额 {{ formatIntegerAmount(order.orderAmount) }} · 账期 {{ order.accountTerm }} 季度</span>
+                    <em>{{ formatDeliveryStatus(order.deliveryStatus ?? '') }}</em>
                   </div>
-                  <div v-if="visibleSegment.deliveryStatus === 'SELECTED'" class="delivery-actions">
-                    <select v-model="deliveryStageDraft[visibleSegment.selectedOrder.orderId]">
-                      <option value="Q1">第一季度</option>
-                      <option value="Q2">第二季度</option>
-                      <option value="Q3">第三季度</option>
-                      <option value="Q4">第四季度</option>
-                    </select>
-                    <button
-                      type="button"
-                      class="btn primary"
-                      :disabled="deliveringOrders || !deliveryEnabled"
-                      @click="handleDeliverOrder(visibleSegment)"
-                    >
-                      {{ deliveryEnabled ? (deliveringOrders ? '交付中...' : '交付订单') : '暂不支持交付' }}
-                    </button>
-                  </div>
-                  <em v-else-if="visibleSegment.selectedOrder.deliveredStageCode" class="delivery-note">
-                    已在 {{ formatDeliveryStage(visibleSegment.selectedOrder.deliveredStageCode) }} 交付
-                  </em>
                 </div>
 
                 <section class="order-grid">
@@ -301,7 +281,7 @@
                     :disabled="!visibleSegment.canPassSegment || passingSegment"
                     @click="handlePassSegment(visibleSegment)"
                   >
-                    {{ passingSegment ? '放弃中...' : '放弃本标段' }}
+                    {{ passingSegment ? '放弃中...' : '放弃本轮' }}
                   </button>
                   <span>{{ visibleSegment.canPassSegment ? '当前轮到本组，可选择或放弃。' : '未轮到本组时只能查看。' }}</span>
                 </div>
@@ -312,7 +292,6 @@
               <div class="panel-head">
                 <div>
                   <strong>本组待交付订单</strong>
-                  <span>{{ deliveryEnabled ? '同一季度可勾选多个完整订单一次交付。' : '当前订单模板暂不支持交付，已选订单仅用于订单流程联调。' }}</span>
                 </div>
               </div>
               <section v-if="pendingDeliveryOrders.length === 0" class="empty-state nested">
@@ -416,7 +395,6 @@ const { currentUser } = storeToRefs(authStore)
 
 let initialized = false
 let pollTimer = 0
-const deliveryStageDraft = ref<Record<number, OrderDeliveryStageCode>>({})
 const bulkDeliveryStage = ref<OrderDeliveryStageCode>('Q1')
 const selectedDeliveryOrderIds = ref<number[]>([])
 const marketOptions = computed(() =>
@@ -454,14 +432,15 @@ const pollingText = computed(() => {
 const pendingDeliveryOrders = computed(() =>
   markets.value.flatMap((market) =>
     market.segments
-      .filter((segment) => segment.selectedOrder && segment.deliveryStatus === 'SELECTED')
-      .map((segment) => ({
-        marketName: segment.marketName,
-        orderTypeName: segment.orderTypeName,
-        orderId: segment.selectedOrder!.orderId,
-        businessOrderNo: segment.selectedOrder!.businessOrderNo,
-        orderAmount: segment.selectedOrder!.orderAmount,
-      })),
+      .flatMap((segment) => segment.selectedOrders
+        .filter((order) => order.deliveryStatus === 'SELECTED')
+        .map((order) => ({
+          marketName: segment.marketName,
+          orderTypeName: segment.orderTypeName,
+          orderId: order.orderId,
+          businessOrderNo: order.businessOrderNo,
+          orderAmount: order.orderAmount,
+        }))),
   ),
 )
 
@@ -569,20 +548,11 @@ async function handleSelectOrder(segment: PlayerOrderSegmentView, orderId: numbe
 }
 
 async function handlePassSegment(segment: PlayerOrderSegmentView) {
-  try {
-    await store.passSegment(segment)
-  } catch {
-    // 页面消息由 store 统一处理。
-  }
-}
-
-async function handleDeliverOrder(segment: PlayerOrderSegmentView) {
-  if (!segment.selectedOrder) {
+  if (!window.confirm(`确认放弃第 ${segment.currentRoundNo} 轮选单机会？仅影响本轮，后续有资格轮次仍可参与。`)) {
     return
   }
-  const stageCode = deliveryStageDraft.value[segment.selectedOrder.orderId] ?? 'Q1'
   try {
-    await store.deliverSelectedOrder(segment, stageCode)
+    await store.passSegment(segment)
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -646,10 +616,6 @@ async function handleLogout() {
   } finally {
     await router.replace('/sandbox-game/login')
   }
-}
-
-function formatAmount(value: number) {
-  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
 function formatIntegerAmount(value: number) {
@@ -734,6 +700,7 @@ function formatSegmentStatus(value?: string) {
     SEQUENCE_READY: '顺序已生成',
     WAITING_RELEASE: '等待释放',
     SELECTING: '选单中',
+    ROUND_READY: '等待管理员开启下一轮',
     COMPLETED: '已完成',
     SKIPPED: '已跳过',
   }
@@ -748,6 +715,7 @@ function formatSelectionStatus(value: string) {
     SELECTED: '已选择',
     PASSED: '已放弃',
     ADMIN_SKIPPED: '管理员跳过',
+    INELIGIBLE_BANKRUPT: '已破产，本轮无资格',
   }
   return map[value] ?? value
 }
@@ -1221,29 +1189,10 @@ function formatDeliveryStage(value: string) {
   font-size: 16px;
 }
 
-.investment-box,
 .sequence-box {
   display: grid;
   gap: 12px;
   padding: 16px;
-}
-
-.investment-box label {
-  display: grid;
-  gap: 6px;
-}
-
-.investment-box label span {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.investment-box input {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px 12px;
 }
 
 .btn {
@@ -1358,6 +1307,22 @@ function formatDeliveryStage(value: string) {
 .selected-order span {
   display: block;
   margin-top: 4px;
+}
+
+.selected-order-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #c9e8d3;
+}
+
+.selected-order-row em {
+  color: var(--success);
+  font-size: 13px;
+  font-style: normal;
+  white-space: nowrap;
 }
 
 .delivery-actions {

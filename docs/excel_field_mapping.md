@@ -229,7 +229,7 @@
 | `orderYearNo` | `year_no` | 订单池 | 年份 | `SYSTEM_DERIVED` | 订单所属年份，`1年 ~ 最终年` |
 | `forecastYearNo` | `year_no` | 多年订单数量控制台/市场预测 | 预测年份 | `ADMIN_INPUT + SYSTEM_DERIVED` | 固定 `1~8年`，不受最终年份裁剪 |
 | `forecastStageCode` | `forecast_stage_code` | 市场预测 | 预测阶段 | `SYSTEM_DERIVED` | `YEAR_1_3 / YEAR_4_5 / YEAR_6_8` |
-| `forecastOrderCount` | `order_count` | 多年订单数量控制台 | 订单数量控制 | `ADMIN_INPUT` | `1~8年 × 市场 × 订单类型` 的订单卡片数量，范围 `0~15` |
+| `forecastOrderCount` | `order_count` | 多年订单数量控制台 | 订单数量控制 | `ADMIN_INPUT` | `1~8年 × 市场 × 订单类型` 的订单卡片数量，非负整数，无固定业务上限 |
 | `forecastNarrative` | `narrative` | 市场预测 | 市场预测说明 | `ADMIN_INPUT` | Excel 右侧说明文字，玩家端只读展示 |
 | `marketCode` | `market_code` | 订单池/年度订单页 | 市场 | `ADMIN_INPUT + PLAYER_INPUT` | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
 | `marketEnabled` | `market_enabled` | 管理员订单管理/年度订单页 | 市场开启 | `ADMIN_INPUT + SYSTEM_DERIVED` | 本地市场默认开启，其他市场默认关闭；市场开启以管理员当年手动状态为准，不随控制台数量自动开启；未开启市场投入自动按 `0` |
@@ -240,22 +240,23 @@
 | `generationBatchId` | `generation_batch_id` | 订单池 | 订单生成批次 | `SYSTEM_DERIVED` | 系统按 Excel 公式链生成订单池后固化的批次 ID |
 | `formulaVersion` | `formula_version` | 订单生成批次 | 公式版本 | `SYSTEM_DERIVED` | 订单生成规则版本 |
 | `randomSeed` | `random_seed` | 订单生成批次 | 随机种子 | `SYSTEM_DERIVED` | 后台复盘字段，首版页面可不展示 |
-| `cardSequenceNo` | `card_sequence_no` | 订单池 | 订单卡片序号 | `SYSTEM_DERIVED` | 每个标段 `1 ~ 15` |
+| `cardSequenceNo` | `card_sequence_no` | 订单池 | 订单卡片序号 | `SYSTEM_DERIVED` | 每个标段从 `1` 递增，无固定业务上限 |
 | `businessOrderNo` | `business_order_no` | 订单池 | 订单编号 | `SYSTEM_DERIVED` | 页面主编号，如 `CARD-01`；不使用数据库自增 ID 作为主要展示编号 |
-| `segmentStatus` | `segment_status` | 年度订单页 | 标段状态 | `SYSTEM_DERIVED` | `MARKET_DISABLED / NO_ORDER_CONFIG / WAITING_RELEASE / SELECTING / COMPLETED / SKIPPED` |
-| `selectionSequenceNo` | `sequence_no` | 年度订单页 | 选单顺序 | `SYSTEM_DERIVED` | 玩家和管理员均可查看完整顺序，但玩家端不展示排序依据 |
-| `selectionStatus` | `selection_status` | 年度订单页 | 小组标段状态 | `SYSTEM_DERIVED` | `INELIGIBLE / WAITING / CURRENT / SELECTED / PASSED / ADMIN_SKIPPED` |
-| `isMarketLeader` | `is_market_leader` | 年度订单页 | 是否市场龙头 | `SYSTEM_DERIVED` | 市场龙头只在对应市场生效，本年 `0` 投入仍可优先选单 |
+| `segmentStatus` | `segment_status` | 年度订单页 | 标段状态 | `SYSTEM_DERIVED` | `MARKET_DISABLED / NO_ORDER_CONFIG / WAITING_RELEASE / SELECTING / ROUND_READY / COMPLETED / SKIPPED` |
+| `roundNo` | `round_no` | 年度订单页 | 选单轮次 | `SYSTEM_DERIVED` | 贵宾/生产为 `1~4`，机场暂时固定为 `1` |
+| `selectionSequenceNo` | `sequence_no` | 年度订单页 | 选单顺序 | `SYSTEM_DERIVED` | 管理员查看全部轮次顺序；玩家只查看本组状态和当前轮次，不展示排序依据 |
+| `selectionStatus` | `selection_status` | 年度订单页 | 小组轮次状态 | `SYSTEM_DERIVED` | `WAITING / CURRENT / SELECTED / PASSED / ADMIN_SKIPPED / INELIGIBLE_BANKRUPT` |
+| `isMarketLeader` | `is_market_leader` | 年度订单页 | 是否市场龙头 | `SYSTEM_DERIVED` | 市场龙头只在对应市场生效且只影响顺序，当前标段投入 `0` 时无资格 |
 | `orderAmount` | `order_amount` | 订单池 | 订单金额 | `SYSTEM_DERIVED` | 系统按 Excel 公式链生成后写入；业务口径为整数金额，且等于数量乘以单价 |
 | `orderQuantity` | `order_quantity` | 订单池 | 数量 | `SYSTEM_DERIVED` | 单张订单卡的随机服务数量，不是控制台订单卡片数量；生成口径为整数 |
 | `unitPrice` | `unit_price` | 订单池 | 单价 | `SYSTEM_DERIVED` | 订单卡片单价字段；允许小数，由后端自动校准有效单价以保证订单金额为整数 |
 | `accountTerm` | `account_term` | 订单池 | 账期 | `SYSTEM_DERIVED` | 订单卡片账期字段；首版只展示，不参与应收账款自动计算 |
-| `orderPoolStatus` | `status` | 订单池 | 订单状态 | `SYSTEM_DERIVED` | `AVAILABLE / SELECTED / VOID` 等后续实现枚举 |
-| `marketInvestment` | `market_investment` | 年度订单页 | 市场投入 | `PLAYER_INPUT + SYSTEM_DERIVED` | 玩家按 `市场 + 订单类型` 提交 16 项投入，提交后不可修改；已开启市场由玩家填写非负整数，未开启市场由系统自动按 `0` |
+| `orderPoolStatus` | `status` | 订单池 | 订单状态 | `SYSTEM_DERIVED` | `AVAILABLE / SELECTED / UNSELECTED_EXPIRED / VOID` |
+| `marketInvestment` | `market_investment` | 年度订单页 | 市场投入 | `PLAYER_INPUT + SYSTEM_DERIVED` | 玩家按当前订单模板的 `市场 + 订单类型` 提交完整投入，提交后不可修改；已开启市场由玩家填写非负整数，未开启市场由系统自动按 `0` |
 | `selectedOrderId` | `order_id` | 年度订单页 | 已选订单 | `PLAYER_INPUT + SYSTEM_DERIVED` | 玩家轮到本组且当前标段释放时选择的订单 |
 | `selectedOrderAmount` | `selected_order_amount` | 年度订单页/经营页 | 已选订单金额 | `SYSTEM_DERIVED` | 汇总进入经营页订单总额 |
 | `selectedOrderTotal` | - | 经营页 | 订单总额 | `SYSTEM_DERIVED` | 正式年份由本组全部标段已选订单金额汇总 |
-| `marketInvestmentTotal` | - | 经营页 | 市场投入 | `SYSTEM_DERIVED` | 正式年份由本组 16 项标段投入汇总 |
+| `marketInvestmentTotal` | - | 经营页 | 市场投入 | `SYSTEM_DERIVED` | 正式年份由本组当前订单模板全部标段投入汇总 |
 | `orderDeliveryStatus` | `delivery_status` | 年度订单页/经营页 | 交付状态 | `SYSTEM_DERIVED` | `SELECTED / DELIVERED / UNFINISHED` |
 | `deliveredStageCode` | `delivered_stage_code` | 年度订单页/经营页 | 交付季度 | `SYSTEM_DERIVED` | 玩家执行交付操作时绑定当前经营季度 |
 | `pollingIntervalSeconds` | - | 年度订单页 | 自动轮询间隔 | `SYSTEM_DERIVED` | 首版固定 `3` 秒，不做 WebSocket |

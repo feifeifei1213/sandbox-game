@@ -326,6 +326,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		adminOrder.POST("/close-market-bidding", adminOrderHandler.CloseMarketBidding)
 		adminOrder.GET("/get-market-selection-status", adminOrderHandler.GetMarketSelectionStatus)
 		adminOrder.POST("/release-next-segment", adminOrderHandler.ReleaseNextSegment)
+		adminOrder.POST("/open-next-round", adminOrderHandler.OpenNextRound)
 		adminOrder.POST("/admin-skip-current-group", adminOrderHandler.AdminSkipCurrentGroup)
 	}
 

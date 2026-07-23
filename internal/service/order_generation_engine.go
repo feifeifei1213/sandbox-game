@@ -74,10 +74,13 @@ func buildGeneratedOrderPoolItems(configs []entity.OrderGenerationConfig, batchI
 	poolItems := make([]entity.OrderPool, 0)
 	details := make([]generatedOrderDetail, 0)
 	for _, config := range configs {
-		if config.OrderCount <= 0 {
+		if config.OrderCount < 0 {
+			return nil, nil, params, ErrAdminOrderConfigInvalid
+		}
+		if config.OrderCount == 0 {
 			continue
 		}
-		if config.OrderCount > params.MaxCardCount {
+		if params.MaxCardCount > 0 && config.OrderCount > params.MaxCardCount {
 			return nil, nil, params, ErrAdminOrderConfigInvalid
 		}
 		for index := 1; index <= config.OrderCount; index++ {
@@ -296,7 +299,7 @@ func defaultVIPOrderGenerationParameters() orderGenerationParameterSnapshot {
 		MaxQuantity:    4,
 		MinAccountTerm: 2,
 		MaxAccountTerm: 4,
-		MaxCardCount:   15,
+		MaxCardCount:   0,
 		AveragePrices: map[string]map[string]float64{
 			enum.MarketCodeLocal: {
 				enum.OrderTypeAgencyInspection: 5,

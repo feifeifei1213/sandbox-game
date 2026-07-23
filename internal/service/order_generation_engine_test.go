@@ -31,7 +31,7 @@ func TestPlayerOrderYearViewForDemoYearDoesNotRequireOrders(t *testing.T) {
 func TestValidateForecastControlCommandEnforcesOrderCountAndReleaseSequence(t *testing.T) {
 	valid := UpdateOrderControlConfigCommand{
 		YearNo: 1,
-		Items:  buildTestControlConfigItems(1, map[string]int{testOrderSegmentKey(enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 15}),
+		Items:  buildTestControlConfigItems(1, map[string]int{testOrderSegmentKey(enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 54}),
 	}
 	if err := validateControlConfigCommand(valid); err != nil {
 		t.Fatalf("expected valid release sequence config, got %v", err)
@@ -39,18 +39,18 @@ func TestValidateForecastControlCommandEnforcesOrderCountAndReleaseSequence(t *t
 
 	forecast := UpdateOrderForecastControlCommand{
 		Items: buildTestForecastControlItems(map[string]int{
-			testForecastSegmentKey(1, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 15,
+			testForecastSegmentKey(1, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 54,
 		}),
 	}
 	if err := validateForecastControlCommand(forecast); err != nil {
-		t.Fatalf("expected valid 0~15 forecast control count, got %v", err)
+		t.Fatalf("expected order count above the former fixed limit to be valid, got %v", err)
 	}
 
 	invalidForecast := forecast
 	invalidForecast.Items = append([]UpdateOrderForecastControlItem(nil), forecast.Items...)
-	invalidForecast.Items[0].OrderCount = 16
+	invalidForecast.Items[0].OrderCount = -1
 	if err := validateForecastControlCommand(invalidForecast); !errors.Is(err, ErrAdminOrderForecastControlInvalid) {
-		t.Fatalf("expected forecast order count > 15 to be invalid, got %v", err)
+		t.Fatalf("expected negative forecast order count to be invalid, got %v", err)
 	}
 
 	duplicatedEffectiveSequence := valid
@@ -129,14 +129,14 @@ func TestValidateMarketConfigCommandRequiresIntegerInvestmentLimit(t *testing.T)
 	}
 }
 
-func TestBuildGeneratedOrderPoolItemsIsDeterministicAndCapsCardCount(t *testing.T) {
+func TestBuildGeneratedOrderPoolItemsIsDeterministicAndSupportsUnlimitedCardCount(t *testing.T) {
 	now := time.Date(2026, 5, 20, 9, 30, 0, 0, time.UTC)
 	configs := []entity.OrderGenerationConfig{
 		{
 			YearNo:            1,
 			MarketCode:        enum.MarketCodeLocal,
 			OrderType:         enum.OrderTypeAgencyInspection,
-			OrderCount:        2,
+			OrderCount:        54,
 			ReleaseSequenceNo: 1,
 		},
 	}
@@ -149,11 +149,11 @@ func TestBuildGeneratedOrderPoolItemsIsDeterministicAndCapsCardCount(t *testing.
 	if err != nil {
 		t.Fatalf("generate right order pool: %v", err)
 	}
-	if leftParams.FormulaVersion != orderGenerationFormulaVersion || rightParams.MaxCardCount != 15 {
+	if leftParams.FormulaVersion != orderGenerationFormulaVersion || rightParams.MaxCardCount != 0 {
 		t.Fatalf("unexpected generation parameters: left=%#v right=%#v", leftParams, rightParams)
 	}
-	if len(leftItems) != 2 || len(leftDetails) != 2 || len(rightItems) != 2 || len(rightDetails) != 2 {
-		t.Fatalf("expected two generated orders, got left=%d/%d right=%d/%d", len(leftItems), len(leftDetails), len(rightItems), len(rightDetails))
+	if len(leftItems) != 54 || len(leftDetails) != 54 || len(rightItems) != 54 || len(rightDetails) != 54 {
+		t.Fatalf("expected 54 generated orders, got left=%d/%d right=%d/%d", len(leftItems), len(leftDetails), len(rightItems), len(rightDetails))
 	}
 	for index := range leftItems {
 		if leftItems[index].OrderAmount != rightItems[index].OrderAmount ||
@@ -180,9 +180,9 @@ func TestBuildGeneratedOrderPoolItemsIsDeterministicAndCapsCardCount(t *testing.
 	}
 
 	invalid := append([]entity.OrderGenerationConfig(nil), configs...)
-	invalid[0].OrderCount = 16
+	invalid[0].OrderCount = -1
 	if _, _, _, err := buildGeneratedOrderPoolItems(invalid, 91, "stable-seed", "tester", now); !errors.Is(err, ErrAdminOrderConfigInvalid) {
-		t.Fatalf("expected generated order count > max to be rejected, got %v", err)
+		t.Fatalf("expected negative generated order count to be rejected, got %v", err)
 	}
 }
 
@@ -229,11 +229,11 @@ func TestBuildMarketParticipantsHonorsLeaderAndPreviousAmountTieBreak(t *testing
 	if err != nil {
 		t.Fatalf("build participants with leader: %v", err)
 	}
-	if len(participants) != 2 {
-		t.Fatalf("expected bankrupt group to be excluded, got %#v", participants)
+	if len(participants) != 1 {
+		t.Fatalf("expected bankrupt group and zero-investment leader to be excluded, got %#v", participants)
 	}
-	if participants[0].GroupID != 1 || !participants[0].IsMarketLeader {
-		t.Fatalf("expected market leader to be first even with zero current investment, got %#v", participants)
+	if participants[0].GroupID != 2 || participants[0].IsMarketLeader {
+		t.Fatalf("expected only the positive-investment normal group to participate, got %#v", participants)
 	}
 
 	tieParticipants, _, err := buildMarketParticipantsWithLeader(
@@ -258,6 +258,97 @@ func TestBuildMarketParticipantsHonorsLeaderAndPreviousAmountTieBreak(t *testing
 	resolvedLeader := resolveMarketLeader(2, groups, map[int64]float64{1: 10, 2: 20, 3: 999}, rand.New(rand.NewSource(7)))
 	if resolvedLeader == nil || *resolvedLeader != 2 {
 		t.Fatalf("expected bankrupt previous leader to be invalid and group 2 to lead, got %v", resolvedLeader)
+	}
+}
+
+func TestOrderSelectionQuotaBoundariesAndAirportSingleRound(t *testing.T) {
+	vipTemplate := MustResolveOrderTemplateVersion(OrderTemplateVersionVIPServiceV1)
+	cases := []struct {
+		investment float64
+		want       int
+	}{
+		{investment: 0, want: 0},
+		{investment: 1, want: 1},
+		{investment: 2, want: 1},
+		{investment: 3, want: 2},
+		{investment: 5, want: 2},
+		{investment: 6, want: 3},
+		{investment: 8, want: 3},
+		{investment: 9, want: 4},
+		{investment: 10, want: 4},
+	}
+	for _, item := range cases {
+		if got := vipTemplate.SelectionQuota(item.investment); got != item.want {
+			t.Errorf("VIP investment %.0f: expected %d rounds, got %d", item.investment, item.want, got)
+		}
+	}
+
+	airportTemplate := MustResolveOrderTemplateVersion(OrderTemplateVersionAirportV1)
+	if got := airportTemplate.SelectionQuota(0); got != 0 {
+		t.Fatalf("airport zero investment should have no round, got %d", got)
+	}
+	for _, investment := range []float64{1, 3, 6, 9, 100} {
+		if got := airportTemplate.SelectionQuota(investment); got != 1 {
+			t.Errorf("airport investment %.0f: expected one round, got %d", investment, got)
+		}
+	}
+	airportState := entity.MarketBiddingState{OrderTemplateVersion: airportTemplate.TemplateVersion, YearNo: 1, MarketCode: MarketCodeDomestic, OrderType: OrderTypeNarrowBody, SegmentStatus: enum.OrderSegmentStatusWaitingInvestment}
+	airportItems := buildSelectionOrderItems([]entity.MarketBiddingState{airportState}, []marketParticipant{{GroupID: 1, MarketInvestment: 9}}, airportTemplate, "test", time.Now())
+	if len(airportItems) != 1 || airportItems[0].RoundNo != 1 {
+		t.Fatalf("airport template must generate exactly one round, got %#v", airportItems)
+	}
+}
+
+func TestBuildSelectionOrderItemsFiltersRoundsFromOneBaseOrder(t *testing.T) {
+	template := MustResolveOrderTemplateVersion(OrderTemplateVersionVIPServiceV1)
+	state := entity.MarketBiddingState{
+		OrderTemplateVersion: template.TemplateVersion,
+		YearNo:               1,
+		MarketCode:           enum.MarketCodeLocal,
+		OrderType:            enum.OrderTypeAgencyInspection,
+		SegmentStatus:        enum.OrderSegmentStatusWaitingInvestment,
+	}
+	participants := []marketParticipant{
+		{GroupID: 10, GroupName: "高投入组", MarketInvestment: 9, IsMarketLeader: true, RandomRank: 1},
+		{GroupID: 20, GroupName: "中投入组", MarketInvestment: 3, RandomRank: 2},
+		{GroupID: 30, GroupName: "低投入组", MarketInvestment: 1, RandomRank: 3},
+	}
+	items := buildSelectionOrderItems([]entity.MarketBiddingState{state}, participants, template, "test", time.Now())
+	if len(items) != 7 {
+		t.Fatalf("expected 4 + 2 + 1 round records, got %d", len(items))
+	}
+	wantGroupsByRound := map[int][]int64{1: {10, 20, 30}, 2: {10, 20}, 3: {10}, 4: {10}}
+	for roundNo, wantGroups := range wantGroupsByRound {
+		var got []int64
+		for _, item := range items {
+			if item.RoundNo == roundNo {
+				got = append(got, item.GroupID)
+			}
+		}
+		if len(got) != len(wantGroups) {
+			t.Fatalf("round %d: expected groups %#v, got %#v", roundNo, wantGroups, got)
+		}
+		for index, groupID := range wantGroups {
+			if got[index] != groupID {
+				t.Fatalf("round %d: expected stable base-order group %d at position %d, got %d", roundNo, groupID, index, got[index])
+			}
+		}
+	}
+}
+
+func TestAdminSkipCurrentGroupRequiresReasonBeforeTransaction(t *testing.T) {
+	service := NewAdminOrderControlCommandService(nil)
+	_, err := service.AdminSkipCurrentGroup(context.Background(), AdminSkipCurrentGroupCommand{
+		YearNo:       1,
+		MarketCode:   enum.MarketCodeLocal,
+		OrderType:    enum.OrderTypeAgencyInspection,
+		GroupID:      1,
+		Reason:       "   ",
+		OperatorID:   1,
+		OperatorName: "test-admin",
+	})
+	if !errors.Is(err, ErrOrderAdminSkipReasonRequired) {
+		t.Fatalf("expected blank admin skip reason to be rejected before opening a transaction, got %v", err)
 	}
 }
 

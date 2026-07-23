@@ -595,10 +595,10 @@ func ensureIntegrationOrderTemplateColumns(t *testing.T, db *gorm.DB) {
 		&entity.OrderMarketConfig{}:     {"OrderTemplateVersion"},
 		&entity.OrderGenerationBatch{}:  {"OrderTemplateVersion"},
 		&entity.OrderPool{}:             {"OrderTemplateVersion", "OrderPayloadJSON"},
-		&entity.MarketBiddingState{}:    {"OrderTemplateVersion"},
+		&entity.MarketBiddingState{}:    {"OrderTemplateVersion", "CurrentRoundNo", "CompletionReason"},
 		&entity.GroupMarketBid{}:        {"OrderTemplateVersion"},
-		&entity.MarketSelectionOrder{}:  {"OrderTemplateVersion"},
-		&entity.GroupOrderSelection{}:   {"OrderTemplateVersion"},
+		&entity.MarketSelectionOrder{}:  {"OrderTemplateVersion", "RoundNo"},
+		&entity.GroupOrderSelection{}:   {"OrderTemplateVersion", "RoundNo", "SelectionOrderID"},
 	}
 
 	for item, columns := range entitiesWithColumns {
@@ -609,6 +609,53 @@ func ensureIntegrationOrderTemplateColumns(t *testing.T, db *gorm.DB) {
 			if err := db.Migrator().AddColumn(item, column); err != nil {
 				t.Fatalf("ensure order template column %s on %T: %v", column, item, err)
 			}
+		}
+	}
+
+	legacyIndexes := []struct {
+		model any
+		name  string
+	}{
+		{model: &entity.MarketSelectionOrder{}, name: "uk_market_sequence"},
+		{model: &entity.MarketSelectionOrder{}, name: "uk_group_market_sequence"},
+		{model: &entity.GroupOrderSelection{}, name: "uk_group_year_segment_selection"},
+	}
+	for _, index := range legacyIndexes {
+		if !db.Migrator().HasIndex(index.model, index.name) {
+			continue
+		}
+		if err := db.Migrator().DropIndex(index.model, index.name); err != nil {
+			t.Fatalf("drop legacy order index %s: %v", index.name, err)
+		}
+	}
+
+	indexes := []struct {
+		model     any
+		name      string
+		statement string
+	}{
+		{
+			model:     &entity.MarketSelectionOrder{},
+			name:      "uk_market_round_sequence",
+			statement: "CREATE UNIQUE INDEX uk_market_round_sequence ON sg_market_selection_order (year_no, market_code, order_type, round_no, sequence_no)",
+		},
+		{
+			model:     &entity.MarketSelectionOrder{},
+			name:      "uk_group_market_round",
+			statement: "CREATE UNIQUE INDEX uk_group_market_round ON sg_market_selection_order (year_no, market_code, order_type, round_no, group_id)",
+		},
+		{
+			model:     &entity.GroupOrderSelection{},
+			name:      "uk_selection_order",
+			statement: "CREATE UNIQUE INDEX uk_selection_order ON sg_group_order_selection (selection_order_id)",
+		},
+	}
+	for _, index := range indexes {
+		if db.Migrator().HasIndex(index.model, index.name) {
+			continue
+		}
+		if err := db.Exec(index.statement).Error; err != nil {
+			t.Fatalf("create multi-round order index %s: %v", index.name, err)
 		}
 	}
 }

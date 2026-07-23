@@ -53,6 +53,12 @@ type AdminOrderReleaseNextSegmentRequest struct {
 	YearNo *int `json:"yearNo" binding:"required"`
 }
 
+type AdminOrderOpenNextRoundRequest struct {
+	YearNo     *int   `json:"yearNo" binding:"required"`
+	MarketCode string `json:"marketCode" binding:"required"`
+	OrderType  string `json:"orderType" binding:"required"`
+}
+
 type AdminOrderSkipCurrentGroupRequest struct {
 	YearNo     *int   `json:"yearNo" binding:"required"`
 	MarketCode string `json:"marketCode" binding:"required"`

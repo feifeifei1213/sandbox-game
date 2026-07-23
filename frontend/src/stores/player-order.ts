@@ -49,7 +49,8 @@ export const DEFAULT_PLAYER_ORDER_TEMPLATE: OrderTemplateMeta = {
   templateName: '贵宾服务订单模板 V1',
   formulaVersion: 'ORDER_GEN_SERVICE_V1',
   segmentCount: DEFAULT_PLAYER_ORDER_MARKETS.length * DEFAULT_PLAYER_ORDER_TYPES.length,
-  maxCardCount: 15,
+  maxCardCount: 0,
+  maxSelectionRounds: 4,
   deliveryEnabled: true,
   markets: DEFAULT_PLAYER_ORDER_MARKETS,
   orderTypes: DEFAULT_PLAYER_ORDER_TYPES,
@@ -215,11 +216,11 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
       })
       pageMessage.value = {
         type: 'success',
-        text: `${segment.marketName} ${segment.orderTypeName} 已放弃。`,
+        text: `${segment.marketName} ${segment.orderTypeName} 第 ${segment.currentRoundNo} 轮已放弃，后续有资格轮次不受影响。`,
       }
       await loadYearView(selectedYear.value, { silent: true })
     } catch (error) {
-      pageMessage.value = toErrorMessage(error, '放弃标段失败')
+      pageMessage.value = toErrorMessage(error, '放弃本轮失败')
       throw error
     } finally {
       passingSegment.value = false

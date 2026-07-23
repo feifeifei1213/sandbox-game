@@ -57,15 +57,16 @@ type OrderFieldDefinition struct {
 }
 
 type OrderTemplateView struct {
-	TemplateVersion string                 `json:"templateVersion"`
-	TemplateName    string                 `json:"templateName"`
-	FormulaVersion  string                 `json:"formulaVersion"`
-	SegmentCount    int                    `json:"segmentCount"`
-	MaxCardCount    int                    `json:"maxCardCount"`
-	DeliveryEnabled bool                   `json:"deliveryEnabled"`
-	Markets         []OrderMarketView      `json:"markets"`
-	OrderTypes      []OrderTypeView        `json:"orderTypes"`
-	Fields          []OrderFieldDefinition `json:"fields"`
+	TemplateVersion    string                 `json:"templateVersion"`
+	TemplateName       string                 `json:"templateName"`
+	FormulaVersion     string                 `json:"formulaVersion"`
+	SegmentCount       int                    `json:"segmentCount"`
+	MaxCardCount       int                    `json:"maxCardCount"`
+	MaxSelectionRounds int                    `json:"maxSelectionRounds"`
+	DeliveryEnabled    bool                   `json:"deliveryEnabled"`
+	Markets            []OrderMarketView      `json:"markets"`
+	OrderTypes         []OrderTypeView        `json:"orderTypes"`
+	Fields             []OrderFieldDefinition `json:"fields"`
 }
 
 type OrderMarketView struct {
@@ -187,6 +188,32 @@ func (t OrderTemplateDefinition) DefaultMarketEnabled(code string) bool {
 	return false
 }
 
+func (t OrderTemplateDefinition) MaxSelectionRounds() int {
+	if t.TemplateVersion == OrderTemplateVersionAirportV1 {
+		return 1
+	}
+	return 4
+}
+
+func (t OrderTemplateDefinition) SelectionQuota(investment float64) int {
+	if investment <= 0 {
+		return 0
+	}
+	if t.MaxSelectionRounds() == 1 {
+		return 1
+	}
+	switch {
+	case investment >= 9:
+		return 4
+	case investment >= 6:
+		return 3
+	case investment >= 3:
+		return 2
+	default:
+		return 1
+	}
+}
+
 func BuildOrderTemplateView(template OrderTemplateDefinition) OrderTemplateView {
 	markets := make([]OrderMarketView, 0, len(template.Markets))
 	for _, market := range template.Markets {
@@ -208,15 +235,16 @@ func BuildOrderTemplateView(template OrderTemplateDefinition) OrderTemplateView 
 	fields := make([]OrderFieldDefinition, len(template.Fields))
 	copy(fields, template.Fields)
 	return OrderTemplateView{
-		TemplateVersion: template.TemplateVersion,
-		TemplateName:    template.TemplateName,
-		FormulaVersion:  template.FormulaVersion,
-		SegmentCount:    len(template.Markets) * len(template.OrderTypes),
-		MaxCardCount:    template.MaxCardCount,
-		DeliveryEnabled: template.DeliveryEnabled,
-		Markets:         markets,
-		OrderTypes:      orderTypes,
-		Fields:          fields,
+		TemplateVersion:    template.TemplateVersion,
+		TemplateName:       template.TemplateName,
+		FormulaVersion:     template.FormulaVersion,
+		SegmentCount:       len(template.Markets) * len(template.OrderTypes),
+		MaxCardCount:       template.MaxCardCount,
+		MaxSelectionRounds: template.MaxSelectionRounds(),
+		DeliveryEnabled:    template.DeliveryEnabled,
+		Markets:            markets,
+		OrderTypes:         orderTypes,
+		Fields:             fields,
 	}
 }
 
@@ -226,7 +254,7 @@ func builtInOrderTemplates() []OrderTemplateDefinition {
 			TemplateVersion: OrderTemplateVersionVIPServiceV1,
 			TemplateName:    "贵宾服务订单模板 V1",
 			FormulaVersion:  OrderFormulaVersionVIPServiceV1,
-			MaxCardCount:    15,
+			MaxCardCount:    0,
 			DeliveryEnabled: true,
 			Markets: []OrderMarketDefinition{
 				{Code: enum.MarketCodeLocal, Name: "本地市场", DefaultEnabled: true, SortOrder: 1},
@@ -251,7 +279,7 @@ func builtInOrderTemplates() []OrderTemplateDefinition {
 			TemplateVersion: OrderTemplateVersionAirportV1,
 			TemplateName:    "机场沙盘订单模板 V1",
 			FormulaVersion:  OrderFormulaVersionAirportV1,
-			MaxCardCount:    28,
+			MaxCardCount:    0,
 			DeliveryEnabled: false,
 			Markets: []OrderMarketDefinition{
 				{Code: MarketCodeDomestic, Name: "国内市场", DefaultEnabled: true, SortOrder: 1},

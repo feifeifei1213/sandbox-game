@@ -784,7 +784,7 @@
 | `year_no` | INT | 预测年份，固定 `1~8` |
 | `market_code` | VARCHAR(32) | `LOCAL / REGIONAL / NATIONAL / GLOBAL` |
 | `order_type` | VARCHAR(32) | `AGENCY_INSPECTION / TWO_CABIN_VIP / BUSINESS_VIP / MEMBER_CUSTOM` |
-| `order_count` | INT | 订单卡片数量，范围 `0~15` |
+| `order_count` | INT | 订单卡片数量，非负整数，无固定业务上限 |
 | `forecast_stage_code` | VARCHAR(32) | `YEAR_1_3 / YEAR_4_5 / YEAR_6_8` |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
 
@@ -876,9 +876,9 @@
 说明：
 
 - 多年订单数量控制台是订单数量主来源；本表中的 `order_count` 是当年生成/确认时的快照，不应作为另一套独立数量来源。
-- `order_count` 范围为 `0 ~ 15`；`0` 表示不生成订单且该标段不进入开标。
+- `order_count` 必须为非负整数，无固定业务上限；`0` 表示不生成订单且该标段不进入开标。
 - `release_sequence_no` 必须在开标前配置完成；释放第一个标段后不允许调整。
-- 系统可基于 `order_count`、实际小组数、市场投入资格生成风险提示，但不做强制保底或多轮分配。
+- 系统按所有有效小组的标段轮次资格合计计算理论最大选单机会；`order_count` 不足时提示“订单池可能提前选空”，只警告、不阻止，不做强制保底、自动补单或扩容。
 - 均价、波动系数、最小/最大订单数量、账期范围等复杂参数暂不进入首版配置页面，但保存到生成批次参数快照。
 
 #### 4.7.2A `sg_order_market_config`
@@ -926,13 +926,13 @@
 | `market_code` | VARCHAR(32) | 市场 |
 | `order_type` | VARCHAR(32) | 订单类型 |
 | `segment_code` | VARCHAR(64) | 标段编码 |
-| `card_sequence_no` | INT | 订单卡片序号，`1 ~ 15` |
+| `card_sequence_no` | INT | 订单卡片序号，从 `1` 递增，无固定业务上限 |
 | `business_order_no` | VARCHAR(64) | 业务订单编号/页面展示编号，例如 `CARD-01` |
 | `order_amount` | DECIMAL(18,2) | 订单金额，业务口径为整数金额 |
 | `order_quantity` | DECIMAL(18,2) | 数量，订单生成口径为整数 |
 | `unit_price` | DECIMAL(18,2) | 单价，允许小数 |
 | `account_term` | VARCHAR(64) | 账期 |
-| `pool_status` | VARCHAR(32) | `AVAILABLE / SELECTED / VOID` |
+| `pool_status` | VARCHAR(32) | `AVAILABLE / SELECTED / UNSELECTED_EXPIRED / VOID` |
 | `selected_group_id` | BIGINT NULL | 选中小组 |
 | `selected_at` | DATETIME NULL | 选中时间 |
 | `generation_batch_id` | BIGINT | 订单生成批次 |
@@ -952,6 +952,8 @@
 - 订单池来自系统按 Excel 公式链生成后的批次，不来自上传固定订单明细。
 - 预览阶段可覆盖；确认后不允许覆盖或重新生成。
 - 管理端和玩家端订单列表应优先展示 `business_order_no` 或由 `card_sequence_no` 格式化出的 `CARD-01`，不应把数据库自增 `id` 作为业务订单编号展示给管理员。
+- 每个标段第一至第四轮共用同一固定订单池，不按轮次重新生成。
+- 标段全部有效轮次结束后仍为 `AVAILABLE` 的订单批量转为 `UNSELECTED_EXPIRED`，只保留审计记录，不进入交付、汇总、龙头计算或后续标段/年份。
 
 #### 4.7.4 `sg_market_bidding_state`
 
@@ -967,11 +969,13 @@
 | `order_type` | VARCHAR(32) | 订单类型 |
 | `segment_code` | VARCHAR(64) | 标段编码，建议由市场和订单类型组合 |
 | `release_sequence_no` | INT | 标段释放顺序 |
-| `segment_status` | VARCHAR(32) | `MARKET_DISABLED / NO_ORDER_CONFIG / WAITING_INVESTMENT / SEQUENCE_READY / WAITING_RELEASE / SELECTING / COMPLETED / SKIPPED` |
+| `segment_status` | VARCHAR(32) | `MARKET_DISABLED / NO_ORDER_CONFIG / WAITING_INVESTMENT / SEQUENCE_READY / WAITING_RELEASE / SELECTING / ROUND_READY / COMPLETED / SKIPPED` |
 | `leader_group_id` | BIGINT NULL | 本年该市场优先的市场龙头 |
 | `leader_rule_json` | JSON NULL | 市场龙头计算依据 |
 | `random_seed` | VARCHAR(64) NULL | 随机排序种子或结果摘要 |
 | `current_group_id` | BIGINT NULL | 当前轮到的小组 |
+| `current_round_no` | TINYINT | 当前或最近处理轮次；`0` 表示尚未释放 |
+| `completion_reason` | VARCHAR(32) NULL | `ALL_ROUNDS_COMPLETED / ORDER_POOL_EXHAUSTED / NO_ELIGIBLE_PARTICIPANTS` 等完成原因 |
 | `investment_ready_at` | DATETIME NULL | 当年所有未破产组市场投入提交完成时间 |
 | `released_at` | DATETIME NULL | 标段释放时间 |
 | `completed_at` | DATETIME NULL | 标段选单完成时间 |
@@ -1009,7 +1013,7 @@
 说明：
 
 - 提交后不可修改。
-- 每组每年必须提交 16 条投入记录；`market_investment=0` 可保存，但普通小组不参与该标段选单。
+- 每组每年必须完整提交当前订单模板定义的全部投入记录；`market_investment=0` 可保存，但任何小组均不参与该标段选单，市场龙头也不例外。
 - 若所属市场关闭，该市场下 4 条投入由系统自动保存为 `0`。
 - 若所属市场配置了单市场投入上限，该组该年该市场下 4 条投入合计不得超过上限。
 - 市场投入从经营页前移到年度订单页提交，经营页只读带入汇总值。
@@ -1026,13 +1030,14 @@
 | `year_no` | INT | 年份 |
 | `market_code` | VARCHAR(32) | 市场 |
 | `order_type` | VARCHAR(32) | 订单类型 |
+| `round_no` | TINYINT | 轮次；贵宾/生产为 `1~4`，机场单轮为 `1` |
 | `sequence_no` | INT | 选单顺序 |
 | `group_id` | BIGINT | 小组 |
 | `market_investment` | DECIMAL(18,2) | 排序时市场投入 |
 | `previous_market_order_amount` | DECIMAL(18,2) | 上一年该市场订单总额，用于同投入时排序 |
 | `is_market_leader` | TINYINT(1) | 是否市场龙头优先 |
 | `rank_basis_json` | JSON | 排序依据与随机结果 |
-| `selection_status` | VARCHAR(32) | `INELIGIBLE / WAITING / CURRENT / SELECTED / PASSED / ADMIN_SKIPPED` |
+| `selection_status` | VARCHAR(32) | `WAITING / CURRENT / SELECTED / PASSED / ADMIN_SKIPPED / INELIGIBLE_BANKRUPT` |
 | `selected_order_id` | BIGINT NULL | 该轮选择的订单 |
 | `selected_at` | DATETIME NULL | 选择时间 |
 | `skipped_by_admin_id` | BIGINT NULL | 管理员代跳过操作人 |
@@ -1042,13 +1047,16 @@
 
 关键约束：
 
-- `uk_market_sequence(year_no, market_code, order_type, sequence_no)`
-- `uk_group_market_sequence(year_no, market_code, order_type, group_id)`
+- `uk_market_round_sequence(year_no, market_code, order_type, round_no, sequence_no)`
+- `uk_group_market_round(year_no, market_code, order_type, round_no, group_id)`
 
 说明：
 
-- 玩家主动放弃记录为 `PASSED`；管理员代跳过记录为 `ADMIN_SKIPPED`，并同步写入管理员动作日志。
+- 玩家主动放弃当前轮记录为 `PASSED`；管理员代跳过当前轮记录为 `ADMIN_SKIPPED`，并同步写入管理员动作日志。
 - 排序依据用于追溯，不在玩家端展示。
+- 每个标段只计算一次基础顺序，后续轮次按资格过滤基础顺序，不重新排序或随机。
+- 管理员生成顺序时一次性生成全部有效轮次记录；客户端不能通过提交 `round_no` 改变服务端当前轮次。
+- 没有轮次资格的小组不需要预生成占位记录；玩家端“本轮无资格”由查询层根据缺少该轮记录派生。
 
 #### 4.7.7 `sg_group_order_selection`
 
@@ -1063,6 +1071,8 @@
 | `year_no` | INT | 年份 |
 | `market_code` | VARCHAR(32) | 市场 |
 | `order_type` | VARCHAR(32) | 订单类型 |
+| `round_no` | TINYINT | 选择订单时所在轮次 |
+| `selection_order_id` | BIGINT | 对应 `sg_market_selection_order.id` |
 | `order_id` | BIGINT | 订单 ID |
 | `selection_status` | VARCHAR(32) | `SELECTED` |
 | `delivery_status` | VARCHAR(32) | `SELECTED / DELIVERED / UNFINISHED` |
@@ -1076,18 +1086,19 @@
 
 关键约束：
 
-- `uk_group_year_segment_selection(group_id, year_no, market_code, order_type)`
+- `uk_selection_order(selection_order_id)`
 - `uk_order_selected(order_id)`
 - `idx_group_year_order_selection(group_id, year_no)`
 
 说明：
 
-- 每组每年每标段最多一个选择记录。
+- 每组每年每标段每轮最多一个选择记录；贵宾服务版和生产制造版最多四轮，机场版暂时一轮。
 - 一个订单只能被一个小组选择。
 - 账期字段来自订单池，首版只展示，不驱动经营页应收账款自动计算。
 - 年末仍未交付时更新为 `UNFINISHED`，但首版不阻断财报提交。
 - 单组快照回退不释放订单归属，不删除选择记录；目标节点之后的交付状态改为失效，玩家重新推进到对应阶段后再确认交付。
 - 若未来年份订单已被该组选择，回退后仍保持归属，不重新进入订单池。
+- 单组回退和快照恢复不修改 `sg_group_market_bid`，不重新计算轮次资格，不重开轮次，也不恢复或覆盖定序依据。
 
 ---
 
@@ -1139,8 +1150,8 @@
 - `sg_order_pool`：`idx_order_pool_year_market`、`idx_order_pool_status`
 - `sg_market_bidding_state`：`uk_market_bidding_state`、`uk_segment_release_sequence`、`idx_segment_status`
 - `sg_group_market_bid`：`uk_group_year_market_bid`、`idx_year_market_bid`
-- `sg_market_selection_order`：`uk_market_sequence`、`uk_group_market_sequence`
-- `sg_group_order_selection`：`uk_group_year_segment_selection`、`uk_order_selected`
+- `sg_market_selection_order`：`uk_market_round_sequence`、`uk_group_market_round`
+- `sg_group_order_selection`：`uk_selection_order`、`uk_order_selected`、`idx_group_year_order_selection`
 - `sg_admin_unlock_log`：`idx_group_year`（可加）
 - `sg_state_snapshot`：`idx_snapshot_scope_type`、`idx_snapshot_group_year`、`idx_snapshot_created_at`
 - `sg_state_snapshot_payload`：`uk_snapshot_payload`

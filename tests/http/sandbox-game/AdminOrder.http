@@ -253,6 +253,35 @@ X-Username: {{adminUsername}}
   "reason": "联调演练：当前小组现场放弃"
 }
 
+### 管理员：开启下一轮
+### 前提：当前轮已结束且状态为 ROUND_READY；服务端从标段状态决定实际开启轮次，不接受客户端轮次参数
+POST {{baseUrl}}/admin-order/open-next-round
+Content-Type: application/json
+X-Role-Type: {{adminRole}}
+X-User-Id: {{adminUserId}}
+X-Username: {{adminUsername}}
+
+{
+  "yearNo": {{yearNo}},
+  "marketCode": "LOCAL",
+  "orderType": "AGENCY_INSPECTION"
+}
+
+### 玩家 1：放弃当前轮
+### 只影响当前轮；后续仍有资格时，玩家可继续参与后续轮次
+POST {{baseUrl}}/player-order/pass-segment
+Content-Type: application/json
+X-Role-Type: {{groupRole}}
+X-User-Id: {{groupOneUserId}}
+X-Username: {{groupOneUsername}}
+X-Group-Id: {{groupOneId}}
+
+{
+  "yearNo": {{yearNo}},
+  "marketCode": "LOCAL",
+  "orderType": "AGENCY_INSPECTION"
+}
+
 ### 玩家 1：交付订单
 ### 前提：当前经营季度为 Q1，且经营草稿中 Q1 销售收入等于本次交付订单金额合计
 POST {{baseUrl}}/player-order/deliver-orders

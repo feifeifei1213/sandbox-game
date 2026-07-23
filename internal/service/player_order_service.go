@@ -26,8 +26,10 @@ const (
 	adminActionCodeCloseOrderMarket          = "CLOSE_ORDER_MARKET"
 	adminActionCodeGenerateSelectionSequence = "GENERATE_ORDER_SELECTION_SEQUENCE"
 	adminActionCodeReleaseOrderSegment       = "RELEASE_ORDER_SEGMENT"
+	adminActionCodeOpenNextOrderRound        = "OPEN_NEXT_ORDER_ROUND"
 	adminActionCodeSkipOrderCurrentGroup     = "SKIP_ORDER_CURRENT_GROUP"
 	orderPollingIntervalSeconds              = 3
+	orderMaxSelectionRounds                  = 4
 )
 
 var (
@@ -49,6 +51,8 @@ var (
 	ErrOrderSegmentNotSelecting         = errors.New("order segment not selecting")
 	ErrOrderSegmentReleaseBlocked       = errors.New("order segment release blocked")
 	ErrOrderSegmentCurrentGroupMismatch = errors.New("order segment current group mismatch")
+	ErrOrderRoundNotReady               = errors.New("order round not ready")
+	ErrOrderPoolExhausted               = errors.New("order pool exhausted")
 	ErrOrderSelectionNotEligible        = errors.New("order selection not eligible")
 	ErrOrderAlreadySelected             = errors.New("order already selected")
 	ErrOrderCannotSelect                = errors.New("order cannot select")
@@ -199,11 +203,15 @@ type PlayerOrderSegmentView struct {
 	InvestmentSubmitted   bool                      `json:"investmentSubmitted"`
 	ReleaseSequenceNo     int                       `json:"releaseSequenceNo"`
 	SegmentStatus         string                    `json:"segmentStatus"`
+	CurrentRoundNo        int                       `json:"currentRoundNo"`
+	NextRoundNo           *int                      `json:"nextRoundNo,omitempty"`
+	SelfRoundStatus       string                    `json:"selfRoundStatus"`
 	SelectionOrder        []PlayerOrderSequenceView `json:"selectionOrder"`
 	CurrentGroupID        *int64                    `json:"currentGroupId"`
 	AvailableOrders       []PlayerOrderPoolItem     `json:"availableOrders"`
 	LockedOrders          []PlayerOrderPoolItem     `json:"lockedOrders"`
 	SelectedOrder         *PlayerOrderPoolItem      `json:"selectedOrder"`
+	SelectedOrders        []PlayerOrderPoolItem     `json:"selectedOrders"`
 	DeliveryStatus        string                    `json:"deliveryStatus"`
 	CanSelectOrder        bool                      `json:"canSelectOrder"`
 	CanPassSegment        bool                      `json:"canPassSegment"`
@@ -227,6 +235,7 @@ type PlayerOrderPoolItem struct {
 	UnitPrice          float64        `json:"unitPrice"`
 	AccountTerm        int            `json:"accountTerm"`
 	PoolStatus         string         `json:"poolStatus"`
+	RoundNo            int            `json:"roundNo,omitempty"`
 	DeliveryStatus     string         `json:"deliveryStatus,omitempty"`
 	DeliveredStageCode *string        `json:"deliveredStageCode,omitempty"`
 	OrderPayload       map[string]any `json:"orderPayload,omitempty"`
@@ -266,6 +275,7 @@ type SelectOrderResult struct {
 	SelectedOrderID     int64  `json:"selectedOrderId"`
 	MarketCode          string `json:"marketCode"`
 	OrderType           string `json:"orderType"`
+	RoundNo             int    `json:"roundNo"`
 	SelectionSequenceNo int    `json:"selectionSequenceNo"`
 	NextGroupID         *int64 `json:"nextGroupId"`
 	SegmentStatus       string `json:"segmentStatus"`
@@ -283,6 +293,7 @@ type PassOrderSegmentCommand struct {
 type PassOrderSegmentResult struct {
 	MarketCode    string `json:"marketCode"`
 	OrderType     string `json:"orderType"`
+	RoundNo       int    `json:"roundNo"`
 	NextGroupID   *int64 `json:"nextGroupId"`
 	SegmentStatus string `json:"segmentStatus"`
 }
@@ -330,6 +341,14 @@ type GenerateSelectionSequenceCommand struct {
 	OperatorName string
 }
 
+type OpenNextOrderRoundCommand struct {
+	YearNo       int
+	MarketCode   string
+	OrderType    string
+	OperatorID   int64
+	OperatorName string
+}
+
 type AdminSkipCurrentGroupCommand struct {
 	YearNo       int
 	MarketCode   string
@@ -348,6 +367,7 @@ type AdminOrderControlResult struct {
 	OrderTypeName  string `json:"orderTypeName,omitempty"`
 	SegmentStatus  string `json:"segmentStatus,omitempty"`
 	CurrentGroupID *int64 `json:"currentGroupId,omitempty"`
+	CurrentRoundNo int    `json:"currentRoundNo,omitempty"`
 	AffectedCount  int64  `json:"affectedCount"`
 	OperatedAt     string `json:"operatedAt"`
 	OperatedBy     string `json:"operatedBy"`
@@ -382,12 +402,18 @@ type AdminOrderSegmentStatus struct {
 	ReleaseSequenceNo int                       `json:"releaseSequenceNo"`
 	SegmentStatus     string                    `json:"segmentStatus"`
 	CurrentGroupID    *int64                    `json:"currentGroupId"`
+	CurrentRoundNo    int                       `json:"currentRoundNo"`
+	NextRoundNo       *int                      `json:"nextRoundNo,omitempty"`
+	CompletionReason  *string                   `json:"completionReason,omitempty"`
 	SelectionOrder    []AdminSelectionOrderView `json:"selectionOrder"`
 	AvailableCount    int                       `json:"availableCount"`
 	SelectedCount     int                       `json:"selectedCount"`
+	TheoreticalMax    int                       `json:"theoreticalMaxSelections"`
+	Warnings          []string                  `json:"warnings"`
 }
 
 type AdminSelectionOrderView struct {
+	RoundNo                   int     `json:"roundNo"`
 	SequenceNo                int     `json:"sequenceNo"`
 	GroupID                   int64   `json:"groupId"`
 	GroupName                 string  `json:"groupName"`
@@ -615,14 +641,14 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 		if segment.CurrentGroupID == nil || *segment.CurrentGroupID != cmd.GroupID {
 			return ErrOrderSegmentCurrentGroupMismatch
 		}
-		sequence, err := sequenceRepo.GetByGroupSegmentForUpdate(ctx, cmd.GroupID, cmd.YearNo, marketCode, orderType)
+		sequence, err := sequenceRepo.GetByGroupSegmentRoundForUpdate(ctx, cmd.GroupID, cmd.YearNo, marketCode, orderType, segment.CurrentRoundNo)
 		if err != nil {
 			return fmt.Errorf("load current selection order: %w", err)
 		}
 		if sequence.SelectionStatus != enum.OrderSelectionStatusCurrent {
 			return ErrOrderSegmentCurrentGroupMismatch
 		}
-		if _, err := selectionRepo.GetByGroupSegment(ctx, cmd.GroupID, cmd.YearNo, marketCode, orderType); err == nil {
+		if _, err := selectionRepo.GetBySelectionOrderID(ctx, sequence.ID); err == nil {
 			return ErrOrderAlreadySelected
 		} else if !repository.IsRecordNotFound(err) {
 			return fmt.Errorf("load existing selection: %w", err)
@@ -646,6 +672,8 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 			YearNo:               cmd.YearNo,
 			MarketCode:           marketCode,
 			OrderType:            orderType,
+			RoundNo:              segment.CurrentRoundNo,
+			SelectionOrderID:     &sequence.ID,
 			OrderID:              order.ID,
 			SelectionStatus:      enum.OrderSelectionStatusSelected,
 			DeliveryStatus:       enum.OrderDeliveryStatusSelected,
@@ -671,6 +699,7 @@ func (s *PlayerOrderCommandService) SelectOrder(ctx context.Context, cmd SelectO
 			SelectedOrderID:     order.ID,
 			MarketCode:          marketCode,
 			OrderType:           orderType,
+			RoundNo:             segment.CurrentRoundNo,
 			SelectionSequenceNo: sequence.SequenceNo,
 			NextGroupID:         nextGroupID,
 			SegmentStatus:       status,
@@ -721,7 +750,7 @@ func (s *PlayerOrderCommandService) PassSegment(ctx context.Context, cmd PassOrd
 		if segment.CurrentGroupID == nil || *segment.CurrentGroupID != cmd.GroupID {
 			return ErrOrderSegmentCurrentGroupMismatch
 		}
-		sequence, err := sequenceRepo.GetByGroupSegmentForUpdate(ctx, cmd.GroupID, cmd.YearNo, marketCode, orderType)
+		sequence, err := sequenceRepo.GetByGroupSegmentRoundForUpdate(ctx, cmd.GroupID, cmd.YearNo, marketCode, orderType, segment.CurrentRoundNo)
 		if err != nil {
 			return fmt.Errorf("load current selection order: %w", err)
 		}
@@ -738,6 +767,7 @@ func (s *PlayerOrderCommandService) PassSegment(ctx context.Context, cmd PassOrd
 		result = &PassOrderSegmentResult{
 			MarketCode:    marketCode,
 			OrderType:     orderType,
+			RoundNo:       segment.CurrentRoundNo,
 			NextGroupID:   nextGroupID,
 			SegmentStatus: status,
 		}
@@ -1048,7 +1078,7 @@ func (s *AdminOrderControlCommandService) CloseMarketBidding(ctx context.Context
 				return fmt.Errorf("skip market segments: %w", err)
 			}
 		} else {
-			sequenceItems := buildSelectionOrderItems(states, participants, operatorName, now)
+			sequenceItems := buildSelectionOrderItems(states, participants, template, operatorName, now)
 			if err := sequenceRepo.CreateBatch(ctx, sequenceItems); err != nil {
 				return fmt.Errorf("create selection order: %w", err)
 			}
@@ -1105,7 +1135,7 @@ func (s *AdminOrderControlCommandService) GenerateSelectionSequence(ctx context.
 			}
 			return fmt.Errorf("load confirmed order batch: %w", err)
 		}
-		states, err := stateRepo.ListByYear(ctx, cmd.YearNo)
+		states, err := stateRepo.ListByYearForUpdate(ctx, cmd.YearNo)
 		if err != nil {
 			return fmt.Errorf("list order states: %w", err)
 		}
@@ -1179,7 +1209,7 @@ func (s *AdminOrderControlCommandService) GenerateSelectionSequence(ctx context.
 				skippedCount++
 				continue
 			}
-			sequenceItems := buildSelectionOrderItems([]entity.MarketBiddingState{item}, participants, operatorName, now)
+			sequenceItems := buildSelectionOrderItems([]entity.MarketBiddingState{item}, participants, template, operatorName, now)
 			if err := sequenceRepo.CreateBatch(ctx, sequenceItems); err != nil {
 				return fmt.Errorf("create selection order: %w", err)
 			}
@@ -1224,12 +1254,12 @@ func (s *AdminOrderControlCommandService) ReleaseNextSegment(ctx context.Context
 		if err != nil {
 			return err
 		}
-		if _, err := stateRepo.GetCurrentSelecting(ctx, cmd.YearNo); err == nil {
+		if _, err := stateRepo.GetCurrentSelectingForUpdate(ctx, cmd.YearNo); err == nil {
 			return ErrOrderSegmentReleaseBlocked
 		} else if !repository.IsRecordNotFound(err) {
 			return fmt.Errorf("load current selecting segment: %w", err)
 		}
-		next, err := stateRepo.GetNextReleasable(ctx, cmd.YearNo)
+		next, err := stateRepo.GetNextReleasableForUpdate(ctx, cmd.YearNo)
 		if err != nil {
 			if repository.IsRecordNotFound(err) {
 				return ErrOrderSegmentNotReady
@@ -1260,7 +1290,7 @@ func (s *AdminOrderControlCommandService) ReleaseNextSegment(ctx context.Context
 			result = buildAdminOrderControlResultFromState(*next, nil, enum.OrderSegmentStatusCompleted, 1, operatorName, now)
 			return nil
 		}
-		first, err := sequenceRepo.GetNextWaiting(ctx, next.YearNo, next.MarketCode, next.OrderType)
+		first, err := sequenceRepo.GetNextWaitingInRound(ctx, next.YearNo, next.MarketCode, next.OrderType, 1)
 		if err != nil {
 			if repository.IsRecordNotFound(err) {
 				if err := stateRepo.CompleteSegment(ctx, next.ID, operatorName, now); err != nil {
@@ -1293,6 +1323,84 @@ func (s *AdminOrderControlCommandService) ReleaseNextSegment(ctx context.Context
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("release next segment transaction: %w", err)
+	}
+	return result, nil
+}
+
+func (s *AdminOrderControlCommandService) OpenNextRound(ctx context.Context, cmd OpenNextOrderRoundCommand) (*AdminOrderControlResult, error) {
+	marketCode := normalizeMarketCode(cmd.MarketCode)
+	orderType := normalizeOrderType(cmd.OrderType)
+	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
+	now := time.Now()
+	var result *AdminOrderControlResult
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		gameConfigRepo := repository.NewGameConfigRepository(tx)
+		stateRepo := repository.NewMarketBiddingStateRepository(tx)
+		sequenceRepo := repository.NewMarketSelectionOrderRepository(tx)
+		poolRepo := repository.NewOrderPoolRepository(tx)
+		actionRepo := repository.NewAdminActionLogRepository(tx)
+		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
+			return err
+		}
+		template, err := resolveCurrentOrderTemplate(ctx, gameConfigRepo)
+		if err != nil {
+			return err
+		}
+		if !template.IsValidMarketCode(marketCode) || !template.IsValidOrderType(orderType) {
+			return ErrOrderSegmentNotReady
+		}
+		segment, err := stateRepo.GetBySegmentForUpdate(ctx, cmd.YearNo, marketCode, orderType)
+		if err != nil {
+			return fmt.Errorf("load segment: %w", err)
+		}
+		if segment.SegmentStatus != enum.OrderSegmentStatusRoundReady {
+			return ErrOrderRoundNotReady
+		}
+		availableCount, err := poolRepo.CountAvailableBySegment(ctx, segment.YearNo, segment.MarketCode, segment.OrderType)
+		if err != nil {
+			return fmt.Errorf("count available order: %w", err)
+		}
+		if availableCount <= 0 {
+			return ErrOrderPoolExhausted
+		}
+		for roundNo := segment.CurrentRoundNo + 1; roundNo <= template.MaxSelectionRounds(); roundNo++ {
+			first, err := sequenceRepo.GetNextWaitingInRound(ctx, segment.YearNo, segment.MarketCode, segment.OrderType, roundNo)
+			if repository.IsRecordNotFound(err) {
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("load next round first group: %w", err)
+			}
+			if err := sequenceRepo.SetCurrent(ctx, first.ID, operatorName, now); err != nil {
+				return fmt.Errorf("set next round current: %w", err)
+			}
+			if err := stateRepo.OpenNextRound(ctx, segment.ID, roundNo, first.GroupID, operatorName, now); err != nil {
+				return fmt.Errorf("open next round: %w", err)
+			}
+			if err := createAdminOrderActionLog(ctx, actionRepo, adminActionCodeOpenNextOrderRound, cmd.OperatorID, operatorName, cmd.YearNo, map[string]any{
+				"marketCode": marketCode,
+				"orderType":  orderType,
+				"roundNo":    roundNo,
+			}, now); err != nil {
+				return err
+			}
+			result = buildAdminOrderControlResultFromState(*segment, &first.GroupID, enum.OrderSegmentStatusSelecting, 1, operatorName, now)
+			result.CurrentRoundNo = roundNo
+			return nil
+		}
+		if _, err := poolRepo.ExpireAvailableBySegment(ctx, segment.YearNo, segment.MarketCode, segment.OrderType, operatorName, now); err != nil {
+			return fmt.Errorf("expire remaining orders: %w", err)
+		}
+		if err := stateRepo.CompleteSegmentWithReason(ctx, segment.ID, enum.OrderCompletionReasonNoEligibleParticipants, operatorName, now); err != nil {
+			return fmt.Errorf("complete no eligible round segment: %w", err)
+		}
+		if err := createSegmentCompletedSnapshot(ctx, tx, *segment, cmd.OperatorID, operatorName, now); err != nil {
+			return err
+		}
+		result = buildAdminOrderControlResultFromState(*segment, nil, enum.OrderSegmentStatusCompleted, 1, operatorName, now)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("open next order round transaction: %w", err)
 	}
 	return result, nil
 }
@@ -1339,7 +1447,7 @@ func (s *AdminOrderControlCommandService) AdminSkipCurrentGroup(ctx context.Cont
 		if segment.CurrentGroupID == nil || *segment.CurrentGroupID != cmd.GroupID {
 			return ErrOrderSegmentCurrentGroupMismatch
 		}
-		sequence, err := sequenceRepo.GetByGroupSegmentForUpdate(ctx, cmd.GroupID, cmd.YearNo, marketCode, orderType)
+		sequence, err := sequenceRepo.GetByGroupSegmentRoundForUpdate(ctx, cmd.GroupID, cmd.YearNo, marketCode, orderType, segment.CurrentRoundNo)
 		if err != nil {
 			return fmt.Errorf("load sequence order: %w", err)
 		}
@@ -1403,7 +1511,7 @@ func buildMarketParticipantsWithLeader(yearNo int, marketCode string, groups []e
 		if !bidSubmitted[group.ID] {
 			continue
 		}
-		if investment <= 0 && !isLeader {
+		if investment <= 0 {
 			continue
 		}
 		participants = append(participants, marketParticipant{
@@ -1475,43 +1583,91 @@ func resolveMarketLeader(yearNo int, groups []entity.Group, previousAmounts map[
 	return &selected
 }
 
-func buildSelectionOrderItems(states []entity.MarketBiddingState, participants []marketParticipant, operatorName string, now time.Time) []entity.MarketSelectionOrder {
-	items := make([]entity.MarketSelectionOrder, 0, len(states)*len(participants))
+func buildSelectionOrderItems(states []entity.MarketBiddingState, participants []marketParticipant, template OrderTemplateDefinition, operatorName string, now time.Time) []entity.MarketSelectionOrder {
+	items := make([]entity.MarketSelectionOrder, 0, len(states)*len(participants)*template.MaxSelectionRounds())
 	for _, state := range states {
 		if isTerminalOrderSegmentStatus(state.SegmentStatus) {
 			continue
 		}
-		for index, participant := range participants {
-			rankBasis, _ := marshalJSON(participant)
-			items = append(items, entity.MarketSelectionOrder{
-				OrderTemplateVersion:      state.OrderTemplateVersion,
-				YearNo:                    state.YearNo,
-				MarketCode:                state.MarketCode,
-				OrderType:                 state.OrderType,
-				SequenceNo:                index + 1,
-				GroupID:                   participant.GroupID,
-				MarketInvestment:          participant.MarketInvestment,
-				PreviousMarketOrderAmount: participant.PreviousMarketOrderAmount,
-				IsMarketLeader:            participant.IsMarketLeader,
-				RankBasis:                 rankBasis,
-				SelectionStatus:           enum.OrderSelectionStatusWaiting,
-				BaseEntity: entity.BaseEntity{
-					Creator:    operatorName,
-					CreateTime: now,
-					Updater:    operatorName,
-					UpdateTime: now,
-				},
-			})
+		for roundNo := 1; roundNo <= template.MaxSelectionRounds(); roundNo++ {
+			sequenceNo := 0
+			for _, participant := range participants {
+				if template.SelectionQuota(participant.MarketInvestment) < roundNo {
+					continue
+				}
+				sequenceNo++
+				rankBasis, _ := marshalJSON(participant)
+				items = append(items, entity.MarketSelectionOrder{
+					OrderTemplateVersion:      state.OrderTemplateVersion,
+					YearNo:                    state.YearNo,
+					MarketCode:                state.MarketCode,
+					OrderType:                 state.OrderType,
+					RoundNo:                   roundNo,
+					SequenceNo:                sequenceNo,
+					GroupID:                   participant.GroupID,
+					MarketInvestment:          participant.MarketInvestment,
+					PreviousMarketOrderAmount: participant.PreviousMarketOrderAmount,
+					IsMarketLeader:            participant.IsMarketLeader,
+					RankBasis:                 rankBasis,
+					SelectionStatus:           enum.OrderSelectionStatusWaiting,
+					BaseEntity: entity.BaseEntity{
+						Creator:    operatorName,
+						CreateTime: now,
+						Updater:    operatorName,
+						UpdateTime: now,
+					},
+				})
+			}
 		}
 	}
 	return items
 }
 
 func advanceOrderSegment(ctx context.Context, tx *gorm.DB, stateRepo *repository.MarketBiddingStateRepository, sequenceRepo *repository.MarketSelectionOrderRepository, poolRepo *repository.OrderPoolRepository, segment entity.MarketBiddingState, operatorID int64, operatorName string, now time.Time) (*int64, string, error) {
-	next, err := sequenceRepo.GetNextWaiting(ctx, segment.YearNo, segment.MarketCode, segment.OrderType)
+	availableCount, err := poolRepo.CountAvailableBySegment(ctx, segment.YearNo, segment.MarketCode, segment.OrderType)
+	if err != nil {
+		return nil, "", fmt.Errorf("count available order: %w", err)
+	}
+	if availableCount <= 0 {
+		if err := stateRepo.CompleteSegmentWithReason(ctx, segment.ID, enum.OrderCompletionReasonPoolExhausted, operatorName, now); err != nil {
+			return nil, "", fmt.Errorf("complete exhausted segment: %w", err)
+		}
+		if err := createSegmentCompletedSnapshot(ctx, tx, segment, operatorID, operatorName, now); err != nil {
+			return nil, "", err
+		}
+		return nil, enum.OrderSegmentStatusCompleted, nil
+	}
+	next, err := sequenceRepo.GetNextWaitingInRound(ctx, segment.YearNo, segment.MarketCode, segment.OrderType, segment.CurrentRoundNo)
 	if err != nil {
 		if repository.IsRecordNotFound(err) {
-			if err := stateRepo.CompleteSegment(ctx, segment.ID, operatorName, now); err != nil {
+			hadInvalidatedFutureRound := false
+			for roundNo := segment.CurrentRoundNo + 1; roundNo <= orderMaxSelectionRounds; roundNo++ {
+				hasRecords, err := sequenceRepo.HasRoundRecords(ctx, segment.YearNo, segment.MarketCode, segment.OrderType, roundNo)
+				if err != nil {
+					return nil, "", fmt.Errorf("check next round records: %w", err)
+				}
+				hasRound, err := sequenceRepo.HasRound(ctx, segment.YearNo, segment.MarketCode, segment.OrderType, roundNo)
+				if err != nil {
+					return nil, "", fmt.Errorf("check next round: %w", err)
+				}
+				if hasRound {
+					if err := stateRepo.MarkRoundReady(ctx, segment.ID, segment.CurrentRoundNo, operatorName, now); err != nil {
+						return nil, "", fmt.Errorf("mark next round ready: %w", err)
+					}
+					return nil, enum.OrderSegmentStatusRoundReady, nil
+				}
+				if hasRecords {
+					hadInvalidatedFutureRound = true
+				}
+			}
+			if _, err := poolRepo.ExpireAvailableBySegment(ctx, segment.YearNo, segment.MarketCode, segment.OrderType, operatorName, now); err != nil {
+				return nil, "", fmt.Errorf("expire remaining orders: %w", err)
+			}
+			completionReason := enum.OrderCompletionReasonAllRoundsCompleted
+			if hadInvalidatedFutureRound {
+				completionReason = enum.OrderCompletionReasonNoEligibleParticipants
+			}
+			if err := stateRepo.CompleteSegmentWithReason(ctx, segment.ID, completionReason, operatorName, now); err != nil {
 				return nil, "", fmt.Errorf("complete segment: %w", err)
 			}
 			if err := createSegmentCompletedSnapshot(ctx, tx, segment, operatorID, operatorName, now); err != nil {
@@ -1737,17 +1893,14 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 	canSubmitInvestment := poolConfirmed && !investmentSubmitted
 	marketConfigMap := buildMarketConfigSnapshotMapForTemplate(marketConfigs, template)
 	sequenceMap := make(map[string][]entity.MarketSelectionOrder)
-	selfSequence := make(map[string]entity.MarketSelectionOrder)
 	for _, sequence := range sequences {
 		key := segmentKey(sequence.YearNo, sequence.MarketCode, sequence.OrderType)
 		sequenceMap[key] = append(sequenceMap[key], sequence)
-		if sequence.GroupID == groupID {
-			selfSequence[key] = sequence
-		}
 	}
-	selectedMap := make(map[string]entity.GroupOrderSelection, len(selected))
+	selectedMap := make(map[string][]entity.GroupOrderSelection, len(selected))
 	for _, item := range selected {
-		selectedMap[segmentKey(item.YearNo, item.MarketCode, item.OrderType)] = item
+		key := segmentKey(item.YearNo, item.MarketCode, item.OrderType)
+		selectedMap[key] = append(selectedMap[key], item)
 	}
 	stateMap := make(map[string][]entity.MarketBiddingState)
 	for _, state := range states {
@@ -1757,7 +1910,6 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 	for _, market := range template.Markets {
 		segments := make([]PlayerOrderSegmentView, 0)
 		canSelectMarket := false
-		var selfMarketSequenceNo *int
 		isMarketLeader := false
 		marketInvestment := 0.0
 		marketSubmittedCount := 0
@@ -1770,11 +1922,16 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 				marketSubmittedCount++
 				marketInvestment += bid.MarketInvestment
 			}
-			selfSeq, hasSelfSeq := selfSequence[key]
-			if hasSelfSeq {
-				seqNo := selfSeq.SequenceNo
-				selfMarketSequenceNo = &seqNo
-				isMarketLeader = isMarketLeader || selfSeq.IsMarketLeader
+			var selfSeq entity.MarketSelectionOrder
+			hasSelfSeq := false
+			for _, sequence := range sequenceMap[key] {
+				if sequence.GroupID == groupID {
+					isMarketLeader = isMarketLeader || sequence.IsMarketLeader
+					if sequence.RoundNo == state.CurrentRoundNo {
+						selfSeq = sequence
+						hasSelfSeq = true
+					}
+				}
 			}
 			pools, err := poolRepo.ListBySegment(ctx, state.YearNo, state.MarketCode, state.OrderType)
 			if err != nil {
@@ -1797,7 +1954,7 @@ func buildPlayerOrderYearView(groupID int64, yearNo int, states []entity.MarketB
 			MarketInvestmentLimit: marketConfig.InvestmentLimit,
 			CanSubmitInvestment:   canSubmitInvestment,
 			CanSelectOrder:        canSelectMarket,
-			SelectionSequenceNo:   selfMarketSequenceNo,
+			SelectionSequenceNo:   nil,
 			IsMarketLeader:        isMarketLeader,
 			MarketEnabled:         marketEnabled,
 			Segments:              segments,
@@ -1827,10 +1984,15 @@ func allMarketStatesDisabled(states []entity.MarketBiddingState) bool {
 	return true
 }
 
-func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid entity.GroupMarketBid, bidSubmitted bool, marketInvestmentLimit *float64, sequences []entity.MarketSelectionOrder, selfSequence entity.MarketSelectionOrder, hasSelfSequence bool, selected entity.GroupOrderSelection, pools []entity.OrderPool, groupNames map[int64]string, template OrderTemplateDefinition) PlayerOrderSegmentView {
+func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid entity.GroupMarketBid, bidSubmitted bool, marketInvestmentLimit *float64, sequences []entity.MarketSelectionOrder, selfSequence entity.MarketSelectionOrder, hasSelfSequence bool, selected []entity.GroupOrderSelection, pools []entity.OrderPool, groupNames map[int64]string, template OrderTemplateDefinition) PlayerOrderSegmentView {
 	available := make([]PlayerOrderPoolItem, 0)
 	locked := make([]PlayerOrderPoolItem, 0)
 	var selectedOrder *PlayerOrderPoolItem
+	selectedOrders := make([]PlayerOrderPoolItem, 0, len(selected))
+	selectedByOrderID := make(map[int64]entity.GroupOrderSelection, len(selected))
+	for _, item := range selected {
+		selectedByOrderID[item.OrderID] = item
+	}
 	for _, pool := range pools {
 		payload := map[string]any(nil)
 		if len(pool.OrderPayloadJSON) > 0 {
@@ -1852,15 +2014,23 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 		} else {
 			locked = append(locked, item)
 		}
-		if selected.OrderID == pool.ID {
+		if selection, ok := selectedByOrderID[pool.ID]; ok {
 			copyItem := item
-			copyItem.DeliveryStatus = selected.DeliveryStatus
-			copyItem.DeliveredStageCode = selected.DeliveredStageCode
-			selectedOrder = &copyItem
+			copyItem.RoundNo = selection.RoundNo
+			copyItem.DeliveryStatus = selection.DeliveryStatus
+			copyItem.DeliveredStageCode = selection.DeliveredStageCode
+			selectedOrders = append(selectedOrders, copyItem)
+			if selectedOrder == nil {
+				first := copyItem
+				selectedOrder = &first
+			}
 		}
 	}
 	sequenceViews := make([]PlayerOrderSequenceView, 0, len(sequences))
 	for _, sequence := range sequences {
+		if sequence.GroupID != groupID || sequence.RoundNo != state.CurrentRoundNo {
+			continue
+		}
 		sequenceViews = append(sequenceViews, PlayerOrderSequenceView{
 			SequenceNo:      sequence.SequenceNo,
 			GroupID:         sequence.GroupID,
@@ -1871,10 +2041,15 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 		})
 	}
 	deliveryStatus := ""
-	if selected.ID > 0 {
-		deliveryStatus = selected.DeliveryStatus
+	if len(selected) > 0 {
+		deliveryStatus = selected[len(selected)-1].DeliveryStatus
 	}
 	canAct := state.SegmentStatus == enum.OrderSegmentStatusSelecting && state.CurrentGroupID != nil && *state.CurrentGroupID == groupID && hasSelfSequence && selfSequence.SelectionStatus == enum.OrderSelectionStatusCurrent
+	nextRoundNo := nextOrderRoundNo(state, sequences)
+	selfRoundStatus := enum.OrderSelectionStatusIneligible
+	if hasSelfSequence {
+		selfRoundStatus = selfSequence.SelectionStatus
+	}
 	return PlayerOrderSegmentView{
 		MarketCode:            state.MarketCode,
 		MarketName:            template.MarketName(state.MarketCode),
@@ -1886,15 +2061,31 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 		InvestmentSubmitted:   bidSubmitted,
 		ReleaseSequenceNo:     state.ReleaseSequenceNo,
 		SegmentStatus:         state.SegmentStatus,
+		CurrentRoundNo:        state.CurrentRoundNo,
+		NextRoundNo:           nextRoundNo,
+		SelfRoundStatus:       selfRoundStatus,
 		SelectionOrder:        sequenceViews,
 		CurrentGroupID:        state.CurrentGroupID,
 		AvailableOrders:       available,
 		LockedOrders:          locked,
 		SelectedOrder:         selectedOrder,
+		SelectedOrders:        selectedOrders,
 		DeliveryStatus:        deliveryStatus,
 		CanSelectOrder:        canAct && len(available) > 0,
 		CanPassSegment:        canAct,
 	}
+}
+
+func nextOrderRoundNo(state entity.MarketBiddingState, sequences []entity.MarketSelectionOrder) *int {
+	for roundNo := state.CurrentRoundNo + 1; roundNo <= orderMaxSelectionRounds; roundNo++ {
+		for _, sequence := range sequences {
+			if sequence.RoundNo == roundNo && sequence.SelectionStatus != enum.OrderSelectionStatusBankrupt {
+				value := roundNo
+				return &value
+			}
+		}
+	}
+	return nil
 }
 
 func buildAdminSegmentStatus(ctx context.Context, sequenceRepo *repository.MarketSelectionOrderRepository, poolRepo *repository.OrderPoolRepository, state entity.MarketBiddingState, groupNames map[int64]string) (AdminOrderSegmentStatus, error) {
@@ -1927,6 +2118,7 @@ func buildAdminSegmentStatus(ctx context.Context, sequenceRepo *repository.Marke
 			selectedOrderNo = orderNoMap[*sequence.SelectedOrderID]
 		}
 		sequenceViews = append(sequenceViews, AdminSelectionOrderView{
+			RoundNo:                   sequence.RoundNo,
 			SequenceNo:                sequence.SequenceNo,
 			GroupID:                   sequence.GroupID,
 			GroupName:                 groupNames[sequence.GroupID],
@@ -1938,6 +2130,11 @@ func buildAdminSegmentStatus(ctx context.Context, sequenceRepo *repository.Marke
 			SelectedOrderNo:           selectedOrderNo,
 		})
 	}
+	theoreticalMax := len(sequences)
+	warnings := make([]string, 0, 1)
+	if len(pools) < theoreticalMax {
+		warnings = append(warnings, "订单池可能提前选空")
+	}
 	return AdminOrderSegmentStatus{
 		MarketCode:        state.MarketCode,
 		MarketName:        marketName(state.MarketCode),
@@ -1946,9 +2143,14 @@ func buildAdminSegmentStatus(ctx context.Context, sequenceRepo *repository.Marke
 		ReleaseSequenceNo: state.ReleaseSequenceNo,
 		SegmentStatus:     state.SegmentStatus,
 		CurrentGroupID:    state.CurrentGroupID,
+		CurrentRoundNo:    state.CurrentRoundNo,
+		NextRoundNo:       nextOrderRoundNo(state, sequences),
+		CompletionReason:  state.CompletionReason,
 		SelectionOrder:    sequenceViews,
 		AvailableCount:    availableCount,
 		SelectedCount:     selectedCount,
+		TheoreticalMax:    theoreticalMax,
+		Warnings:          warnings,
 	}, nil
 }
 
@@ -1961,6 +2163,7 @@ func buildAdminOrderControlResultFromState(state entity.MarketBiddingState, curr
 		OrderTypeName:  orderTypeName(state.OrderType),
 		SegmentStatus:  status,
 		CurrentGroupID: currentGroupID,
+		CurrentRoundNo: state.CurrentRoundNo,
 		AffectedCount:  affected,
 		OperatedAt:     now.Format(time.RFC3339),
 		OperatedBy:     operatorName,

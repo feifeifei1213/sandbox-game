@@ -520,6 +520,18 @@ func (r *OrderPoolRepository) MarkSelected(ctx context.Context, orderID int64, g
 		}).Error
 }
 
+func (r *OrderPoolRepository) ExpireAvailableBySegment(ctx context.Context, yearNo int, marketCode string, orderType string, operatorName string, operateTime time.Time) (int64, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&entity.OrderPool{}).
+		Where("year_no = ? AND market_code = ? AND order_type = ? AND pool_status = ?", yearNo, marketCode, orderType, enum.OrderPoolStatusAvailable).
+		Updates(map[string]any{
+			"pool_status": enum.OrderPoolStatusUnselectedExpired,
+			"updater":     operatorName,
+			"update_time": operateTime,
+		})
+	return tx.RowsAffected, tx.Error
+}
+
 func (r *OrderPoolRepository) DeleteByYear(ctx context.Context, yearNo int) error {
 	return r.db.WithContext(ctx).Where("year_no = ?", yearNo).Delete(&entity.OrderPool{}).Error
 }
@@ -542,6 +554,21 @@ func NewMarketBiddingStateRepository(db *gorm.DB) *MarketBiddingStateRepository 
 func (r *MarketBiddingStateRepository) ListByYear(ctx context.Context, yearNo int) ([]entity.MarketBiddingState, error) {
 	var items []entity.MarketBiddingState
 	if err := r.db.WithContext(ctx).
+		Where("year_no = ?", yearNo).
+		Order("release_sequence_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// ListByYearForUpdate 在生成选单顺序的事务中锁定目标年份全部标段状态。
+// 生成顺序是按年一次性动作，必须与释放、开启下一轮和选单操作使用同一锁顺序，
+// 避免并发请求同时看到 WAITING_INVESTMENT 后重复删除并重建顺序记录。
+func (r *MarketBiddingStateRepository) ListByYearForUpdate(ctx context.Context, yearNo int) ([]entity.MarketBiddingState, error) {
+	var items []entity.MarketBiddingState
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("year_no = ?", yearNo).
 		Order("release_sequence_no ASC").
 		Find(&items).Error; err != nil {
@@ -597,7 +624,19 @@ func (r *MarketBiddingStateRepository) GetBySegmentForUpdate(ctx context.Context
 func (r *MarketBiddingStateRepository) GetCurrentSelecting(ctx context.Context, yearNo int) (*entity.MarketBiddingState, error) {
 	var item entity.MarketBiddingState
 	if err := r.db.WithContext(ctx).
-		Where("year_no = ? AND segment_status = ?", yearNo, enum.OrderSegmentStatusSelecting).
+		Where("year_no = ? AND segment_status IN ?", yearNo, []string{enum.OrderSegmentStatusSelecting, enum.OrderSegmentStatusRoundReady}).
+		Order("release_sequence_no ASC").
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *MarketBiddingStateRepository) GetCurrentSelectingForUpdate(ctx context.Context, yearNo int) (*entity.MarketBiddingState, error) {
+	var item entity.MarketBiddingState
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("year_no = ? AND segment_status IN ?", yearNo, []string{enum.OrderSegmentStatusSelecting, enum.OrderSegmentStatusRoundReady}).
 		Order("release_sequence_no ASC").
 		First(&item).Error; err != nil {
 		return nil, err
@@ -616,6 +655,18 @@ func (r *MarketBiddingStateRepository) GetNextReleasable(ctx context.Context, ye
 	return &item, nil
 }
 
+func (r *MarketBiddingStateRepository) GetNextReleasableForUpdate(ctx context.Context, yearNo int) (*entity.MarketBiddingState, error) {
+	var item entity.MarketBiddingState
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("year_no = ? AND segment_status = ?", yearNo, enum.OrderSegmentStatusSequenceReady).
+		Order("release_sequence_no ASC").
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *MarketBiddingStateRepository) HasStartedByYear(ctx context.Context, yearNo int) (bool, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).
@@ -623,13 +674,25 @@ func (r *MarketBiddingStateRepository) HasStartedByYear(ctx context.Context, yea
 		Where(
 			"year_no = ? AND (segment_status IN ? OR (segment_status = ? AND (released_at IS NOT NULL OR completed_at IS NOT NULL)))",
 			yearNo,
-			[]string{enum.OrderSegmentStatusSelecting, enum.OrderSegmentStatusCompleted},
+			[]string{enum.OrderSegmentStatusSelecting, enum.OrderSegmentStatusRoundReady, enum.OrderSegmentStatusCompleted},
 			enum.OrderSegmentStatusSkipped,
 		).
 		Count(&count).Error; err != nil {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *MarketBiddingStateRepository) ListSelectingByCurrentGroupForUpdate(ctx context.Context, yearNo int, groupID int64) ([]entity.MarketBiddingState, error) {
+	var items []entity.MarketBiddingState
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("year_no = ? AND segment_status = ? AND current_group_id = ?", yearNo, enum.OrderSegmentStatusSelecting, groupID).
+		Order("release_sequence_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *MarketBiddingStateRepository) ExistsSelectingBefore(ctx context.Context, yearNo int, releaseSequenceNo int) (bool, error) {
@@ -733,24 +796,61 @@ func (r *MarketBiddingStateRepository) ReleaseSegment(ctx context.Context, id in
 		Model(&entity.MarketBiddingState{}).
 		Where("id = ? AND segment_status = ?", id, enum.OrderSegmentStatusSequenceReady).
 		Updates(map[string]any{
+			"segment_status":    enum.OrderSegmentStatusSelecting,
+			"current_group_id":  currentGroupID,
+			"current_round_no":  1,
+			"completion_reason": nil,
+			"released_at":       operateTime,
+			"updater":           operatorName,
+			"update_time":       operateTime,
+		}).Error
+}
+
+func (r *MarketBiddingStateRepository) MarkRoundReady(ctx context.Context, id int64, roundNo int, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.MarketBiddingState{}).
+		Where("id = ? AND segment_status = ?", id, enum.OrderSegmentStatusSelecting).
+		Updates(map[string]any{
+			"segment_status":   enum.OrderSegmentStatusRoundReady,
+			"current_group_id": nil,
+			"current_round_no": roundNo,
+			"updater":          operatorName,
+			"update_time":      operateTime,
+		}).Error
+}
+
+func (r *MarketBiddingStateRepository) OpenNextRound(ctx context.Context, id int64, roundNo int, currentGroupID int64, operatorName string, operateTime time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.MarketBiddingState{}).
+		Where("id = ? AND segment_status = ?", id, enum.OrderSegmentStatusRoundReady).
+		Updates(map[string]any{
 			"segment_status":   enum.OrderSegmentStatusSelecting,
 			"current_group_id": currentGroupID,
-			"released_at":      operateTime,
+			"current_round_no": roundNo,
 			"updater":          operatorName,
 			"update_time":      operateTime,
 		}).Error
 }
 
 func (r *MarketBiddingStateRepository) CompleteSegment(ctx context.Context, id int64, operatorName string, operateTime time.Time) error {
+	return r.CompleteSegmentWithReason(ctx, id, "", operatorName, operateTime)
+}
+
+func (r *MarketBiddingStateRepository) CompleteSegmentWithReason(ctx context.Context, id int64, reason string, operatorName string, operateTime time.Time) error {
+	var completionReason any
+	if reason != "" {
+		completionReason = reason
+	}
 	return r.db.WithContext(ctx).
 		Model(&entity.MarketBiddingState{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
-			"segment_status":   enum.OrderSegmentStatusCompleted,
-			"current_group_id": nil,
-			"completed_at":     operateTime,
-			"updater":          operatorName,
-			"update_time":      operateTime,
+			"segment_status":    enum.OrderSegmentStatusCompleted,
+			"current_group_id":  nil,
+			"completion_reason": completionReason,
+			"completed_at":      operateTime,
+			"updater":           operatorName,
+			"update_time":       operateTime,
 		}).Error
 }
 
@@ -955,6 +1055,7 @@ func (r *MarketSelectionOrderRepository) ListBySegment(ctx context.Context, year
 	var items []entity.MarketSelectionOrder
 	if err := r.db.WithContext(ctx).
 		Where("year_no = ? AND market_code = ? AND order_type = ?", yearNo, marketCode, orderType).
+		Order("round_no ASC").
 		Order("sequence_no ASC").
 		Find(&items).Error; err != nil {
 		return nil, err
@@ -968,6 +1069,7 @@ func (r *MarketSelectionOrderRepository) ListByYear(ctx context.Context, yearNo 
 		Where("year_no = ?", yearNo).
 		Order("market_code ASC").
 		Order("order_type ASC").
+		Order("round_no ASC").
 		Order("sequence_no ASC").
 		Find(&items).Error; err != nil {
 		return nil, err
@@ -982,11 +1084,34 @@ func (r *MarketSelectionOrderRepository) ListFromYear(ctx context.Context, fromY
 		Order("year_no ASC").
 		Order("market_code ASC").
 		Order("order_type ASC").
+		Order("round_no ASC").
 		Order("sequence_no ASC").
 		Find(&items).Error; err != nil {
 		return nil, err
 	}
 	return items, nil
+}
+
+func (r *MarketSelectionOrderRepository) ListBySegmentRound(ctx context.Context, yearNo int, marketCode string, orderType string, roundNo int) ([]entity.MarketSelectionOrder, error) {
+	var items []entity.MarketSelectionOrder
+	if err := r.db.WithContext(ctx).
+		Where("year_no = ? AND market_code = ? AND order_type = ? AND round_no = ?", yearNo, marketCode, orderType, roundNo).
+		Order("sequence_no ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *MarketSelectionOrderRepository) GetByGroupSegmentRoundForUpdate(ctx context.Context, groupID int64, yearNo int, marketCode string, orderType string, roundNo int) (*entity.MarketSelectionOrder, error) {
+	var item entity.MarketSelectionOrder
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("group_id = ? AND year_no = ? AND market_code = ? AND order_type = ? AND round_no = ?", groupID, yearNo, marketCode, orderType, roundNo).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
 }
 
 func (r *MarketSelectionOrderRepository) GetByGroupSegmentForUpdate(ctx context.Context, groupID int64, yearNo int, marketCode string, orderType string) (*entity.MarketSelectionOrder, error) {
@@ -1001,14 +1126,53 @@ func (r *MarketSelectionOrderRepository) GetByGroupSegmentForUpdate(ctx context.
 }
 
 func (r *MarketSelectionOrderRepository) GetNextWaiting(ctx context.Context, yearNo int, marketCode string, orderType string) (*entity.MarketSelectionOrder, error) {
+	return r.GetNextWaitingInRound(ctx, yearNo, marketCode, orderType, 1)
+}
+
+func (r *MarketSelectionOrderRepository) GetNextWaitingInRound(ctx context.Context, yearNo int, marketCode string, orderType string, roundNo int) (*entity.MarketSelectionOrder, error) {
 	var item entity.MarketSelectionOrder
 	if err := r.db.WithContext(ctx).
-		Where("year_no = ? AND market_code = ? AND order_type = ? AND selection_status = ?", yearNo, marketCode, orderType, enum.OrderSelectionStatusWaiting).
+		Where("year_no = ? AND market_code = ? AND order_type = ? AND round_no = ? AND selection_status = ?", yearNo, marketCode, orderType, roundNo, enum.OrderSelectionStatusWaiting).
 		Order("sequence_no ASC").
 		First(&item).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
+}
+
+func (r *MarketSelectionOrderRepository) HasRound(ctx context.Context, yearNo int, marketCode string, orderType string, roundNo int) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&entity.MarketSelectionOrder{}).
+		Where("year_no = ? AND market_code = ? AND order_type = ? AND round_no = ? AND selection_status != ?", yearNo, marketCode, orderType, roundNo, enum.OrderSelectionStatusBankrupt).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *MarketSelectionOrderRepository) HasRoundRecords(ctx context.Context, yearNo int, marketCode string, orderType string, roundNo int) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&entity.MarketSelectionOrder{}).
+		Where("year_no = ? AND market_code = ? AND order_type = ? AND round_no = ?", yearNo, marketCode, orderType, roundNo).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *MarketSelectionOrderRepository) MarkUnfinishedBankrupt(ctx context.Context, groupID int64, yearNo int, operatorName string, operateTime time.Time) (int64, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&entity.MarketSelectionOrder{}).
+		Where("group_id = ? AND year_no = ? AND selection_status IN ?", groupID, yearNo, []string{
+			enum.OrderSelectionStatusWaiting,
+			enum.OrderSelectionStatusCurrent,
+		}).
+		Updates(map[string]any{
+			"selection_status": enum.OrderSelectionStatusBankrupt,
+			"updater":          operatorName,
+			"update_time":      operateTime,
+		})
+	return tx.RowsAffected, tx.Error
 }
 
 func (r *MarketSelectionOrderRepository) SetStatus(ctx context.Context, id int64, status string, selectedOrderID *int64, skippedByAdminID *int64, skippedReason *string, operateTime *time.Time, operatorName string) error {
@@ -1092,6 +1256,14 @@ func (r *GroupOrderSelectionRepository) GetByGroupSegment(ctx context.Context, g
 	if err := r.db.WithContext(ctx).
 		Where("group_id = ? AND year_no = ? AND market_code = ? AND order_type = ?", groupID, yearNo, marketCode, orderType).
 		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GroupOrderSelectionRepository) GetBySelectionOrderID(ctx context.Context, selectionOrderID int64) (*entity.GroupOrderSelection, error) {
+	var item entity.GroupOrderSelection
+	if err := r.db.WithContext(ctx).Where("selection_order_id = ?", selectionOrderID).First(&item).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil

@@ -31,9 +31,10 @@ const (
 )
 
 const (
-	OrderPoolStatusAvailable = "AVAILABLE"
-	OrderPoolStatusSelected  = "SELECTED"
-	OrderPoolStatusVoid      = "VOID"
+	OrderPoolStatusAvailable         = "AVAILABLE"
+	OrderPoolStatusSelected          = "SELECTED"
+	OrderPoolStatusUnselectedExpired = "UNSELECTED_EXPIRED"
+	OrderPoolStatusVoid              = "VOID"
 )
 
 const (
@@ -45,6 +46,7 @@ const (
 	OrderSegmentStatusSequenceReady     = "SEQUENCE_READY"
 	OrderSegmentStatusWaitingRelease    = "WAITING_RELEASE"
 	OrderSegmentStatusSelecting         = "SELECTING"
+	OrderSegmentStatusRoundReady        = "ROUND_READY"
 	OrderSegmentStatusCompleted         = "COMPLETED"
 	OrderSegmentStatusSkipped           = "SKIPPED"
 )
@@ -61,6 +63,13 @@ const (
 	OrderSelectionStatusSelected     = "SELECTED"
 	OrderSelectionStatusPassed       = "PASSED"
 	OrderSelectionStatusAdminSkipped = "ADMIN_SKIPPED"
+	OrderSelectionStatusBankrupt     = "INELIGIBLE_BANKRUPT"
+)
+
+const (
+	OrderCompletionReasonAllRoundsCompleted     = "ALL_ROUNDS_COMPLETED"
+	OrderCompletionReasonPoolExhausted          = "ORDER_POOL_EXHAUSTED"
+	OrderCompletionReasonNoEligibleParticipants = "NO_ELIGIBLE_PARTICIPANTS"
 )
 
 const (

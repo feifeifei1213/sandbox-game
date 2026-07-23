@@ -531,6 +531,34 @@ func (h *AdminOrderHandler) ReleaseNextSegment(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 
+func (h *AdminOrderHandler) OpenNextRound(c *gin.Context) {
+	var req dto.AdminOrderOpenNextRoundRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortPlayerOrderBadRequest(c, "开启下一轮参数不正确", err)
+		return
+	}
+	if req.YearNo == nil || *req.YearNo < 1 {
+		abortPlayerOrderBadRequest(c, "yearNo 参数不正确", nil)
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权开启下一轮") {
+		return
+	}
+	identity, _ := middleware.GetAuthIdentity(c)
+	result, err := h.controlCommandService.OpenNextRound(c.Request.Context(), service.OpenNextOrderRoundCommand{
+		YearNo:       *req.YearNo,
+		MarketCode:   req.MarketCode,
+		OrderType:    req.OrderType,
+		OperatorID:   identity.UserID,
+		OperatorName: identity.Username,
+	})
+	if err != nil {
+		abortOrderError(c, err, "开启下一轮失败")
+		return
+	}
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *AdminOrderHandler) AdminSkipCurrentGroup(c *gin.Context) {
 	var req dto.AdminOrderSkipCurrentGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

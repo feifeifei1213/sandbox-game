@@ -232,6 +232,8 @@ func abortOrderError(c *gin.Context, err error, fallbackMessage string) {
 		errors.Is(err, service.ErrOrderMarketAlreadyClosed),
 		errors.Is(err, service.ErrOrderAlreadySelected),
 		errors.Is(err, service.ErrOrderSegmentReleaseBlocked),
+		errors.Is(err, service.ErrOrderRoundNotReady),
+		errors.Is(err, service.ErrOrderPoolExhausted),
 		errors.Is(err, service.ErrOrderSegmentCurrentGroupMismatch):
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusConflict, enum.ConflictCode, resolveOrderErrorMessage(err), err))
 	case errors.Is(err, service.ErrOrderNotRequiredForDemoYear),
@@ -296,12 +298,16 @@ func resolveOrderErrorMessage(err error) string {
 		return "当前标段未处于选单中"
 	case errors.Is(err, service.ErrOrderSegmentReleaseBlocked):
 		return "当前标段未完成，不能释放下一个标段"
+	case errors.Is(err, service.ErrOrderRoundNotReady):
+		return "当前没有可开启的下一轮"
+	case errors.Is(err, service.ErrOrderPoolExhausted):
+		return "订单池已选空，当前标段已经结束"
 	case errors.Is(err, service.ErrOrderSegmentCurrentGroupMismatch):
 		return "当前未轮到该小组操作"
 	case errors.Is(err, service.ErrOrderSelectionNotEligible):
 		return "当前小组不具备该标段选单资格"
 	case errors.Is(err, service.ErrOrderAlreadySelected):
-		return "当前小组已在该标段选择订单"
+		return "当前小组已在本轮选择订单"
 	case errors.Is(err, service.ErrOrderCannotSelect):
 		return "该订单不可选择"
 	case errors.Is(err, service.ErrOrderAdminSkipReasonRequired):
