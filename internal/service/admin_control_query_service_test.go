@@ -1,12 +1,21 @@
 package service
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"log"
+	"strings"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 
 	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
 	"sandbox-game/internal/model/payload"
+	"sandbox-game/internal/repository"
 )
 
 func TestEvaluateOpenNextYearStatusBlocksWhenReachedFinalYear(t *testing.T) {
@@ -127,5 +136,42 @@ func TestBuildInitialBaselineViewResultFormatsSubmittedMeta(t *testing.T) {
 	}
 	if view.SubmitterName == nil || *view.SubmitterName != submitter {
 		t.Fatalf("expected submitterName to be preserved")
+	}
+}
+
+func TestAdminActionLogFindLatestEmptyDoesNotEmitRecordNotFound(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	clearAdminActionLogsForIntegrationTest(t, ctx, tx)
+
+	var loggerOutput bytes.Buffer
+	queryDB := tx.Session(&gorm.Session{
+		Logger: gormlogger.New(
+			log.New(&loggerOutput, "", 0),
+			gormlogger.Config{
+				LogLevel: gormlogger.Warn,
+				Colorful: false,
+			},
+		),
+	})
+
+	item, err := repository.NewAdminActionLogRepository(queryDB).FindLatest(ctx)
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("expected gorm.ErrRecordNotFound, got item=%#v err=%v", item, err)
+	}
+	if item != nil {
+		t.Fatalf("expected nil item when admin action log is empty, got %#v", item)
+	}
+	if strings.Contains(loggerOutput.String(), "record not found") {
+		t.Fatalf("expected empty latest-action query to avoid GORM record-not-found noise, got log: %s", loggerOutput.String())
 	}
 }

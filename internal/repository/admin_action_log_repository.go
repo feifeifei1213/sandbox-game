@@ -21,12 +21,17 @@ func (r *AdminActionLogRepository) Create(ctx context.Context, item *entity.Admi
 }
 
 func (r *AdminActionLogRepository) FindLatest(ctx context.Context) (*entity.AdminActionLog, error) {
-	var item entity.AdminActionLog
-	if err := r.db.WithContext(ctx).
+	var items []entity.AdminActionLog
+	result := r.db.WithContext(ctx).
 		Order("operate_time DESC").
 		Order("id DESC").
-		First(&item).Error; err != nil {
-		return nil, err
+		Limit(1).
+		Find(&items)
+	if result.Error != nil {
+		return nil, result.Error
 	}
-	return &item, nil
+	if len(items) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &items[0], nil
 }
