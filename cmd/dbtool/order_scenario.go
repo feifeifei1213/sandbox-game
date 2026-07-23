@@ -15,26 +15,27 @@ import (
 )
 
 const (
-	orderScenarioOperatorID   int64 = 1
-	orderScenarioOperatorName       = "I4-07订单专项造数"
+	orderScenarioOperatorID     int64 = 1
+	orderScenarioOperatorName         = "I13-08订单手动造数"
+	orderScenarioBankruptReason       = "I13-08手动造数：用于验证破产组过滤"
 )
 
 type seededOrderScenario struct {
-	GroupIDs []int64
+	Groups []entity.Group
 }
 
 func seedOrderScenario(ctx context.Context, db *gorm.DB) error {
 	var seeded seededOrderScenario
 	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var err error
-		seeded.GroupIDs, err = seedOrderScenarioGroups(ctx, tx)
+		seeded.Groups, err = seedOrderScenarioGroups(ctx, tx)
 		if err != nil {
 			return err
 		}
-		if err := seedOrderScenarioHistoricalYears(ctx, tx, seeded.GroupIDs); err != nil {
+		if err := seedOrderScenarioHistoricalYears(ctx, tx, seeded.Groups); err != nil {
 			return err
 		}
-		if err := seedOrderScenarioPreviousOrders(ctx, tx, seeded.GroupIDs); err != nil {
+		if err := seedOrderScenarioPreviousOrders(ctx, tx, seeded.Groups); err != nil {
 			return err
 		}
 		return nil
@@ -42,20 +43,25 @@ func seedOrderScenario(ctx context.Context, db *gorm.DB) error {
 		return fmt.Errorf("seed order scenario transaction: %w", err)
 	}
 
+	groupIDs := make([]int64, 0, len(seeded.Groups))
+	for _, group := range seeded.Groups {
+		groupIDs = append(groupIDs, group.ID)
+	}
 	fmt.Printf(
-		"order scenario seeded: groups=%d groupIDs=%v stop=2年已开放、1年订单历史已写入、2年订单配置未开始\n",
-		len(seeded.GroupIDs),
-		seeded.GroupIDs,
+		"order scenario seeded: groups=%d groupIDs=%v stop=2年已开放、1年龙头历史已写入、2年订单数量/市场投入待手动配置\n",
+		len(seeded.Groups),
+		groupIDs,
 	)
 	return nil
 }
 
-func seedOrderScenarioGroups(ctx context.Context, tx *gorm.DB) ([]int64, error) {
+func seedOrderScenarioGroups(ctx context.Context, tx *gorm.DB) ([]entity.Group, error) {
 	now := time.Now()
 	groups := []entity.Group{
 		buildScenarioGroup(1, "GROUP_01", "第一组", now),
 		buildScenarioGroup(2, "GROUP_02", "第二组", now),
 		buildScenarioGroup(3, "GROUP_03", "第三组", now),
+		buildScenarioBankruptGroup(4, "GROUP_04", "第四组", now, 2, orderScenarioBankruptReason),
 	}
 	if err := tx.WithContext(ctx).Create(&groups).Error; err != nil {
 		return nil, fmt.Errorf("create scenario groups: %w", err)
@@ -99,11 +105,7 @@ func seedOrderScenarioGroups(ctx context.Context, tx *gorm.DB) ([]int64, error) 
 		return nil, fmt.Errorf("update scenario game config: %w", err)
 	}
 
-	groupIDs := make([]int64, 0, len(groups))
-	for _, group := range groups {
-		groupIDs = append(groupIDs, group.ID)
-	}
-	return groupIDs, nil
+	return groups, nil
 }
 
 func buildScenarioGroup(no int, code string, name string, now time.Time) entity.Group {
@@ -117,7 +119,15 @@ func buildScenarioGroup(no int, code string, name string, now time.Time) entity.
 	}
 }
 
-func seedOrderScenarioHistoricalYears(ctx context.Context, tx *gorm.DB, groupIDs []int64) error {
+func buildScenarioBankruptGroup(no int, code string, name string, now time.Time, bankruptYearNo int, bankruptReason string) entity.Group {
+	group := buildScenarioGroup(no, code, name, now)
+	group.BusinessStatus = enum.BusinessStatusBankrupt
+	group.BankruptYearNo = &bankruptYearNo
+	group.BankruptReason = &bankruptReason
+	return group
+}
+
+func seedOrderScenarioHistoricalYears(ctx context.Context, tx *gorm.DB, groups []entity.Group) error {
 	now := time.Now()
 	manualJSON, computedJSON, err := buildScenarioReportJSON()
 	if err != nil {
@@ -131,7 +141,8 @@ func seedOrderScenarioHistoricalYears(ctx context.Context, tx *gorm.DB, groupIDs
 	if err != nil {
 		return err
 	}
-	for _, groupID := range groupIDs {
+	for _, group := range groups {
+		groupID := group.ID
 		submittedAt := now
 		submitterID := orderScenarioOperatorID
 		baseline := entity.InitialBaseline{
@@ -190,6 +201,9 @@ func seedOrderScenarioHistoricalYears(ctx context.Context, tx *gorm.DB, groupIDs
 			LatestStageSubmitVersion:  0,
 			LatestReportSubmitVersion: 0,
 			BaseEntity:                buildScenarioBase(now),
+		}
+		if group.BusinessStatus == enum.BusinessStatusBankrupt {
+			yearTwoState.YearStatus = enum.YearStatusLocked
 		}
 		if err := tx.WithContext(ctx).Create(&yearTwoState).Error; err != nil {
 			return fmt.Errorf("create year 2 state group=%d: %w", groupID, err)
@@ -283,9 +297,9 @@ func seedScenarioSummary(ctx context.Context, tx *gorm.DB, groupID int64, yearNo
 	return nil
 }
 
-func seedOrderScenarioPreviousOrders(ctx context.Context, tx *gorm.DB, groupIDs []int64) error {
-	if len(groupIDs) < 3 {
-		return fmt.Errorf("seed previous orders requires 3 groups")
+func seedOrderScenarioPreviousOrders(ctx context.Context, tx *gorm.DB, groups []entity.Group) error {
+	if len(groups) < 4 {
+		return fmt.Errorf("seed previous orders requires 4 groups")
 	}
 	now := time.Now()
 	type leaderCase struct {
@@ -293,14 +307,15 @@ func seedOrderScenarioPreviousOrders(ctx context.Context, tx *gorm.DB, groupIDs 
 		amounts    []float64
 	}
 	cases := []leaderCase{
-		{marketCode: enum.MarketCodeLocal, amounts: []float64{120, 80, 60}},
-		{marketCode: enum.MarketCodeRegional, amounts: []float64{70, 130, 90}},
-		{marketCode: enum.MarketCodeNational, amounts: []float64{65, 75, 150}},
-		{marketCode: enum.MarketCodeGlobal, amounts: []float64{140, 100, 110}},
+		{marketCode: enum.MarketCodeLocal, amounts: []float64{120, 80, 60, 40}},
+		{marketCode: enum.MarketCodeRegional, amounts: []float64{70, 130, 90, 60}},
+		{marketCode: enum.MarketCodeNational, amounts: []float64{65, 75, 150, 50}},
+		{marketCode: enum.MarketCodeGlobal, amounts: []float64{140, 100, 110, 9999}},
 	}
-	orders := make([]entity.OrderPool, 0, len(cases)*len(groupIDs))
+	orders := make([]entity.OrderPool, 0, len(cases)*len(groups))
 	for _, item := range cases {
-		for index, groupID := range groupIDs {
+		for index, group := range groups {
+			groupID := group.ID
 			selectedGroupID := groupID
 			selectedAt := now
 			sourceIndex := index + 1
@@ -319,10 +334,10 @@ func seedOrderScenarioPreviousOrders(ctx context.Context, tx *gorm.DB, groupIDs 
 				PoolStatus:      enum.OrderPoolStatusSelected,
 				SelectedGroupID: &selectedGroupID,
 				SelectedAt:      &selectedAt,
-				SourceSheetName: "I4-07造数",
+				SourceSheetName: "I13-08造数",
 				SourceCell:      "PREV",
 				SourceRowIndex:  &sourceIndex,
-				SourceRowKey:    fmt.Sprintf("i4_07_prev_%s_%d", item.marketCode, groupID),
+				SourceRowKey:    fmt.Sprintf("i13_08_prev_%s_%d", item.marketCode, groupID),
 				BaseEntity:      buildScenarioBase(now),
 			})
 		}
