@@ -190,7 +190,7 @@
 |---|---|
 | `auth` | 登录、当前用户信息、退出登录 |
 | `game-config` | 当前游戏配置、开放年份、规则版本信息 |
-| `player-order` | 玩家年度订单页、16 项市场投入、按顺序选择订单与交付状态查看 |
+| `player-order` | 玩家年度订单页、当前订单模板完整市场投入、按轮次选择订单与交付状态查看 |
 | `player-operating` | 玩家经营页读取、草稿保存、阶段提交 |
 | `player-report` | 财报页读取、草稿保存、财报提交 |
 | `admin-order` | 管理员多年订单数量控制台、年度市场开启、预览/确认订单池、标段释放与竞标控制 |
@@ -537,22 +537,23 @@
 | `markets[].marketName` | 市场名称 |
 | `markets[].marketEnabled` | 当前年份该市场是否开启；未开启市场不生成订单、不抢单 |
 | `markets[].marketInvestmentLimit` | 当前年份该市场投入上限；`null` 表示无上限，未开启市场前端显示为不可投 |
-| `investmentStatus` | 本组当年 16 项市场投入提交状态 |
+| `investmentStatus` | 本组当年当前订单模板全部市场投入提交状态 |
 | `canSubmitInvestment` | 是否可提交本年市场投入 |
 | `markets[].segments[].marketInvestment` | 本组该标段投入 |
 | `markets[].segments[].investmentSubmitted` | 本组该标段投入是否已提交 |
-| `markets[].canSelectOrder` | 当前是否轮到本组选择 |
-| `markets[].selectionSequenceNo` | 本组在该市场选单顺序 |
 | `markets[].isMarketLeader` | 本组是否为该市场本年市场龙头 |
 | `markets[].segments[].orderType` | 标段订单类型 |
 | `markets[].segments[].releaseSequenceNo` | 标段释放顺序 |
 | `markets[].segments[].segmentStatus` | 标段状态 |
-| `markets[].segments[].selectionOrder[]` | 当前标段完整选单顺序和状态，不包含排序依据 |
-| `markets[].segments[].currentGroupId` | 当前轮到的小组 |
-| `markets[].segments[].availableOrders` | 当前标段仍可选择订单列表 |
-| `markets[].segments[].lockedOrders[]` | 已被选择订单的只读展示信息，玩家端只用于灰色不可选，不返回选中组 |
-| `markets[].segments[].selectedOrder` | 本组该标段已选订单 |
-| `markets[].segments[].deliveryStatus` | 本组已选订单交付状态 |
+| `markets[].segments[].currentRoundNo` | 当前或最近处理轮次 |
+| `markets[].segments[].nextRoundNo` | 下一待开启轮次；没有则为空 |
+| `markets[].segments[].selfRoundStatus` | 本组当前轮次状态；无顺序记录时派生为“本轮无资格” |
+| `markets[].segments[].selfSelectionSequenceNo` | 本组当前轮次顺序；无资格时为空 |
+| `markets[].segments[].canSelectOrder` | 当前轮次是否轮到本组选择 |
+| `markets[].segments[].ordersVisible` | 玩家端是否可以查看该标段订单明细；由后端按标段是否已释放进入过选单阶段计算 |
+| `markets[].segments[].availableOrders` | 当前标段仍可选择订单列表；仅 `ordersVisible=true` 时返回明细，否则返回空数组 |
+| `markets[].segments[].lockedOrders[]` | 已被选择订单的只读展示信息，玩家端只用于灰色不可选，不返回选中组；仅 `ordersVisible=true` 时返回明细，否则返回空数组 |
+| `markets[].segments[].selectedOrders[]` | 本组该标段各轮已选订单，包含 `roundNo`；仅 `ordersVisible=true` 时返回明细，否则返回空数组 |
 | `pollingIntervalSeconds` | 年度订单页建议自动轮询间隔，首版为 `3` |
 
 规则：
@@ -560,11 +561,14 @@
 - `0年` 返回 `orderRequired=false`，不进入市场选单。
 - 未开启市场仍返回其 4 个订单类型投入项，但玩家端输入框禁用，提交时系统自动带 `0`；若绕过前端提交非 `0`，服务端返回 `422`。
 - 玩家端应展示每个市场的 `marketInvestmentLimit`；`null` 显示为“无上限”，未开启市场显示为“未开启”。
+- 市场投入阶段、等待其他小组提交投入、已生成选单顺序但标段尚未释放时，`ordersVisible=false`，玩家接口不得返回具体订单池明细、订单编号、金额、数量、单价、账期或交付面板所需的订单明细。
+- 管理员释放标段并进入过选单阶段后，`ordersVisible=true`；前端按现有页面结构分别展示订单卡片、本组已选订单和交付面板，不新增合并后的统一大模块。
 - 玩家不返回其他组已选订单明细。
 - 已被选择的订单在玩家端显示为灰色不可选，但不返回被哪个小组选走。
 - 只有当前释放到的标段才允许选择订单。
-- 玩家端可展示完整排序和各组状态，但不展示排序依据。
+- 玩家端只展示本组状态和当前轮次，不返回其他小组投入、完整顺序或未来轮次参与名单。
 - 首版通过自动轮询同步状态，不做 WebSocket。
+- 轮询采用静默局部合并，不进入整页加载态，不改变页面滚动位置。
 
 #### 6.2A.2 提交市场投入
 
@@ -596,12 +600,12 @@
 
 - 仅正式年份允许提交。
 - `0年` 不走独立市场投入提交。
-- 每次提交必须包含本年全部 `16` 个 `市场 + 订单类型` 投入值。
+- 每次提交必须包含本年当前订单模板定义的全部 `市场 + 订单类型` 投入值。
 - 投入金额必须大于等于 `0` 且必须为整数；空值和小数不允许提交。
 - 若某市场未开启，该市场下 4 项 `marketInvestment` 必须全部为 `0`；前端应自动带 `0`，绕过前端提交非 `0` 返回 `422`。
 - 若某市场配置了 `marketInvestmentLimit`，该市场下 4 项投入合计不得超过该上限；未配置上限时不做单市场上限校验。
 - 提交后不可修改；重复提交返回 `409`。
-- 普通小组某标段投入为 `0` 时，不参与该标段选单。
+- 任何小组某标段投入为 `0` 时均不参与该标段选单，市场龙头也不例外。
 - 市场投入提交后回写经营页年初市场投入区域为只读展示，经营页 `Q1` 不再允许修改。
 
 #### 6.2A.3 选择订单
@@ -625,8 +629,8 @@
 
 - 仅在该标段处于 `SELECTING` 时允许选择。
 - 必须轮到当前组。
-- 当前组必须满足当前标段参与资格：普通小组需提交正数标段投入；市场龙头即使本年该市场下当前产品投入为 `0` 也允许优先选择。
-- 每组每标段最多选择 `1` 个订单。
+- 当前组必须具有服务端当前轮次资格；客户端不提交权威 `roundNo`，后端从加锁后的标段状态读取当前轮次。
+- 每组每标段每轮最多选择 `1` 个订单；贵宾/生产最多四轮，机场暂时一轮。
 - 订单必须属于当前年份、市场和订单类型，且状态仍可选。
 - 选择成功后订单锁定，不再对其他组可选。
 - 玩家选择后不可撤销。
@@ -638,11 +642,12 @@
 | `selectedOrderId` | 已选订单 ID |
 | `marketCode` | 市场 |
 | `orderType` | 订单类型 |
+| `roundNo` | 实际选择轮次 |
 | `selectionSequenceNo` | 本组顺序 |
-| `nextGroupId` | 下一顺位组；若市场已结束则为空 |
+| `nextGroupId` | 本轮下一顺位组；若本轮已结束则为空 |
 | `segmentStatus` | 选择后的标段状态 |
 
-#### 6.2A.4 放弃本标段
+#### 6.2A.4 放弃当前轮
 
 - 方法：`POST`
 - 路径：`/api/v1/sandbox-game/player-order/pass-segment`
@@ -661,8 +666,9 @@
 规则：
 
 - 仅当前轮到本组时允许放弃。
-- 放弃只对当前标段生效，不影响后续标段。
-- 放弃后本标段不能反悔，系统推进到下一个有资格小组。
+- 放弃只对当前轮生效，不影响后续有资格轮次或后续标段。
+- 前端放弃前二次确认但不要求原因；放弃后本轮不能反悔，系统推进到本轮下一个有资格小组。
+- 客户端不提交权威 `roundNo`，后端根据当前标段状态确定轮次。
 
 #### 6.2A.5 交付已选订单
 
@@ -935,7 +941,7 @@ reportBestCeoScore =
 规则：
 
 - `yearNo` 固定允许 `1~8`，不受管理员最终年份配置影响。
-- `orderCount` 必须在 `0~15` 范围内。
+- `orderCount` 必须为非负整数，不设置固定业务最大值。
 - 更新后应重新生成市场预测快照，或标记预测快照待生成。
 - 若某年订单池已确认，修改多年控制台不得静默改变该年已确认订单池；后续是否允许重新生成需遵守订单池锁定规则。
 
@@ -1011,7 +1017,7 @@ reportBestCeoScore =
 - `releaseSequenceNo` 用于控制同一年内标段释放先后；同一年内不得重复。
 - 标段释放顺序只对已开启且订单数量大于 `0` 的标段生效；未开启市场和订单数量为 `0` 的标段不占用有效释放顺序。
 - 标段释放顺序在释放第一个有效标段前允许调整；释放第一个有效标段后不允许修改。
-- 当年订单数量只做风险提示，不强制保底、不做多轮分配。
+- 当年订单数量只做风险提示，不强制保底或自动补单；贵宾/生产多轮资格按固定规则生成。
 
 #### 6.4A.4 生成预览订单池
 
@@ -1078,7 +1084,7 @@ reportBestCeoScore =
 
 返回：
 
-- 各未破产小组是否已提交当年 16 项市场投入。
+- 各未破产小组是否已提交当年当前订单模板的全部市场投入。
 - 已提交小组的提交时间。
 - 未提交小组列表。
 
@@ -1103,15 +1109,18 @@ reportBestCeoScore =
 
 规则：
 
-- 前置条件：所有未破产小组已提交当年 16 项市场投入、订单池已确认、标段释放顺序已配置。
-- 系统按每个 `市场 + 订单类型` 标段分别生成选单顺序。
+- 前置条件：所有未破产小组已提交当年当前订单模板的全部市场投入、订单池已确认、标段释放顺序已配置。
+- 系统按每个 `市场 + 订单类型` 标段只计算一次基础顺序，并一次生成全部有效轮次顺序。
 - 未开启市场进入 `MARKET_DISABLED`，订单数量为 `0` 的已开启标段进入 `NO_ORDER_CONFIG`，两者不进入选单顺序。
 - 订单数量大于 `0` 但所有未破产小组该标段投入均为 `0` 的标段进入 `SKIPPED`。
 - `1年` 按当前标段投入排序，投入相同随机。
-- `2年` 起市场龙头优先；市场龙头即使本年当前标段投入为 `0` 也仍参与并优先。
+- `2年` 起有资格的市场龙头优先；市场龙头当前标段投入为 `0` 时无资格。
 - 市场龙头已破产时，本年按没有有效市场龙头处理。
 - 其余普通小组按当前标段投入排序；投入相同时按上一年度该市场订单总额排序；仍相同则随机。
 - 随机结果、市场龙头和排序依据必须保存，便于追溯。
+- 贵宾/生产按当前标段投入 `1~2 / 3~5 / 6~8 / >=9` 分别生成 `1 / 2 / 3 / 4` 轮；机场固定生成一轮。
+- 后续轮次只过滤基础顺序，不重新排序或随机。
+- 返回每个标段的 `theoreticalMaxSelections`、`availableOrderCount` 和 `warnings[]`；订单池不足时包含“订单池可能提前选空”，但不阻止生成。
 
 #### 6.4A.8 获取年度选单状态
 
@@ -1126,10 +1135,12 @@ reportBestCeoScore =
 - 各市场龙头
 - 各标段释放顺序
 - 当前释放标段
-- 当前标段选单顺序
-- 当前标段各组状态：无资格、待选择、当前选择、已选择、已放弃、管理员跳过
+- 当前标段 `currentRoundNo / nextRoundNo / completionReason`
+- 当前标段第一至第四轮完整顺序，每轮包含小组、标段投入、上一年市场订单金额、龙头、状态和所选订单
+- 当前标段各轮状态：待本轮开始、待选择、当前选择、已选择、已放弃、管理员跳过、破产无资格
 - 当前轮到的小组
 - 已选订单与未交付状态
+- 订单池剩余数量、理论最大选单机会和风险提示
 
 #### 6.4A.9 释放下一个标段
 
@@ -1149,10 +1160,36 @@ reportBestCeoScore =
 
 - 系统按管理员配置的 `releaseSequenceNo` 找到下一个未完成标段。
 - 只能释放预设顺序中的下一个标段，不能跳序。
-- 当前标段未结束时，不允许释放下一个标段。
+- 当前标段处于 `SELECTING` 或 `ROUND_READY` 时，不允许释放下一个标段。
 - 释放第一个标段后，该年标段释放顺序锁定。
 - 订单数量为 `0` 或所有未破产小组该标段投入均为 `0` 的标段进入 `SKIPPED`。
 - 同一时间建议只存在一个 `SELECTING` 标段，避免玩家并行选单造成现场混乱。
+- 释放成功后立即把第一轮首个有效小组设为当前选择，不增加开启第一轮接口或确认弹窗。
+
+#### 6.4A.9A 开启下一轮
+
+- 方法：`POST`
+- 路径：`/api/v1/sandbox-game/admin-order/open-next-round`
+- 权限：`sandbox-game:admin-order:control-bidding`
+
+请求体建议：
+
+```json
+{
+  "yearNo": 1,
+  "marketCode": "LOCAL",
+  "orderType": "AGENCY_INSPECTION"
+}
+```
+
+规则：
+
+- 只允许当前标段处于 `ROUND_READY` 时调用。
+- 后端从加锁后的标段状态确定下一轮，客户端不提交权威 `roundNo`。
+- 下一轮没有有效参与小组时自动跳过；后续全部轮次均无参与小组时直接完成标段。
+- 订单池已经选空时禁止开启并保持标段完成。
+- 重复请求只有第一次成功，不能重复开启或跨轮。
+- 管理员端按钮统一显示“开启下一轮”，不增加确认弹窗。
 
 #### 6.4A.10 管理员代跳过当前小组
 
@@ -1174,10 +1211,10 @@ reportBestCeoScore =
 
 规则：
 
-- 仅允许跳过当前轮到的小组。
-- 只对当前标段生效，不影响该小组后续标段。
+- 仅允许跳过当前轮当前小组。
+- 只对当前轮生效，不影响后续有资格轮次或后续标段。
 - 管理员不能代玩家选择订单。
-- 必须记录管理员动作日志。
+- `reason` 必填，并记录管理员动作日志。
 
 ---
 
@@ -2474,7 +2511,7 @@ type UpdateOrderControlConfigReq struct {
 type OrderControlItemReq struct {
     MarketCode        string `json:"marketCode" validate:"required"`
     OrderType         string `json:"orderType" validate:"required"`
-    OrderCount        int    `json:"orderCount" validate:"min=0,max=15"`
+    OrderCount        int    `json:"orderCount" validate:"min=0"`
     ReleaseSequenceNo int    `json:"releaseSequenceNo" validate:"required,min=1"`
 }
 
@@ -2503,8 +2540,8 @@ type OrderMarketEnabledItemReq struct {
 | `ErrOrderMarketConfigLocked` | `409` | 订单池确认后或已有小组提交市场投入后修改市场配置 | `市场配置已锁定，不能修改开启状态或投入上限` |
 | `ErrOrderPoolNotGenerated` | `422` | 订单池未生成或未确认就尝试开标/选单 | `订单池尚未确认` |
 | `ErrOrderPoolNotConfirmed` | `422` | 未确认预览批次就生成选单顺序 | `请先确认订单池` |
-| `ErrOrderCountOutOfRange` | `422` | 订单卡片数量超出 `0 ~ 15` | `订单数量必须在0到15之间` |
-| `ErrOrderInvestmentIncomplete` | `422` | 未提交完整 16 项市场投入 | `请先提交本年全部市场投入` |
+| `ErrOrderCountInvalid` | `422` | 订单卡片数量为负数或非整数 | `订单数量必须为非负整数` |
+| `ErrOrderInvestmentIncomplete` | `422` | 未提交当前订单模板的完整市场投入 | `请先提交本年全部市场投入` |
 | `ErrOrderInvestmentNotInteger` | `422` | 市场投入或单市场投入上限包含小数 | `市场投入和投入上限必须为整数` |
 | `ErrOrderInvestmentLimitExceeded` | `422` | 某市场 4 项投入合计超过单市场上限 | `市场投入超过单市场上限` |
 | `ErrOrderInvestmentSubmitted` | `409` | 重复提交市场投入 | `本年市场投入已提交，不能修改` |
@@ -2515,8 +2552,11 @@ type OrderMarketEnabledItemReq struct {
 | `ErrOrderReleaseSequenceDuplicated` | `422` | 同一年标段释放顺序重复 | `标段释放顺序重复` |
 | `ErrOrderReleaseSequenceLocked` | `409` | 开标后修改释放顺序 | `标段释放顺序已锁定，不能修改` |
 | `ErrOrderReleaseSequenceOutOfOrder` | `409` | 管理员跳序释放标段 | `请按预设顺序释放下一个标段` |
-| `ErrOrderAlreadySelectedInSegment` | `409` | 同标段重复选单 | `本组已在该标段选择订单` |
-| `ErrOrderSegmentAlreadyPassed` | `409` | 放弃后再次操作该标段 | `本组已放弃该标段，不能再次选择` |
+| `ErrOrderAlreadySelectedInRound` | `409` | 同标段同轮重复选单 | `本组已在本轮选择订单` |
+| `ErrOrderRoundAlreadyPassed` | `409` | 放弃后再次操作当前轮 | `本组已放弃本轮，不能再次选择` |
+| `ErrOrderRoundNotReady` | `409` | 标段不处于下一轮待开启状态 | `当前没有可开启的下一轮` |
+| `ErrOrderRoundAlreadyOpened` | `409` | 重复开启已经开始或结束的轮次 | `该轮次已经开启，不能重复操作` |
+| `ErrOrderPoolExhausted` | `409` | 订单池已选空后继续选择或开启下一轮 | `订单池已选空，当前标段已经结束` |
 | `ErrOrderUnavailable` | `409` | 订单已被选择或不可选 | `该订单已不可选择` |
 | `ErrOrderPoolLocked` | `409` | 订单池确认后仍尝试修改数量或重新生成 | `订单池已确认，不能重新生成` |
 | `ErrOrderDeliveryRevenueMismatch` | `422` | 季度销售收入与交付订单金额合计不一致 | `本季度销售收入必须等于交付订单金额合计` |

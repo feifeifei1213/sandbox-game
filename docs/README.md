@@ -112,6 +112,7 @@ npm run dev
 - [go_project_structure.md](E:\project\sand box game\docs\go_project_structure.md)
 - [backend_guide.md](E:\project\sand box game\docs\backend_guide.md)
 - [frontend_guide.md](E:\project\sand box game\docs\frontend_guide.md)
+- [order_multi_round_upgrade_design.md](E:\project\sand box game\docs\order_multi_round_upgrade_design.md)
 - [order_template_airport_plan.md](E:\project\sand box game\docs\order_template_airport_plan.md)
 - [airport_order_module_acceptance_checklist.md](E:\project\sand box game\docs\airport_order_module_acceptance_checklist.md)
 
@@ -127,6 +128,7 @@ npm run dev
 - [integration_acceptance_runbook.md](E:\project\sand box game\docs\integration_acceptance_runbook.md)
 - [single_group_rehearsal_runbook.md](E:\project\sand box game\docs\single_group_rehearsal_runbook.md)
 - [test_demo_commands.md](E:\project\sand box game\docs\test_demo_commands.md)
+- [order_module_acceptance_checklist.md](E:\project\sand box game\docs\order_module_acceptance_checklist.md)
 - [airport_order_module_acceptance_checklist.md](E:\project\sand box game\docs\airport_order_module_acceptance_checklist.md)
 
 ### 7.5 看比赛上线与现场使用
