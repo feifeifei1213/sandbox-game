@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -20,17 +19,18 @@ func NewGroupAdjustmentRevisionRepository(db *gorm.DB) *GroupAdjustmentRevisionR
 }
 
 func (r *GroupAdjustmentRevisionRepository) Get(ctx context.Context, groupID int64, yearNo int) (int64, error) {
-	var item entity.GroupAdjustmentRevision
-	err := r.db.WithContext(ctx).
+	var items []entity.GroupAdjustmentRevision
+	if err := r.db.WithContext(ctx).
 		Where("group_id = ? AND year_no = ?", groupID, yearNo).
-		First(&item).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, nil
-	}
-	if err != nil {
+		Order("id").
+		Limit(1).
+		Find(&items).Error; err != nil {
 		return 0, err
 	}
-	return item.Revision, nil
+	if len(items) == 0 {
+		return 0, nil
+	}
+	return items[0].Revision, nil
 }
 
 // Increment 在调用方事务中原子递增奖惩版本，新年份第一次变更后的版本为 1。
