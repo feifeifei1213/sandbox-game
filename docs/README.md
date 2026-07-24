@@ -113,6 +113,7 @@ npm run dev
 - [backend_guide.md](E:\project\sand box game\docs\backend_guide.md)
 - [frontend_guide.md](E:\project\sand box game\docs\frontend_guide.md)
 - [input_navigation_design.md](E:\project\sand box game\docs\input_navigation_design.md)
+- [admin_input_navigation_design.md](E:\project\sand box game\docs\admin_input_navigation_design.md)
 - [order_multi_round_upgrade_design.md](E:\project\sand box game\docs\order_multi_round_upgrade_design.md)
 - [order_template_airport_plan.md](E:\project\sand box game\docs\order_template_airport_plan.md)
 - [airport_order_module_acceptance_checklist.md](E:\project\sand box game\docs\airport_order_module_acceptance_checklist.md)

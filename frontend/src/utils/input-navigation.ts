@@ -22,6 +22,14 @@ function canFocusInput(input: HTMLInputElement) {
   return !input.disabled && !input.readOnly && isVisibleInput(input)
 }
 
+export function shouldHandleEnterNavigation(event: KeyboardEvent) {
+  return !isKeyboardComposing(event)
+}
+
+export function canFocusEnterInput(input: HTMLInputElement | null | undefined): input is HTMLInputElement {
+  return !!input && canFocusInput(input)
+}
+
 function isEnterNavigableInput(input: HTMLInputElement) {
   return input.matches('input[data-enter-nav]') && canFocusInput(input)
 }
@@ -42,8 +50,18 @@ function selectInputText(input: HTMLInputElement) {
   }
 }
 
+export function focusInputElement(input: HTMLInputElement | null | undefined) {
+  if (!canFocusEnterInput(input)) {
+    return false
+  }
+
+  input.focus()
+  selectInputText(input)
+  return true
+}
+
 export function confirmInputOnEnter(event: KeyboardEvent) {
-  if (isKeyboardComposing(event)) {
+  if (!shouldHandleEnterNavigation(event)) {
     return
   }
 
@@ -57,7 +75,7 @@ export function confirmInputOnEnter(event: KeyboardEvent) {
 }
 
 export function focusNextInputOnEnter(event: KeyboardEvent) {
-  if (isKeyboardComposing(event)) {
+  if (!shouldHandleEnterNavigation(event)) {
     return
   }
 
@@ -74,17 +92,29 @@ export function focusNextInputOnEnter(event: KeyboardEvent) {
     return
   }
 
-  const inputs = Array
-    .from(scope.querySelectorAll<HTMLInputElement>('input[data-enter-nav]'))
-    .filter(isEnterNavigableInput)
+  const inputs = Array.from(scope.querySelectorAll<HTMLInputElement>('input[data-enter-nav]'))
 
-  const currentIndex = inputs.indexOf(current)
-  const next = currentIndex >= 0 ? inputs[currentIndex + 1] : null
-  if (!next) {
-    current.blur()
+  focusNextInputFromList(event, inputs)
+}
+
+export function focusNextInputFromList(event: KeyboardEvent, inputs: Array<HTMLInputElement | null | undefined>) {
+  if (!shouldHandleEnterNavigation(event)) {
     return
   }
 
-  next.focus()
-  selectInputText(next)
+  const current = event.target
+  if (!(current instanceof HTMLInputElement) || !canFocusEnterInput(current)) {
+    return
+  }
+
+  event.preventDefault()
+
+  const focusableInputs = inputs.filter(canFocusEnterInput)
+  const currentIndex = focusableInputs.indexOf(current)
+  const candidates = currentIndex >= 0 ? focusableInputs.slice(currentIndex + 1) : focusableInputs
+  const next = candidates.find((input) => input !== current) ?? null
+
+  if (!focusInputElement(next)) {
+    current.blur()
+  }
 }

@@ -20,12 +20,12 @@
 
 ## 开发执行层任务总览
 
-- 总任务数：`77`
-- 已完成：`76`
+- 总任务数：`79`
+- 已完成：`78`
 - 部分完成：`1`
 - 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I13-02 ~ I13-07、I13-09、I14-01 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善；等待用户按订单验收清单复测，并可人工复测输入导航体验`
+- 当前状态：`I13-02 ~ I13-07、I13-09、I14-01、I15-01、I15-02 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善；等待用户按订单验收清单复测，并可人工复测输入导航体验`
 
 ---
 
@@ -603,10 +603,21 @@
 |---|---|---|---|---|---|---|---|
 | I14-01 | 玩家端数字录入支持回车跳下一格并标亮当前格；管理员端数字输入支持回车结束输入态 | P1 | 已完成 | 用户 2026-07-24 确认输入态口径；现有玩家经营、财报、订单页输入组件 | `frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、管理员端数字输入相关页面、`docs/input_navigation_design.md`、`docs/implementation_plan.md` | 已新增通用 `input-navigation` 工具；玩家端经营页、财报页、订单页市场投入支持 `Enter` 跳到同模块下一个可编辑数字输入框，并跳过禁用/只读/隐藏/未开放格；当前玩家输入格叠加蓝色描边/浅蓝光晕且不覆盖原业务底色；管理员端数字输入框按 `Enter` 只失焦，不跳格、不高亮；所有回车行为均不触发保存、提交、选单、交付或按钮动作；验证：`frontend/npm.cmd run build` 通过 | 无；待页面人工复测手感 |
 
+### 9.17 I15：管理员端分页面输入体验优化
+
+> 最新口径以 `docs/admin_input_navigation_design.md` 为主；本迭代只做管理员端指定录入区域的前端输入体验增强，不改变保存、提交、生成订单、释放标段、后端校验、订单公式或 Excel 规则链。
+
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I15-01 | 冻结管理员端字典、初始基线、订单数量和释放顺序的回车导航口径 | P1 | 已完成 | 用户 2026-07-24 分页面输入体验确认；`I14-01` 已有输入导航工具 | `docs/admin_input_navigation_design.md`、`docs/input_navigation_design.md`、`docs/README.md`、`docs/implementation_plan.md` | 已明确管理员端只在赛前配置字典、初始基线、订单数量控制、释放顺序四个区域做局部 `Enter` 跳格和蓝色高亮；字典支持折叠分类自动展开；订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 顺序，即在每个阶段内先填完 `1年数量` 这一列，再进入 `2年数量`；搜索框、按钮、select、checkbox、textarea、确认/原因输入和其他管理员页面不参与跳转 | 无；本任务只写文档，不修改前端代码 |
+| I15-02 | 实现管理员端指定区域回车跳格、自动展开和当前格高亮 | P1 | 已完成 | `I15-01` | `frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/admin/DictionaryEditor.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`docs/admin_input_navigation_design.md`、`docs/implementation_plan.md` | 已实现赛前配置字典按当前筛选结果和分类顺序跳转，必要时自动展开分类；初始基线从上到下跳转；订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 显式序列跳转并跳过锁定年份；释放顺序从上到下跳转并跳过市场未开启 / 不可编辑行；最后一格只失焦；所有行为不触发保存、提交、生成、释放或按钮动作；前端构建通过，待页面人工复测 | 无 |
+
 ### 12.1 本轮新增记录
 
 | 日期 | 记录 |
 |---|---|
+| 2026-07-24 | 任务状态：✅ 已完成；落点：`frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/admin/DictionaryEditor.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`docs/admin_input_navigation_design.md`、`docs/implementation_plan.md`；偏差说明：本轮完成 `I15-02` 管理员端指定区域输入体验开发，只改前端输入导航和局部高亮，不修改后端接口、保存/提交/生成/释放按钮语义、订单公式或 Excel 规则链。公共工具新增可复用的可聚焦判断、聚焦并选中文本、自定义列表跳转能力；赛前配置页字典输入支持中文输入法组合态保护、按当前筛选结果跳转、折叠分类自动展开后聚焦；初始基线按表格从上到下跳转；订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 显式序列跳转，先填完 `1年数量` 列再进入后续年份；释放顺序按 `sortedItems` 页面顺序跳转；四个区域均采用蓝色描边 / 浅蓝光晕叠加当前格高亮，并跳过锁定、禁用、只读、隐藏和不可填写输入框。验证：`npm.cmd run build` 已通过，`git diff --check` 已通过（仅提示 Windows 换行转换警告）；下一步：用户在管理员端四个目标区域做人工复测，重点检查最后一格只失焦且不触发保存、提交、生成或释放。 |
+| 2026-07-24 | 任务状态：✅ 已完成；落点：`docs/admin_input_navigation_design.md`、`docs/input_navigation_design.md`、`docs/README.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写管理员端分页面输入体验优化文档，不修改前端代码。已明确赛前配置页字典修改支持中文输入后 `Enter` 跳到下一个可编辑字典输入框，遇到折叠分类先展开再聚焦；初始基线按表格从上到下跳转；订单管理页数量控制按用户修正后的 `阶段 → 年份 → 市场 → 订单类型` 顺序跳转，即每个阶段内先纵向填完 `1年数量` 列：本地市场 A/B/C/D → 区域市场 A/B/C/D → 后续市场，再进入 `2年数量`；标段释放顺序按从上到下跳转；四个区域均做蓝色当前格高亮并跳过锁定、禁用、只读、隐藏和不可填写输入框。下一步：用户确认后进入 `I15-02` 前端开发，实现工具函数扩展、页面接入、构建验证与人工验收。 |
 | 2026-07-24 | 任务状态：✅ 已完成；落点：`frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/admin/notice/AdminNoticePage.vue`、`frontend/src/views/sandbox-game/admin/control/AdminControlPage.vue`、`frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue`、`frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`docs/input_navigation_design.md`、`docs/implementation_plan.md`；偏差说明：按用户确认只做首版最省事、最稳妥口径。玩家端经营页、财报页、订单页市场投入矩阵通过 `data-enter-nav-scope` / `data-enter-nav` 接入回车跳下一可编辑输入格，最后一格只失焦；焦点高亮采用蓝色描边/浅蓝光晕叠加，不替换绿色/红色/灰色等原业务底色；管理员端仅数字输入框接入 `Enter` 失焦，不做跳格和高亮；搜索框、确认文本框、textarea、select、checkbox、按钮、订单卡片和交付面板未接管。验证：`frontend/npm.cmd run build` 通过。下一步：用户在前端人工复测经营页、财报页、订单市场投入和管理员数字表单的回车手感。 |
 | 2026-07-24 | 任务状态：⏳ 未开始；落点：`docs/input_navigation_design.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写开发文档，不修改前端代码。已明确玩家端经营页、财报页、订单页市场投入支持 `Enter` 跳下一可编辑数字输入格并标亮当前格；管理员端只做 `Enter` 结束输入态，不做跳格和高亮；高亮采用叠加蓝色描边/浅蓝光晕，不替换绿色可编辑语义；`textarea/select/button/checkbox/搜索框/确认文本框` 不参与跳转。下一步：用户确认进入开发后，实施 `I14-01` 前端工具函数、页面接入和构建/人工验收。 |
 | 2026-07-23 | 任务状态：✅ 已完成；落点：`internal/repository/group_adjustment_revision_repository.go`、`internal/service/group_adjustment_revision_repository_test.go`、`docs/implementation_plan.md`；偏差说明：用户发现玩家端奖惩静默同步接口 `/player-notice/get-adjustment-sync` 每 3 秒轮询时持续打印 `sg_group_adjustment_revision record not found`。经定位，奖惩版本记录为空在业务上是正常状态，应等价于 `revision=0`，但仓储层使用 GORM `First` 查询导致空结果被打印为报错噪音。本轮将查询改为 `Limit(1).Find(&slice)`，空结果仍返回 `0,nil`，但不再触发 GORM record-not-found 日志；新增测试覆盖空 revision 查询不输出该噪音。验证：`go test ./internal/service -run TestGroupAdjustmentRevisionGetEmptyDoesNotEmitRecordNotFound -count=1`、`go test ./internal/service -count=1` 均通过。下一步：用户重启后端后保持玩家经营页或财报页打开，确认 `get-adjustment-sync` 轮询不再持续打印 `sg_group_adjustment_revision record not found`。 |

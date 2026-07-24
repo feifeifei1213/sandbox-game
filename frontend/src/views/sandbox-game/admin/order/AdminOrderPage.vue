@@ -96,8 +96,14 @@
                 <tr v-for="(orderType, orderIndex) in orderTypeOptions" :key="`${market.code}-${orderType.code}`">
                   <td v-if="orderIndex === 0" :rowspan="orderTypeOptions.length">{{ market.name }}</td>
                   <td>{{ orderType.name }}</td>
-                  <td v-for="yearNo in stage.years" :key="yearNo" :class="{ 'locked-year-cell': isForecastYearLocked(yearNo) }">
+                  <td
+                    v-for="yearNo in stage.years"
+                    :key="yearNo"
+                    class="forecast-input-cell"
+                    :class="{ 'locked-year-cell': isForecastYearLocked(yearNo) }"
+                  >
                     <input
+                      :ref="(el) => setForecastInputRef(stage.forecastStageCode, yearNo, market.code, orderType.code, el)"
                       :value="getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0"
                       type="number"
                       min="0"
@@ -106,8 +112,8 @@
                       class="compact-input"
                       :class="{ invalid: hasFractionInput(getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0) }"
                       :disabled="savingForecastControl || generatingPool || isForecastYearLocked(yearNo)"
-                      data-enter-confirm
-                      @keydown.enter="confirmInputOnEnter"
+                      data-admin-forecast-nav
+                      @keydown.enter="handleForecastCountEnter(stage.forecastStageCode, yearNo, market.code, orderType.code, $event)"
                       @input="handleForecastCountInput(yearNo, market.code, orderType.code, $event)"
                     >
                   </td>
@@ -215,7 +221,7 @@
         </button>
       </div>
 
-      <div class="table-scroll">
+      <div class="table-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
         <table class="config-table release-sequence-table">
           <colgroup>
             <col class="release-order-col">
@@ -238,8 +244,8 @@
               <td colspan="5" class="empty-row">暂无订单配置。</td>
             </tr>
             <tr v-for="item in sortedItems" :key="`${item.marketCode}-${item.orderType}`" :class="{ 'row-disabled': !item.marketEnabled }">
-              <td>
-                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" inputmode="numeric" data-enter-confirm :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input release-sequence-input" :class="{ invalid: hasFractionInput(item.releaseSequenceNo) }" @keydown.enter="confirmInputOnEnter">
+              <td class="release-sequence-cell">
+                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" inputmode="numeric" data-enter-nav :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input release-sequence-input" :class="{ invalid: hasFractionInput(item.releaseSequenceNo) }">
               </td>
               <td>
                 {{ item.marketName }}
@@ -546,7 +552,11 @@ import { useAdminOrderStore } from '@/stores/admin-order'
 import { useDictionaryStore } from '@/stores/dictionary'
 import type { OrderPoolItem, OrderPoolStatus } from '@/types/sandbox-game-admin'
 import type { AdminOrderSegmentStatus, OrderMarketForecastMarket, OrderTemplateField } from '@/types/sandbox-game-order'
-import { confirmInputOnEnter } from '@/utils/input-navigation'
+import {
+  confirmInputOnEnter,
+  focusNextInputFromList,
+  focusNextInputOnEnter,
+} from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
@@ -608,6 +618,7 @@ const extraPoolFields = computed(() =>
 )
 const selectedSequenceSegmentKey = ref('')
 const activeOrderTab = ref<'forecast' | 'market' | 'sequence' | 'pool' | 'bidding'>('market')
+const forecastInputRefs = new Map<string, HTMLInputElement>()
 let selectionStatusTimer: number | null = null
 const lockedForecastYearCount = computed(() => forecastYearLocks.value.filter((item) => item.locked).length)
 
@@ -798,6 +809,45 @@ function handleMarketLimitInput(marketCode: string, event: Event) {
 
 function getForecastItem(yearNo: number, marketCode: string, orderType: string) {
   return editableForecastItems.value.find((item) => item.yearNo === yearNo && item.marketCode === marketCode && item.orderType === orderType) ?? null
+}
+
+function forecastInputKey(stageCode: string, yearNo: number, marketCode: string, orderType: string) {
+  return `${stageCode}|${yearNo}|${marketCode}|${orderType}`
+}
+
+function setForecastInputRef(stageCode: string, yearNo: number, marketCode: string, orderType: string, el: unknown) {
+  const key = forecastInputKey(stageCode, yearNo, marketCode, orderType)
+  if (el instanceof HTMLInputElement) {
+    forecastInputRefs.set(key, el)
+    return
+  }
+
+  forecastInputRefs.delete(key)
+}
+
+function orderedForecastInputKeys() {
+  const keys: string[] = []
+  for (const stage of forecastStages.value) {
+    for (const yearNo of stage.years) {
+      if (isForecastYearLocked(yearNo)) {
+        continue
+      }
+      for (const market of marketOptions.value) {
+        for (const orderType of orderTypeOptions.value) {
+          keys.push(forecastInputKey(stage.forecastStageCode, yearNo, market.code, orderType.code))
+        }
+      }
+    }
+  }
+  return keys
+}
+
+function handleForecastCountEnter(stageCode: string, yearNo: number, marketCode: string, orderType: string, event: KeyboardEvent) {
+  const currentKey = forecastInputKey(stageCode, yearNo, marketCode, orderType)
+  const keys = orderedForecastInputKeys()
+  const currentIndex = keys.indexOf(currentKey)
+  const nextKeys = currentIndex >= 0 ? keys.slice(currentIndex + 1) : []
+  focusNextInputFromList(event, nextKeys.map((key) => forecastInputRefs.get(key)))
 }
 
 function getForecastNarrative(stageCode: string, marketCode: string) {
@@ -1412,6 +1462,11 @@ function formatGroupName(groupId?: number | null) {
   padding: 6px 8px;
   border-radius: 8px;
   text-align: center;
+}
+
+.forecast-input-cell:focus-within,
+.release-sequence-cell:focus-within {
+  box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px rgba(37, 99, 235, 0.12);
 }
 
 .forecast-control-table .locked-year-cell {

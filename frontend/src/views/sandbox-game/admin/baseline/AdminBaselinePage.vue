@@ -28,7 +28,7 @@
         </div>
 
         <div v-if="loading" class="empty-state">正在读取初始基线...</div>
-        <div v-else class="table-scroll">
+        <div v-else class="table-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
           <table class="baseline-table">
             <thead>
               <tr>
@@ -48,9 +48,8 @@
                     type="number"
                     step="1"
                     inputmode="numeric"
-                    data-enter-confirm
+                    data-enter-nav
                     :disabled="!view?.editable"
-                    @keydown.enter="confirmInputOnEnter"
                     @input="handleFieldInput(field.key, $event)"
                   >
                 </td>
@@ -112,7 +111,7 @@ import { useAdminBaselineStore } from '@/stores/admin-baseline'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useDictionaryStore } from '@/stores/dictionary'
 import type { BaselinePayload } from '@/types/sandbox-game-admin'
-import { confirmInputOnEnter } from '@/utils/input-navigation'
+import { focusNextInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()
@@ -351,6 +350,10 @@ function formatDateTime(value?: string | null) {
 
 .input-cell input:disabled {
   background: var(--readonly-bg);
+}
+
+.input-cell:focus-within {
+  box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px rgba(37, 99, 235, 0.12);
 }
 
 .input-cell.invalid input {

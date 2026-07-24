@@ -55,9 +55,12 @@
             <span class="row-current">{{ row.currentName }}</span>
             <label class="row-input">
               <input
+                :ref="(el) => setDictionaryInputRef(row.item.itemCode, el)"
                 :value="row.item.displayName"
                 :readonly="readonly || !row.item.editable"
                 :aria-label="`${row.item.defaultName} 修改后名称`"
+                data-admin-dictionary-nav
+                @keydown.enter="handleDictionaryInputEnter(row.item.itemCode, $event)"
                 @input="handleInput(row.item.itemCode, $event)"
               >
             </label>
@@ -99,9 +102,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import type { AdminDictionaryItem } from '@/types/sandbox-game-admin'
+import {
+  canFocusEnterInput,
+  focusInputElement,
+  shouldHandleEnterNavigation,
+} from '@/utils/input-navigation'
 
 type DictionaryRow = {
   item: AdminDictionaryItem
@@ -143,6 +151,7 @@ const categoryOrder = ['MARKET', 'ORDER_TYPE', 'OPERATING', 'REPORT', 'BASELINE'
 const searchKeyword = ref('')
 const changedOnly = ref(false)
 const expandedCategories = ref<Record<string, boolean>>({})
+const dictionaryInputRefs = new Map<string, HTMLInputElement>()
 
 const baseItemMap = computed(() => new Map(props.baseItems.map((item) => [item.itemCode, item])))
 
@@ -226,6 +235,61 @@ function toggleCategory(category: string) {
 
 function handleInput(itemCode: string, event: Event) {
   emit('update', itemCode, (event.target as HTMLInputElement).value)
+}
+
+function setDictionaryInputRef(itemCode: string, el: unknown) {
+  if (el instanceof HTMLInputElement) {
+    dictionaryInputRefs.set(itemCode, el)
+    return
+  }
+
+  dictionaryInputRefs.delete(itemCode)
+}
+
+function visibleEditableRows() {
+  if (props.readonly) {
+    return []
+  }
+
+  return visibleGroups.value.flatMap((group) =>
+    group.items
+      .filter((row) => row.item.editable)
+      .map((row) => ({
+        itemCode: row.item.itemCode,
+        category: group.category,
+      })),
+  )
+}
+
+async function handleDictionaryInputEnter(itemCode: string, event: KeyboardEvent) {
+  if (!shouldHandleEnterNavigation(event)) {
+    return
+  }
+
+  const current = event.target
+  if (!(current instanceof HTMLInputElement) || !canFocusEnterInput(current)) {
+    return
+  }
+
+  event.preventDefault()
+
+  const rows = visibleEditableRows()
+  const currentIndex = rows.findIndex((row) => row.itemCode === itemCode)
+  const nextRows = currentIndex >= 0 ? rows.slice(currentIndex + 1) : []
+
+  for (const row of nextRows) {
+    expandedCategories.value = {
+      ...expandedCategories.value,
+      [row.category]: true,
+    }
+    await nextTick()
+
+    if (focusInputElement(dictionaryInputRefs.get(row.itemCode))) {
+      return
+    }
+  }
+
+  current.blur()
 }
 
 function restoreCategoryDefault(category: string) {
@@ -469,6 +533,10 @@ function normalizeName(value?: string | null) {
 .row-input input[readonly] {
   background: #f1f5f9;
   color: #64748b;
+}
+
+.row-input:focus-within input {
+  box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px rgba(37, 99, 235, 0.12);
 }
 
 .text-btn {
