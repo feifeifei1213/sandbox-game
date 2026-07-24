@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="sheet-frame">
-    <div class="sheet-scroll">
+    <div class="sheet-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
       <table class="sheet-table">
         <colgroup>
           <col class="col-index" />
@@ -71,6 +71,7 @@
                 :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateMarketBidField(index, field.key, $event)"
               />
             </td>
@@ -86,6 +87,7 @@
                 :disabled="marketBidReadonly || !isScopeEditable('YEAR_START')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateMarketInvestmentTotal($event)"
               />
             </td>
@@ -111,6 +113,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('shortTermLoan', quarter.key, field.key, $event)"
               />
             </td>
@@ -140,6 +143,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('materialPayment', quarter.key, field.key, $event)"
               />
             </td>
@@ -186,6 +190,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('productionLineAdjustment', quarter.key, field.key, $event)"
               />
             </td>
@@ -210,6 +215,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('humanResource', quarter.key, 'staffCost', $event)"
               />
             </td>
@@ -234,6 +240,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('salaryAndProduction', quarter.key, 'salaryCost', $event)"
               />
             </td>
@@ -258,6 +265,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('researchAndManagement', quarter.key, field.key, $event)"
               />
             </td>
@@ -286,6 +294,7 @@
                 inputmode="numeric"
                 min="0"
                 pattern="[0-9]*"
+                data-enter-nav
                 @input="updateQuarterField('supplyChainOrderRecord', quarter.key, field.key, $event)"
               />
             </td>
@@ -310,6 +319,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('receivableUpdate', quarter.key, 'receivableCollection', $event)"
               />
             </td>
@@ -338,6 +348,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('deliverySettlement', quarter.key, 'salesRevenue', $event)"
               />
             </td>
@@ -353,6 +364,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('deliverySettlement', quarter.key, 'directCost', $event)"
               />
             </td>
@@ -377,6 +389,7 @@
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateQuarterField('deliverySettlement', quarter.key, 'managementStaffCost', $event)"
               />
             </td>
@@ -407,6 +420,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('longTermLoan', 'interest', $event)"
               />
             </td>
@@ -423,6 +437,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('longTermLoan', 'repayment', $event)"
               />
             </td>
@@ -437,6 +452,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('longTermLoan', 'newLoan', $event)"
               />
             </td>
@@ -453,6 +469,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('assetAdjustment', 'lineMaintenance', $event)"
               />
             </td>
@@ -470,6 +487,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('assetAdjustment', 'purchase', $event)"
               />
             </td>
@@ -485,6 +503,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('assetAdjustment', 'sale', $event)"
               />
             </td>
@@ -502,6 +521,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('assetAdjustment', 'rent', $event)"
               />
             </td>
@@ -540,6 +560,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('assetAdjustment', 'workInConstruction', $event)"
               />
             </td>
@@ -557,6 +578,7 @@
                 :disabled="!isScopeEditable('YEAR_END')"
                 inputmode="numeric"
                 pattern="[0-9-]*"
+                data-enter-nav
                 @input="updateYearEndField('assetAdjustment', 'marketCultivation', $event)"
               />
             </td>
@@ -588,6 +610,7 @@
                   :disabled="!isScopeEditable(period.scope)"
                   inputmode="numeric"
                   pattern="[0-9-]*"
+                  data-enter-nav
                   @input="updateQuarterField('incomeAndPenalty', period.key, field.key, $event)"
                 />
               </template>
@@ -654,6 +677,7 @@ import { computed } from 'vue'
 
 import { serviceOperatingLabels, type SandboxGameOperatingLabels } from '@/configs/sandbox-game-service-labels'
 import { cloneOperatingPayload, type CellValue, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
+import { focusNextInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 type MarketBidKey =
@@ -1336,6 +1360,12 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 
 .linked-order-cell {
   background: var(--calc-bg);
+}
+
+.input-cell:focus-within,
+.manual-integer-invalid-cell:focus-within {
+  position: relative;
+  box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px rgba(37, 99, 235, 0.14);
 }
 
 .input-cell input,

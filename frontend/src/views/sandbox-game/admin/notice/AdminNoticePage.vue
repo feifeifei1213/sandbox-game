@@ -95,6 +95,8 @@
                 inputmode="numeric"
                 placeholder="请输入整数金额"
                 :class="{ invalid: hasFractionInput(store.adjustmentForm.amount) }"
+                data-enter-confirm
+                @keydown.enter="confirmInputOnEnter"
               />
             </label>
           </div>
@@ -247,6 +249,7 @@ import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useAdminNoticeStore } from '@/stores/admin-notice'
+import { confirmInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 import type { AdjustmentImpactResult, AdjustmentRecordStatus } from '@/types/sandbox-game-admin'
 

@@ -106,6 +106,8 @@
                       class="compact-input"
                       :class="{ invalid: hasFractionInput(getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0) }"
                       :disabled="savingForecastControl || generatingPool || isForecastYearLocked(yearNo)"
+                      data-enter-confirm
+                      @keydown.enter="confirmInputOnEnter"
                       @input="handleForecastCountInput(yearNo, market.code, orderType.code, $event)"
                     >
                   </td>
@@ -192,6 +194,8 @@
               placeholder="无上限"
               :class="{ invalid: hasFractionInput(market.marketInvestmentLimit ?? '') }"
               :disabled="savingMarketConfig || !config?.canUpdateConfig || !market.enabled"
+              data-enter-confirm
+              @keydown.enter="confirmInputOnEnter"
               @input="handleMarketLimitInput(market.marketCode, $event)"
             >
           </label>
@@ -235,7 +239,7 @@
             </tr>
             <tr v-for="item in sortedItems" :key="`${item.marketCode}-${item.orderType}`" :class="{ 'row-disabled': !item.marketEnabled }">
               <td>
-                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" inputmode="numeric" :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input release-sequence-input" :class="{ invalid: hasFractionInput(item.releaseSequenceNo) }">
+                <input v-model.number="item.releaseSequenceNo" type="number" min="1" step="1" inputmode="numeric" data-enter-confirm :disabled="savingConfig || generatingPool || !config?.canUpdateConfig || !item.marketEnabled" class="compact-input release-sequence-input" :class="{ invalid: hasFractionInput(item.releaseSequenceNo) }" @keydown.enter="confirmInputOnEnter">
               </td>
               <td>
                 {{ item.marketName }}
@@ -542,6 +546,7 @@ import { useAdminOrderStore } from '@/stores/admin-order'
 import { useDictionaryStore } from '@/stores/dictionary'
 import type { OrderPoolItem, OrderPoolStatus } from '@/types/sandbox-game-admin'
 import type { AdminOrderSegmentStatus, OrderMarketForecastMarket, OrderTemplateField } from '@/types/sandbox-game-order'
+import { confirmInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()

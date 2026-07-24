@@ -34,7 +34,7 @@
         </label>
         <label class="field">
           <span>年份</span>
-          <input v-model.number="store.unlockForm.yearNo" type="number" min="0" step="1">
+          <input v-model.number="store.unlockForm.yearNo" type="number" min="0" step="1" data-enter-confirm @keydown.enter="confirmInputOnEnter">
         </label>
         <label class="field">
           <span>目标类型</span>
@@ -94,7 +94,7 @@
           </label>
           <label class="field">
             <span>年份</span>
-            <input v-model.number="store.filters.yearNo" type="number" min="0" step="1">
+            <input v-model.number="store.filters.yearNo" type="number" min="0" step="1" data-enter-confirm @keydown.enter="confirmInputOnEnter">
           </label>
           <label class="field">
             <span>阶段</span>
@@ -180,7 +180,7 @@
             </label>
             <label class="field">
               <span>年份</span>
-              <input v-model.number="store.manualSnapshotForm.yearNo" type="number" min="0" step="1">
+              <input v-model.number="store.manualSnapshotForm.yearNo" type="number" min="0" step="1" data-enter-confirm @keydown.enter="confirmInputOnEnter">
             </label>
             <label class="field">
               <span>阶段</span>
@@ -247,6 +247,7 @@ import { storeToRefs } from 'pinia'
 
 import { useAdminRollbackStore } from '@/stores/admin-rollback'
 import { useAdminShellStore } from '@/stores/admin-shell'
+import { confirmInputOnEnter } from '@/utils/input-navigation'
 
 type TabKey = 'unlock' | 'snapshot'
 

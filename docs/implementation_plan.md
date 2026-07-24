@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-07-23
+> 更新日期：2026-07-24
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -20,12 +20,12 @@
 
 ## 开发执行层任务总览
 
-- 总任务数：`76`
-- 已完成：`75`
+- 总任务数：`77`
+- 已完成：`76`
 - 部分完成：`1`
 - 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I13-02 ~ I13-07、I13-09 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善；等待用户按订单验收清单复测`
+- 当前状态：`I13-02 ~ I13-07、I13-09、I14-01 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善；等待用户按订单验收清单复测，并可人工复测输入导航体验`
 
 ---
 
@@ -595,10 +595,20 @@
 | I13-08 | 升级订单专项造数命令 | P1 | 部分完成 | `I13-07` | `cmd/dbtool/order_scenario.go`、`docs/test_demo_commands.md`、`docs/order_module_acceptance_checklist.md` | 已切到手动联调口径：保留 `1年` 龙头历史、预置 `3` 个正常组和 `1` 个破产组、停在 `2年已开放/订单数量与市场投入待手动配置`；后续再按需要补快速复现型停点 | 继续完善手动场景验证与必要的回归说明 |
 | I13-09 | 收口玩家端订单明细可见性 | P0 | 已完成 | 用户 2026-07-23 确认“页面不改、展示分开，只控制展示时机” | `internal/service/player_order_service.go`、`internal/service/order_generation_engine_test.go`、`frontend/src/types/sandbox-game-order.ts`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`docs/order_multi_round_upgrade_design.md`、`docs/requirements_spec.md`、`docs/api_design.md`、`docs/order_module_acceptance_checklist.md`、`docs/implementation_plan.md` | 后端玩家订单视图已新增 `ordersVisible`，仅在 `SELECTING / ROUND_READY / COMPLETED` 返回订单池和本组已选订单明细；市场投入、等待提交、顺序已生成但标段未释放等状态返回空明细；前端保持原页面结构，订单卡片、本组已选订单和交付面板分开展示并统一受 `ordersVisible` 控制；已补服务层状态策略和裁剪测试 | 无；后续由用户按验收清单复测市场投入阶段和标段释放后的页面展示 |
 
+### 9.16 I14：输入导航与输入态优化
+
+> 最新口径以 `docs/input_navigation_design.md` 为主；本迭代只做前端输入体验优化，不改变保存、提交、后端校验、接口和计算规则。
+
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I14-01 | 玩家端数字录入支持回车跳下一格并标亮当前格；管理员端数字输入支持回车结束输入态 | P1 | 已完成 | 用户 2026-07-24 确认输入态口径；现有玩家经营、财报、订单页输入组件 | `frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、管理员端数字输入相关页面、`docs/input_navigation_design.md`、`docs/implementation_plan.md` | 已新增通用 `input-navigation` 工具；玩家端经营页、财报页、订单页市场投入支持 `Enter` 跳到同模块下一个可编辑数字输入框，并跳过禁用/只读/隐藏/未开放格；当前玩家输入格叠加蓝色描边/浅蓝光晕且不覆盖原业务底色；管理员端数字输入框按 `Enter` 只失焦，不跳格、不高亮；所有回车行为均不触发保存、提交、选单、交付或按钮动作；验证：`frontend/npm.cmd run build` 通过 | 无；待页面人工复测手感 |
+
 ### 12.1 本轮新增记录
 
 | 日期 | 记录 |
 |---|---|
+| 2026-07-24 | 任务状态：✅ 已完成；落点：`frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/admin/notice/AdminNoticePage.vue`、`frontend/src/views/sandbox-game/admin/control/AdminControlPage.vue`、`frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue`、`frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`docs/input_navigation_design.md`、`docs/implementation_plan.md`；偏差说明：按用户确认只做首版最省事、最稳妥口径。玩家端经营页、财报页、订单页市场投入矩阵通过 `data-enter-nav-scope` / `data-enter-nav` 接入回车跳下一可编辑输入格，最后一格只失焦；焦点高亮采用蓝色描边/浅蓝光晕叠加，不替换绿色/红色/灰色等原业务底色；管理员端仅数字输入框接入 `Enter` 失焦，不做跳格和高亮；搜索框、确认文本框、textarea、select、checkbox、按钮、订单卡片和交付面板未接管。验证：`frontend/npm.cmd run build` 通过。下一步：用户在前端人工复测经营页、财报页、订单市场投入和管理员数字表单的回车手感。 |
+| 2026-07-24 | 任务状态：⏳ 未开始；落点：`docs/input_navigation_design.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写开发文档，不修改前端代码。已明确玩家端经营页、财报页、订单页市场投入支持 `Enter` 跳下一可编辑数字输入格并标亮当前格；管理员端只做 `Enter` 结束输入态，不做跳格和高亮；高亮采用叠加蓝色描边/浅蓝光晕，不替换绿色可编辑语义；`textarea/select/button/checkbox/搜索框/确认文本框` 不参与跳转。下一步：用户确认进入开发后，实施 `I14-01` 前端工具函数、页面接入和构建/人工验收。 |
 | 2026-07-23 | 任务状态：✅ 已完成；落点：`internal/repository/group_adjustment_revision_repository.go`、`internal/service/group_adjustment_revision_repository_test.go`、`docs/implementation_plan.md`；偏差说明：用户发现玩家端奖惩静默同步接口 `/player-notice/get-adjustment-sync` 每 3 秒轮询时持续打印 `sg_group_adjustment_revision record not found`。经定位，奖惩版本记录为空在业务上是正常状态，应等价于 `revision=0`，但仓储层使用 GORM `First` 查询导致空结果被打印为报错噪音。本轮将查询改为 `Limit(1).Find(&slice)`，空结果仍返回 `0,nil`，但不再触发 GORM record-not-found 日志；新增测试覆盖空 revision 查询不输出该噪音。验证：`go test ./internal/service -run TestGroupAdjustmentRevisionGetEmptyDoesNotEmitRecordNotFound -count=1`、`go test ./internal/service -count=1` 均通过。下一步：用户重启后端后保持玩家经营页或财报页打开，确认 `get-adjustment-sync` 轮询不再持续打印 `sg_group_adjustment_revision record not found`。 |
 | 2026-07-23 | 任务状态：✅ 已完成；落点：`docs/requirements_spec.md`、`docs/api_design.md`、`frontend/src/stores/player-report.ts`、`frontend/src/views/sandbox-game/player/report/PlayerReportPage.vue`、`frontend/src/components/sandbox-game/player/ReportSidebar.vue`、`internal/service/player_report_query_service.go`、`internal/service/player_report_command_service_test.go`、`docs/implementation_plan.md`；偏差说明：用户修正财报年份 Bug 处理口径，明确不能把未到财报阶段的年份标签改成不可点击，而应允许进入已开放年份的财报路由，并在该年份页面内展示“本年财报尚未提交 / 尚未开放”的占位状态。本轮已回退此前 `get-year-tabs` 按财报类型过滤可进入状态的 B1 思路，改为后端在财报未开放时返回 `200 + canView=false` 占位视图，前端停留在目标年份展示占位，不回跳上一年；同时为财报年份视图加载增加“只接受最后一次请求结果”的序号保护，避免快速多次点击时旧请求覆盖新年份提示。验证：`go test ./internal/service -run TestGetPlayerReportViewReturnsClosedViewBeforeReportOpen -count=1`、`go test ./internal/service ./internal/http/handler -count=1`、`frontend/npm.cmd run build` 均通过。下一步：用户重启前后端后复测玩家端财报页，重点验证点击 `2年财报` 后停留在 `2年`，经营未完成时显示 `2年财报尚未提交`，经营完成并开放财报后正常显示本年财报表。 |
 | 2026-07-23 | 任务状态：✅ 已完成；落点：`internal/repository/admin_action_log_repository.go`、`internal/service/admin_control_query_service_test.go`、`docs/implementation_plan.md`；偏差说明：用户发现后端启动后 `get-config` 周期性出现 `sg_admin_action_log` 的 `record not found` 日志。经定位，该接口查询“最新管理员动作”时允许日志表为空，上层已将 `gorm.ErrRecordNotFound` 视为无最新动作，但仓储层使用 GORM `First` 导致空结果被打印为报错噪音。本轮改为 `Limit(1).Find(&slice)` 查询，空结果仍按仓储契约返回 `gorm.ErrRecordNotFound`，但不再触发 GORM record-not-found 日志；新增测试覆盖空表查询不输出该噪音。验证：`go test ./internal/service -run TestAdminActionLogFindLatestEmptyDoesNotEmitRecordNotFound -count=1`、`go test ./internal/repository` 通过。下一步：用户重启后端后刷新管理员端，确认无最新管理员动作时不再持续打印该条 `record not found`。 |

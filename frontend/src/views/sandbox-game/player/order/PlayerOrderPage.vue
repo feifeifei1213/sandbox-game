@@ -120,7 +120,7 @@
                 {{ currentView.investmentSubmitted ? '已提交' : submittingInvestment ? '提交中...' : `提交 ${orderSegmentCount} 项投入` }}
               </button>
             </div>
-            <div class="investment-grid">
+            <div class="investment-grid" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
               <div class="investment-grid-head">市场</div>
               <div v-for="orderType in orderTypeOptions" :key="orderType.code" class="investment-grid-head">{{ orderType.name }}</div>
               <template v-for="market in marketOptions" :key="market.code">
@@ -141,6 +141,7 @@
                     min="0"
                     step="1"
                     inputmode="numeric"
+                    data-enter-nav
                     :disabled="!currentView.canSubmitInvestment || submittingInvestment || isMarketDisabled(market.code)"
                     @input="handleInvestmentInput(market.code, orderType.code, $event)"
                   >
@@ -362,6 +363,7 @@ import type {
   PlayerOrderPoolItem,
   PlayerOrderSegmentView,
 } from '@/types/sandbox-game-order'
+import { focusNextInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const route = useRoute()
@@ -1132,6 +1134,11 @@ function formatDeliveryStage(value: string) {
 
 .investment-cell.invalid {
   background: #fff5f5;
+}
+
+.investment-cell:focus-within {
+  position: relative;
+  box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px rgba(37, 99, 235, 0.14);
 }
 
 .investment-cell input {

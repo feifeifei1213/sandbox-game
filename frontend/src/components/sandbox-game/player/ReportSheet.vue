@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="sheet-frame">
-    <div class="sheet-scroll">
+    <div class="sheet-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
       <table class="sheet-table">
         <colgroup>
           <col class="col-index" />
@@ -69,6 +69,7 @@
                   :disabled="!canEdit"
                   inputmode="numeric"
                   pattern="[0-9-]*"
+                  data-enter-nav
                   @input="updateManualNumber(row.profit.manualKey, $event)"
                 />
               </template>
@@ -85,6 +86,7 @@
                   :disabled="!canEdit"
                   inputmode="numeric"
                   pattern="[0-9-]*"
+                  data-enter-nav
                   @input="updateManualNumber(row.asset.manualKey, $event)"
                 />
               </template>
@@ -107,6 +109,7 @@
                   :disabled="!canEdit"
                   inputmode="numeric"
                   pattern="[0-9-]*"
+                  data-enter-nav
                   @input="updateManualNumber(row.liability.manualKey, $event)"
                 />
               </template>
@@ -153,6 +156,7 @@ import { computed } from 'vue'
 import { serviceReportLabels, type SandboxGameReportLabels } from '@/configs/sandbox-game-service-labels'
 import type { ReportComputedPayload, ReportManualPayload } from '@/types/sandbox-game'
 import { cloneReportManualPayload } from '@/types/sandbox-game'
+import { focusNextInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 type ManualKey = keyof ReportManualPayload
@@ -433,6 +437,13 @@ function formatTaxRate(value: number) {
 
 .manual-cell {
   background: #d7efc3;
+}
+
+.manual-cell:focus-within,
+.manual-invalid-cell:focus-within,
+.manual-integer-invalid-cell:focus-within {
+  position: relative;
+  box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px rgba(37, 99, 235, 0.14);
 }
 
 .manual-invalid-cell {

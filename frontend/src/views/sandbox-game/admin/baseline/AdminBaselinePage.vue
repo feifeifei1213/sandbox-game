@@ -48,7 +48,9 @@
                     type="number"
                     step="1"
                     inputmode="numeric"
+                    data-enter-confirm
                     :disabled="!view?.editable"
+                    @keydown.enter="confirmInputOnEnter"
                     @input="handleFieldInput(field.key, $event)"
                   >
                 </td>
@@ -110,6 +112,7 @@ import { useAdminBaselineStore } from '@/stores/admin-baseline'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useDictionaryStore } from '@/stores/dictionary'
 import type { BaselinePayload } from '@/types/sandbox-game-admin'
+import { confirmInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()

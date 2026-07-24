@@ -56,6 +56,8 @@
               inputmode="numeric"
               :class="{ invalid: hasFractionInput(finalYearDraft) }"
               :disabled="updatingFinalYear || shellLoading"
+              data-enter-confirm
+              @keydown.enter="confirmInputOnEnter"
             >
           </label>
           <label class="field">
@@ -116,6 +118,7 @@ import { storeToRefs } from 'pinia'
 
 import { openAdminNextYear, updateAdminFinalYear } from '@/api/sandbox-game/admin-control'
 import { useAdminShellStore, type PageMessage } from '@/stores/admin-shell'
+import { confirmInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()

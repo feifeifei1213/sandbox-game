@@ -59,6 +59,8 @@
                 inputmode="numeric"
                 :class="{ invalid: hasFractionInput(groupCountDraft) }"
                 :disabled="initializing"
+                data-enter-confirm
+                @keydown.enter="confirmInputOnEnter"
               >
             </label>
             <label class="field">
@@ -225,6 +227,7 @@ import { useAdminShellStore, type PageMessage } from '@/stores/admin-shell'
 import { useAuthStore } from '@/stores/auth'
 import { useDictionaryStore } from '@/stores/dictionary'
 import type { AdminDictionaryItem } from '@/types/sandbox-game-admin'
+import { confirmInputOnEnter } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const router = useRouter()
