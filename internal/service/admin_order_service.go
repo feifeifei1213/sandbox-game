@@ -32,6 +32,17 @@ const (
 	forecastControlMaxYear               = 8
 )
 
+const (
+	orderYearLockReasonHistoricalYear   = "该年份已成为历史年份"
+	orderYearLockReasonRollbackPending  = "该年份存在回退补提，订单事实保持锁定"
+	orderYearLockReasonPoolConfirmed    = "订单池已确认"
+	orderYearLockReasonSelectedOrders   = "该年份已产生订单历史"
+	orderYearLockReasonGroupSelections  = "该年份已有小组选单记录"
+	orderYearLockReasonMarketBids       = "该年份已有市场投入"
+	orderYearLockReasonSelectionOrders  = "该年份已生成选单顺序"
+	orderYearLockReasonWorkflowAdvanced = "该年份竞标流程已开始"
+)
+
 var (
 	ErrAdminOrderYearInvalid                  = errors.New("admin order year invalid")
 	ErrAdminOrderFileRequired                 = errors.New("admin order file required")
@@ -51,6 +62,12 @@ var (
 	ErrAdminOrderForecastControlInvalid       = errors.New("admin order forecast control invalid")
 	ErrAdminOrderMarketInvestmentLimitInvalid = errors.New("admin order market investment limit invalid")
 )
+
+type orderYearLockInfo struct {
+	YearNo int
+	Locked bool
+	Reason string
+}
 
 type OrderSegmentDefinition struct {
 	MarketCode    string
@@ -371,6 +388,9 @@ type AdminOrderQueryService struct {
 	bidRepo            *repository.GroupMarketBidRepository
 	poolRepo           *repository.OrderPoolRepository
 	stateRepo          *repository.MarketBiddingStateRepository
+	groupYearRepo      *repository.GroupYearStateRepository
+	selectionRepo      *repository.GroupOrderSelectionRepository
+	sequenceRepo       *repository.MarketSelectionOrderRepository
 }
 
 func NewAdminOrderQueryService(
@@ -385,6 +405,9 @@ func NewAdminOrderQueryService(
 	bidRepo *repository.GroupMarketBidRepository,
 	poolRepo *repository.OrderPoolRepository,
 	stateRepo *repository.MarketBiddingStateRepository,
+	groupYearRepo *repository.GroupYearStateRepository,
+	selectionRepo *repository.GroupOrderSelectionRepository,
+	sequenceRepo *repository.MarketSelectionOrderRepository,
 ) *AdminOrderQueryService {
 	return &AdminOrderQueryService{
 		gameConfigRepo:     gameConfigRepo,
@@ -398,6 +421,9 @@ func NewAdminOrderQueryService(
 		bidRepo:            bidRepo,
 		poolRepo:           poolRepo,
 		stateRepo:          stateRepo,
+		groupYearRepo:      groupYearRepo,
+		selectionRepo:      selectionRepo,
+		sequenceRepo:       sequenceRepo,
 	}
 }
 
@@ -499,13 +525,13 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 	if confirmedErr != nil && !repository.IsRecordNotFound(confirmedErr) {
 		return nil, fmt.Errorf("load confirmed order batch: %w", confirmedErr)
 	}
-	submittedInvestmentCount, err := s.bidRepo.CountByYear(ctx, yearNo)
-	if err != nil {
-		return nil, fmt.Errorf("count submitted market investments: %w", err)
-	}
 	states, err := s.stateRepo.ListByYear(ctx, yearNo)
 	if err != nil {
 		return nil, fmt.Errorf("list order states: %w", err)
+	}
+	lockInfo, err := resolveOrderYearLock(ctx, gameConfig, s.batchRepo, s.poolRepo, s.bidRepo, s.stateRepo, s.groupYearRepo, s.selectionRepo, s.sequenceRepo, yearNo)
+	if err != nil {
+		return nil, err
 	}
 
 	items := buildControlConfigItemsForTemplate(yearNo, configs, forecastControlCounts, sourceCounts, poolCounts, marketConfigMap, template)
@@ -523,9 +549,9 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 		GenerationStatus:      resolveOrderGenerationStatus(latestPreview, confirmed, states),
 		LatestPreviewBatch:    buildOrderGenerationBatchSummary(latestPreview),
 		ConfirmedBatch:        buildOrderGenerationBatchSummary(confirmed),
-		CanUpdateConfig:       confirmed == nil && submittedInvestmentCount == 0,
-		CanGeneratePreview:    confirmed == nil,
-		CanConfirmPool:        latestPreview != nil && confirmed == nil,
+		CanUpdateConfig:       !lockInfo.Locked,
+		CanGeneratePreview:    !lockInfo.Locked,
+		CanConfirmPool:        latestPreview != nil && !lockInfo.Locked,
 		MarketConfigs:         buildOrderMarketConfigItemsForTemplate(yearNo, marketConfigs, template),
 		Items:                 items,
 		Warnings:              buildOrderControlWarnings(items, int(groupCount)),
@@ -633,24 +659,163 @@ func (s *AdminOrderQueryService) validateYear(ctx context.Context, yearNo int) e
 }
 
 func (s *AdminOrderQueryService) buildForecastYearLocks(ctx context.Context) ([]OrderForecastYearLock, error) {
-	return buildForecastYearLocksWithRepo(ctx, s.batchRepo)
+	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	return buildForecastYearLocks(ctx, gameConfig, s.batchRepo, s.poolRepo, s.bidRepo, s.stateRepo, s.groupYearRepo, s.selectionRepo, s.sequenceRepo)
 }
 
-func buildForecastYearLocksWithRepo(ctx context.Context, batchRepo *repository.OrderGenerationBatchRepository) ([]OrderForecastYearLock, error) {
+func buildForecastYearLocks(
+	ctx context.Context,
+	gameConfig *entity.GameConfig,
+	batchRepo *repository.OrderGenerationBatchRepository,
+	poolRepo *repository.OrderPoolRepository,
+	bidRepo *repository.GroupMarketBidRepository,
+	stateRepo *repository.MarketBiddingStateRepository,
+	groupYearRepo *repository.GroupYearStateRepository,
+	selectionRepo *repository.GroupOrderSelectionRepository,
+	sequenceRepo *repository.MarketSelectionOrderRepository,
+) ([]OrderForecastYearLock, error) {
 	result := make([]OrderForecastYearLock, 0, forecastControlMaxYear)
 	for yearNo := forecastControlMinYear; yearNo <= forecastControlMaxYear; yearNo++ {
-		lock := OrderForecastYearLock{YearNo: yearNo}
-		confirmed, err := batchRepo.FindConfirmedByYear(ctx, yearNo)
-		if err != nil && !repository.IsRecordNotFound(err) {
-			return nil, fmt.Errorf("load confirmed order batch: %w", err)
+		lockInfo, err := resolveOrderYearLock(ctx, gameConfig, batchRepo, poolRepo, bidRepo, stateRepo, groupYearRepo, selectionRepo, sequenceRepo, yearNo)
+		if err != nil {
+			return nil, err
 		}
-		if confirmed != nil {
-			lock.Locked = true
-			lock.Reason = "订单池已确认"
-		}
-		result = append(result, lock)
+		result = append(result, OrderForecastYearLock{
+			YearNo: lockInfo.YearNo,
+			Locked: lockInfo.Locked,
+			Reason: lockInfo.Reason,
+		})
 	}
 	return result, nil
+}
+
+func buildForecastYearLocksWithDB(ctx context.Context, db *gorm.DB) ([]OrderForecastYearLock, error) {
+	gameConfigRepo := repository.NewGameConfigRepository(db)
+	gameConfig, err := gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load game config: %w", err)
+	}
+	return buildForecastYearLocks(
+		ctx,
+		gameConfig,
+		repository.NewOrderGenerationBatchRepository(db),
+		repository.NewOrderPoolRepository(db),
+		repository.NewGroupMarketBidRepository(db),
+		repository.NewMarketBiddingStateRepository(db),
+		repository.NewGroupYearStateRepository(db),
+		repository.NewGroupOrderSelectionRepository(db),
+		repository.NewMarketSelectionOrderRepository(db),
+	)
+}
+
+func resolveOrderYearLockWithDB(ctx context.Context, db *gorm.DB, yearNo int) (orderYearLockInfo, error) {
+	gameConfigRepo := repository.NewGameConfigRepository(db)
+	gameConfig, err := gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		return orderYearLockInfo{}, fmt.Errorf("load game config: %w", err)
+	}
+	return resolveOrderYearLock(
+		ctx,
+		gameConfig,
+		repository.NewOrderGenerationBatchRepository(db),
+		repository.NewOrderPoolRepository(db),
+		repository.NewGroupMarketBidRepository(db),
+		repository.NewMarketBiddingStateRepository(db),
+		repository.NewGroupYearStateRepository(db),
+		repository.NewGroupOrderSelectionRepository(db),
+		repository.NewMarketSelectionOrderRepository(db),
+		yearNo,
+	)
+}
+
+func resolveOrderYearLock(
+	ctx context.Context,
+	gameConfig *entity.GameConfig,
+	batchRepo *repository.OrderGenerationBatchRepository,
+	poolRepo *repository.OrderPoolRepository,
+	bidRepo *repository.GroupMarketBidRepository,
+	stateRepo *repository.MarketBiddingStateRepository,
+	groupYearRepo *repository.GroupYearStateRepository,
+	selectionRepo *repository.GroupOrderSelectionRepository,
+	sequenceRepo *repository.MarketSelectionOrderRepository,
+	yearNo int,
+) (orderYearLockInfo, error) {
+	if gameConfig != nil && yearNo < gameConfig.CurrentOpenYear {
+		return lockedOrderYear(yearNo, orderYearLockReasonHistoricalYear), nil
+	}
+	if groupYearRepo != nil {
+		count, err := groupYearRepo.CountRollbackPendingByYear(ctx, yearNo)
+		if err != nil {
+			return orderYearLockInfo{}, fmt.Errorf("count rollback pending year: %w", err)
+		}
+		if count > 0 {
+			return lockedOrderYear(yearNo, orderYearLockReasonRollbackPending), nil
+		}
+	}
+	if batchRepo != nil {
+		if _, err := batchRepo.FindConfirmedByYear(ctx, yearNo); err == nil {
+			return lockedOrderYear(yearNo, orderYearLockReasonPoolConfirmed), nil
+		} else if !repository.IsRecordNotFound(err) {
+			return orderYearLockInfo{}, fmt.Errorf("load confirmed order batch: %w", err)
+		}
+	}
+	if poolRepo != nil {
+		hasSelected, err := poolRepo.HasSelectedByYear(ctx, yearNo)
+		if err != nil {
+			return orderYearLockInfo{}, fmt.Errorf("check selected order pool: %w", err)
+		}
+		if hasSelected {
+			return lockedOrderYear(yearNo, orderYearLockReasonSelectedOrders), nil
+		}
+	}
+	if selectionRepo != nil {
+		count, err := selectionRepo.CountByYear(ctx, yearNo)
+		if err != nil {
+			return orderYearLockInfo{}, fmt.Errorf("count group order selections: %w", err)
+		}
+		if count > 0 {
+			return lockedOrderYear(yearNo, orderYearLockReasonGroupSelections), nil
+		}
+	}
+	if bidRepo != nil {
+		count, err := bidRepo.CountByYear(ctx, yearNo)
+		if err != nil {
+			return orderYearLockInfo{}, fmt.Errorf("count market bids: %w", err)
+		}
+		if count > 0 {
+			return lockedOrderYear(yearNo, orderYearLockReasonMarketBids), nil
+		}
+	}
+	if sequenceRepo != nil {
+		count, err := sequenceRepo.CountByYear(ctx, yearNo)
+		if err != nil {
+			return orderYearLockInfo{}, fmt.Errorf("count market selection orders: %w", err)
+		}
+		if count > 0 {
+			return lockedOrderYear(yearNo, orderYearLockReasonSelectionOrders), nil
+		}
+	}
+	if stateRepo != nil {
+		started, err := stateRepo.HasWorkflowFactByYear(ctx, yearNo)
+		if err != nil {
+			return orderYearLockInfo{}, fmt.Errorf("check order workflow state: %w", err)
+		}
+		if started {
+			return lockedOrderYear(yearNo, orderYearLockReasonWorkflowAdvanced), nil
+		}
+	}
+	return orderYearLockInfo{YearNo: yearNo}, nil
+}
+
+func lockedOrderYear(yearNo int, reason string) orderYearLockInfo {
+	return orderYearLockInfo{
+		YearNo: yearNo,
+		Locked: true,
+		Reason: reason,
+	}
 }
 
 type AdminOrderCommandService struct {
@@ -749,7 +914,6 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 	var result *UpdateOrderForecastControlResult
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		gameConfigRepo := repository.NewGameConfigRepository(tx)
-		batchRepo := repository.NewOrderGenerationBatchRepository(tx)
 		forecastRepo := repository.NewOrderForecastControlRepository(tx)
 		marketForecastRepo := repository.NewOrderMarketForecastRepository(tx)
 		actionRepo := repository.NewAdminActionLogRepository(tx)
@@ -776,10 +940,12 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 			if yearNo > gameConfig.FinalYear {
 				continue
 			}
-			if _, err := batchRepo.FindConfirmedByYear(ctx, yearNo); err == nil {
-				return ErrAdminOrderPoolLocked
-			} else if !repository.IsRecordNotFound(err) {
-				return fmt.Errorf("load confirmed order batch: %w", err)
+			lockInfo, err := resolveOrderYearLockWithDB(ctx, tx, yearNo)
+			if err != nil {
+				return err
+			}
+			if lockInfo.Locked {
+				return fmt.Errorf("%w: %s", ErrAdminOrderPoolLocked, lockInfo.Reason)
 			}
 			autoPreviewYears = append(autoPreviewYears, yearNo)
 		}
@@ -864,7 +1030,7 @@ func (s *AdminOrderCommandService) UpdateForecastControl(ctx context.Context, cm
 			return fmt.Errorf("create admin action log: %w", err)
 		}
 
-		yearLocks, err := buildForecastYearLocksWithRepo(ctx, batchRepo)
+		yearLocks, err := buildForecastYearLocksWithDB(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -896,7 +1062,6 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		configRepo := repository.NewOrderGenerationConfigRepository(tx)
 		forecastRepo := repository.NewOrderForecastControlRepository(tx)
 		marketRepo := repository.NewOrderMarketConfigRepository(tx)
-		bidRepo := repository.NewGroupMarketBidRepository(tx)
 		poolRepo := repository.NewOrderPoolRepository(tx)
 		stateRepo := repository.NewMarketBiddingStateRepository(tx)
 		actionRepo := repository.NewAdminActionLogRepository(tx)
@@ -915,23 +1080,11 @@ func (s *AdminOrderCommandService) UpdateMarketConfig(ctx context.Context, cmd U
 		if cmd.YearNo < 1 || cmd.YearNo > gameConfig.FinalYear {
 			return ErrAdminOrderYearInvalid
 		}
-		started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
+		lockInfo, err := resolveOrderYearLockWithDB(ctx, tx, cmd.YearNo)
 		if err != nil {
-			return fmt.Errorf("check order segment started: %w", err)
+			return err
 		}
-		if started {
-			return ErrAdminOrderMarketConfigLocked
-		}
-		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
-			return ErrAdminOrderMarketConfigLocked
-		} else if !repository.IsRecordNotFound(err) {
-			return fmt.Errorf("load confirmed order batch: %w", err)
-		}
-		submittedInvestmentCount, err := bidRepo.CountByYear(ctx, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("count submitted market investments: %w", err)
-		}
-		if submittedInvestmentCount > 0 {
+		if lockInfo.Locked {
 			return ErrAdminOrderMarketConfigLocked
 		}
 
@@ -1056,17 +1209,12 @@ func (s *AdminOrderCommandService) UpdateControlConfig(ctx context.Context, cmd 
 		if cmd.YearNo < 1 || cmd.YearNo > gameConfig.FinalYear {
 			return ErrAdminOrderYearInvalid
 		}
-		started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
+		lockInfo, err := resolveOrderYearLockWithDB(ctx, tx, cmd.YearNo)
 		if err != nil {
-			return fmt.Errorf("check order segment started: %w", err)
+			return err
 		}
-		if started {
-			return ErrAdminOrderReleaseSequenceLocked
-		}
-		if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
+		if lockInfo.Locked {
 			return ErrAdminOrderPoolLocked
-		} else if !repository.IsRecordNotFound(err) {
-			return fmt.Errorf("load confirmed order batch: %w", err)
 		}
 		if err := poolRepo.DeleteByYear(ctx, cmd.YearNo); err != nil {
 			return fmt.Errorf("delete old order pool before config update: %w", err)
@@ -1235,17 +1383,12 @@ func generateOrderPreviewInTx(ctx context.Context, tx *gorm.DB, cmd GenerateOrde
 	if err != nil {
 		return nil, err
 	}
-	started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
+	lockInfo, err := resolveOrderYearLockWithDB(ctx, tx, cmd.YearNo)
 	if err != nil {
-		return nil, fmt.Errorf("check order segment started: %w", err)
+		return nil, err
 	}
-	if started {
+	if lockInfo.Locked {
 		return nil, ErrAdminOrderPoolLocked
-	}
-	if _, err := batchRepo.FindConfirmedByYear(ctx, cmd.YearNo); err == nil {
-		return nil, ErrAdminOrderPoolLocked
-	} else if !repository.IsRecordNotFound(err) {
-		return nil, fmt.Errorf("load confirmed order batch: %w", err)
 	}
 	existingCount, err := poolRepo.CountByYear(ctx, cmd.YearNo)
 	if err != nil {
@@ -1459,11 +1602,11 @@ func (s *AdminOrderCommandService) ConfirmOrderPool(ctx context.Context, cmd Con
 		if batch.YearNo != cmd.YearNo || batch.BatchStatus != enum.OrderGenerationBatchStatusPreview {
 			return ErrAdminOrderPreviewNotFound
 		}
-		started, err := stateRepo.HasStartedByYear(ctx, cmd.YearNo)
+		lockInfo, err := resolveOrderYearLockWithDB(ctx, tx, cmd.YearNo)
 		if err != nil {
-			return fmt.Errorf("check order segment started: %w", err)
+			return err
 		}
-		if started {
+		if lockInfo.Locked {
 			return ErrAdminOrderPoolLocked
 		}
 		now := time.Now()

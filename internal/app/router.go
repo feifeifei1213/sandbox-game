@@ -208,6 +208,9 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 		marketBidRepo,
 		orderPoolRepo,
 		marketStateRepo,
+		groupYearRepo,
+		groupOrderSelectionRepo,
+		marketSequenceRepo,
 	)
 	adminOrderCommandService := service.NewAdminOrderCommandService(db)
 	adminOrderControlQueryService := service.NewAdminOrderControlQueryService(

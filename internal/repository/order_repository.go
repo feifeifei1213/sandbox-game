@@ -683,6 +683,21 @@ func (r *MarketBiddingStateRepository) HasStartedByYear(ctx context.Context, yea
 	return count > 0, nil
 }
 
+func (r *MarketBiddingStateRepository) HasWorkflowFactByYear(ctx context.Context, yearNo int) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.MarketBiddingState{}).
+		Where("year_no = ? AND segment_status NOT IN ?", yearNo, []string{
+			enum.OrderSegmentStatusWaitingInvestment,
+			enum.OrderSegmentStatusMarketDisabled,
+			enum.OrderSegmentStatusNoOrderConfig,
+		}).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *MarketBiddingStateRepository) ListSelectingByCurrentGroupForUpdate(ctx context.Context, yearNo int, groupID int64) ([]entity.MarketBiddingState, error) {
 	var items []entity.MarketBiddingState
 	if err := r.db.WithContext(ctx).
@@ -1077,6 +1092,17 @@ func (r *MarketSelectionOrderRepository) ListByYear(ctx context.Context, yearNo 
 	return items, nil
 }
 
+func (r *MarketSelectionOrderRepository) CountByYear(ctx context.Context, yearNo int) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.MarketSelectionOrder{}).
+		Where("year_no = ?", yearNo).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *MarketSelectionOrderRepository) ListFromYear(ctx context.Context, fromYearNo int) ([]entity.MarketSelectionOrder, error) {
 	var items []entity.MarketSelectionOrder
 	if err := r.db.WithContext(ctx).
@@ -1235,6 +1261,17 @@ func (r *GroupOrderSelectionRepository) ListByGroupYear(ctx context.Context, gro
 		return nil, err
 	}
 	return items, nil
+}
+
+func (r *GroupOrderSelectionRepository) CountByYear(ctx context.Context, yearNo int) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.GroupOrderSelection{}).
+		Where("year_no = ?", yearNo).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (r *GroupOrderSelectionRepository) ListByGroupFromYear(ctx context.Context, groupID int64, fromYearNo int) ([]entity.GroupOrderSelection, error) {

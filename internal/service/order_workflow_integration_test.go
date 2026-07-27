@@ -666,6 +666,94 @@ func ptrIntForOrderTest(value int) *int {
 	return &value
 }
 
+func TestOrderYearLockRejectsHistoricalForecastControlRefresh(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	historicalYearNo := 1
+	currentOpenYear := 2
+
+	ensureIntegrationGameConfig(t, ctx, tx, currentOpenYear, currentOpenYear, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, historicalYearNo, currentOpenYear)
+	isolateOrderIntegrationGroups(t, ctx, tx)
+
+	groupID := createOrderIntegrationGroup(t, ctx, tx, "I13 historical order owner", enum.BusinessStatusNormal, nil)
+	createSelectedOrderAmountFixture(t, ctx, tx, groupID, historicalYearNo, enum.MarketCodeLocal, 88)
+
+	adminOrderService := NewAdminOrderCommandService(tx)
+	if _, err := adminOrderService.UpdateForecastControl(ctx, UpdateOrderForecastControlCommand{
+		Items: buildTestForecastControlItems(map[string]int{
+			testForecastSegmentKey(historicalYearNo, enum.MarketCodeLocal, enum.OrderTypeAgencyInspection): 1,
+		}),
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); !errors.Is(err, ErrAdminOrderPoolLocked) {
+		t.Fatalf("expected historical year forecast refresh to be locked, got %v", err)
+	}
+
+	var selectedCount int64
+	if err := tx.WithContext(ctx).
+		Model(&entity.OrderPool{}).
+		Where("year_no = ? AND pool_status = ? AND selected_group_id = ?", historicalYearNo, enum.OrderPoolStatusSelected, groupID).
+		Count(&selectedCount).Error; err != nil {
+		t.Fatalf("count selected historical orders: %v", err)
+	}
+	if selectedCount != 1 {
+		t.Fatalf("expected historical selected order to be preserved, got %d", selectedCount)
+	}
+}
+
+func TestOrderYearLockProtectsSelectedPoolFromPreviewOverwrite(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	yearNo := 1
+
+	ensureIntegrationGameConfig(t, ctx, tx, yearNo, yearNo, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, yearNo)
+	isolateOrderIntegrationGroups(t, ctx, tx)
+
+	groupID := createOrderIntegrationGroup(t, ctx, tx, "I13 selected order owner", enum.BusinessStatusNormal, nil)
+	createSelectedOrderAmountFixture(t, ctx, tx, groupID, yearNo, enum.MarketCodeLocal, 66)
+
+	adminOrderService := NewAdminOrderCommandService(tx)
+	if _, err := adminOrderService.GenerateOrderPool(ctx, GenerateOrderPoolCommand{
+		YearNo:       yearNo,
+		Overwrite:    true,
+		OperatorID:   1,
+		OperatorName: "integration-admin",
+	}); !errors.Is(err, ErrAdminOrderPoolLocked) {
+		t.Fatalf("expected selected order pool to reject preview overwrite, got %v", err)
+	}
+
+	var selectedCount int64
+	if err := tx.WithContext(ctx).
+		Model(&entity.OrderPool{}).
+		Where("year_no = ? AND pool_status = ? AND selected_group_id = ?", yearNo, enum.OrderPoolStatusSelected, groupID).
+		Count(&selectedCount).Error; err != nil {
+		t.Fatalf("count selected orders after rejected overwrite: %v", err)
+	}
+	if selectedCount != 1 {
+		t.Fatalf("expected selected order ownership to be preserved, got %d", selectedCount)
+	}
+}
+
 func TestOrderMarketDisabledRequiresZeroInvestment(t *testing.T) {
 	db := openIntegrationMySQL(t)
 
@@ -919,6 +1007,19 @@ func cleanupOrderIntegrationYears(t *testing.T, ctx context.Context, tx *gorm.DB
 	if len(targets) == 0 {
 		return
 	}
+	if err := tx.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("year_no IN ?", targets).
+		Updates(map[string]any{
+			"rollback_pending":           false,
+			"rollback_target_year_no":    nil,
+			"rollback_target_stage_code": nil,
+			"rollback_log_id":            nil,
+			"updater":                    "integration-test",
+			"update_time":                time.Now(),
+		}).Error; err != nil {
+		t.Fatalf("cleanup rollback pending flags for order integration years %v: %v", targets, err)
+	}
 	entities := []any{
 		&entity.GroupMarketBid{},
 		&entity.MarketSelectionOrder{},
@@ -928,6 +1029,7 @@ func cleanupOrderIntegrationYears(t *testing.T, ctx context.Context, tx *gorm.DB
 		&entity.OrderGenerationConfig{},
 		&entity.OrderMarketConfig{},
 		&entity.OrderGenerationBatch{},
+		&entity.OrderForecastControl{},
 	}
 	for _, item := range entities {
 		if err := tx.WithContext(ctx).Where("year_no IN ?", targets).Delete(item).Error; err != nil {

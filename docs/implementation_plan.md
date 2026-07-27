@@ -20,12 +20,12 @@
 
 ## 开发执行层任务总览
 
-- 总任务数：`83`
-- 已完成：`82`
+- 总任务数：`84`
+- 已完成：`83`
 - 部分完成：`1`
 - 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I13-02 ~ I13-07、I13-09、I14-01、I15-01 ~ I15-04、I16-01 ~ I16-02 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善`
+- 当前状态：`I13-02 ~ I13-07、I13-09 ~ I13-10、I14-01、I15-01 ~ I15-04、I16-01 ~ I16-02 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善`
 
 ---
 
@@ -594,6 +594,7 @@
 | I13-07 | 补多轮订单自动化、接口与人工验收 | P0 | 已完成 | `I13-02 ~ I13-06` | Go 单元/集成测试、`tests/http/sandbox-game/AdminOrder.http`、`docs/order_module_acceptance_checklist.md`、浏览器人工验收 | 已覆盖资格 `0/1/3/6/9/10`、基础顺序轮次过滤、机场单轮、放弃后续轮、管理员跳过原因、正常结束 `UNSELECTED_EXPIRED`、破产失效和已选历史保留、重复生成/重复开启幂等；补齐下一轮/放弃 HTTP 样例；`go test ./...`、前端构建和 `git diff --check` 通过；浏览器验收通过 | 无；I13-08 造数命令仍按用户确认延后 |
 | I13-08 | 升级订单专项造数命令 | P1 | 部分完成 | `I13-07` | `cmd/dbtool/order_scenario.go`、`docs/test_demo_commands.md`、`docs/order_module_acceptance_checklist.md` | 已切到手动联调口径：保留 `1年` 龙头历史、预置 `3` 个正常组和 `1` 个破产组、停在 `2年已开放/订单数量与市场投入待手动配置`；后续再按需要补快速复现型停点 | 继续完善手动场景验证与必要的回归说明 |
 | I13-09 | 收口玩家端订单明细可见性 | P0 | 已完成 | 用户 2026-07-23 确认“页面不改、展示分开，只控制展示时机” | `internal/service/player_order_service.go`、`internal/service/order_generation_engine_test.go`、`frontend/src/types/sandbox-game-order.ts`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`docs/order_multi_round_upgrade_design.md`、`docs/requirements_spec.md`、`docs/api_design.md`、`docs/order_module_acceptance_checklist.md`、`docs/implementation_plan.md` | 后端玩家订单视图已新增 `ordersVisible`，仅在 `SELECTING / ROUND_READY / COMPLETED` 返回订单池和本组已选订单明细；市场投入、等待提交、顺序已生成但标段未释放等状态返回空明细；前端保持原页面结构，订单卡片、本组已选订单和交付面板分开展示并统一受 `ordersVisible` 控制；已补服务层状态策略和裁剪测试 | 无；后续由用户按验收清单复测市场投入阶段和标段释放后的页面展示 |
+| I13-10 | 实现订单历史年份与订单事实锁定保护 | P0 | 已完成 | 用户 2026-07-27 确认、`seed-order-scenario` 的 `1年` 龙头历史被订单配置刷新覆盖问题、回退与快照恢复边界 | `docs/order_year_lock_design.md`、`internal/service/admin_order_service.go`、`internal/repository/order_repository.go`、`internal/repository/group_year_state_repository.go`、`internal/http/handler/admin_order_handler.go`、`internal/service/order_workflow_integration_test.go`、`internal/app/router.go` | 已实现统一订单年份锁定判断：`yearNo < currentOpenYear`、回退待重提、订单池已确认、已选订单、选单记录、市场投入、选单顺序和竞标推进状态均锁定该年；保存数量控制台、市场开启配置、释放顺序、生成/刷新预览池和确认订单池前统一拦截，底层 `generateOrderPreviewInTx` 在删除订单池前兜底检查；查询端 `yearLocks`、`canUpdateConfig / canGeneratePreview / canConfirmPool` 已按新口径返回，前端复用既有置灰逻辑；管理员订单锁定错误提示已统一为“订单数据已锁定”；已补历史年份刷新被拒绝、`SELECTED` 订单池不能被预览覆盖、订单主工作流不回归测试 | 无；后续可用 `seed-order-scenario` 在页面侧人工复测 `2年` 龙头历史是否稳定保留 |
 
 ### 9.16 I14：输入导航与输入态优化
 
@@ -627,6 +628,8 @@
 
 | 日期 | 记录 |
 |---|---|
+| 2026-07-27 | 任务状态：✅ 已完成；落点：`docs/order_year_lock_design.md`、`internal/service/admin_order_service.go`、`internal/repository/order_repository.go`、`internal/repository/group_year_state_repository.go`、`internal/http/handler/admin_order_handler.go`、`internal/service/order_workflow_integration_test.go`、`internal/app/router.go`、`docs/implementation_plan.md`；偏差说明：本轮按 `I13-10` 文档实现订单年份统一锁定保护，不修改市场龙头公式、不释放已选订单、不重排选单顺序、不新增历史订单人工修改入口，也未修改前端页面结构。实现上将锁定条件从“订单池已确认”扩展为历史年份、回退待重提、已选订单、选单记录、市场投入、选单顺序和竞标状态推进等订单事实；所有会删除或重建订单池的管理员写入口和底层预览生成均接入锁定判断，查询端继续复用 `yearLocks` 与 `canUpdateConfig / canGeneratePreview / canConfirmPool` 置灰，并把管理员订单锁定错误提示统一为“订单数据已锁定”。验证：`go test ./internal/service -run 'TestOrderYearLock' -count=1`、`go test ./internal/service -run 'TestOrder(WorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished|MarketInvestmentLimitAndConfigLock|MarketDisabledRequiresZeroInvestment|YearLock)' -count=1`、`go test ./internal/service -count=1`、`go test ./internal/repository -count=1`、`go test ./internal/http/handler ./internal/app -count=1`、`frontend/npm.cmd run build`、`git diff --check` 均通过；`git diff --check` 仅提示 Windows 换行转换警告。下一步：用户运行订单专项造数命令后，在管理员订单页确认 `1年` 数量列置灰，配置 `2年` 市场投入并生成顺序时龙头历史不再丢失。 |
+| 2026-07-27 | 任务状态：⏳ 未开始；落点：`docs/order_year_lock_design.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写订单历史年份与订单事实锁定保护开发文档，不修改业务代码、数据库迁移或前端页面。已明确本 bug 的核心不是龙头算法错误，而是历史年份或已产生订单事实的年份可能被订单配置刷新订单池覆盖；后续开发需新增统一订单年份锁定判断，覆盖 `yearNo < currentOpenYear`、回退待重提、confirmed batch、`sg_order_pool SELECTED`、`sg_group_order_selection`、`sg_group_market_bid`、`sg_market_selection_order` 和竞标状态已推进等条件，并在保存数量控制台、市场开启、释放顺序、生成/刷新预览池、确认订单池前统一拦截。回退/快照恢复边界保持为只影响经营、财报、汇总和订单交付有效性，不释放已选订单、不重排选单、不重算市场龙头。下一步：进入 `I13-10` 开发，补统一锁定服务、前后端接入和回归测试。 |
 | 2026-07-27 | 任务状态：✅ 已完成；落点：`frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/components/sandbox-game/admin/DictionaryEditor.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`docs/implementation_plan.md`；偏差说明：本轮按 `docs/keyboard_navigation_design.md` 实现 `I15-04`，只修改前端输入导航交互和计划回写，不修改后端接口、保存/提交、订单生成、释放标段、选单、交付、公式或 Excel 规则链。公共输入导航工具扩展为 `Enter / ArrowDown` 跳下一格、`ArrowUp` 退上一格，并保留中文输入法组合态保护、跳过禁用/只读/隐藏输入、首尾边界只失焦不循环；玩家端经营页、财报页、订单市场投入接入统一 DOM 顺序导航并保留蓝色当前格高亮；管理员端字典支持方向键上/下导航，目标在折叠分类中时先展开再聚焦；管理员初始基线和释放顺序接入统一 DOM 顺序导航；管理员订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 的显式序列导航，并跳过锁定年份。验证：`frontend/npm.cmd run build` 通过。下一步：用户在真实页面人工复测玩家端三个录入区和管理员端四个录入区，重点检查方向键不导致数字加减、不触发保存/提交/生成/释放。 |
 | 2026-07-27 | 任务状态：✅ 已完成；落点：`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`docs/implementation_plan.md`；偏差说明：本轮按 `I16-01` 文档只优化玩家端经营页主表文字层级与格子内部留白，不修改后端接口、保存/提交逻辑、字段顺序、列宽、颜色语义、输入焦点或 Excel 公式链。实现上新增 `item-label`、`period-label`、`instruction-note`、`rule-note` / `rule-note-short` / `rule-note-long` 等语义修饰类，替代原先大量 `note-cell center` 混用；CSS 新增经营页字号与间距变量，二级任务标题提升到 `16px` 并居中，普通项目和阶段短标签居中，流程说明左对齐，规则说明按短句居中 / 长句左对齐处理，输入和计算数字统一使用等宽数字。验证：`cd frontend && npm.cmd run build` 通过。下一步：用户在真实页面验收可读性，如长标题导致表格高度偏高，可只回调 CSS 变量。 |
 | 2026-07-27 | 任务状态：✅ 已完成；落点：`docs/player_operating_typography_spacing_design.md`、`docs/README.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写玩家端经营页文字层级与格子间距优化文档，不修改正式前端代码。已明确本优化不是重做页面，而是在现有 `OperatingSheet.vue` Excel 风格主表基础上分类处理文字：二级任务标题居中并首选 `16px`、上下左右留白更明显；普通业务内容和阶段短标签居中并适度放大；流程说明优先左对齐、`14px`、中等加粗和更舒展行距；规则参数说明按短句居中 / 长句左对齐处理；输入和计算数字保持居中并建议使用等宽数字；首版不大幅调整列宽，优先通过 padding、line-height 和 min-height 解决细长格子贴边问题。下一步：用户确认后进入 `I16-02`，修改正式经营页样式和必要语义类，并通过前端构建与真实页面人工验收。 |

@@ -239,6 +239,17 @@ func (r *GroupYearStateRepository) CountRollbackPending(ctx context.Context) (in
 	return count, nil
 }
 
+func (r *GroupYearStateRepository) CountRollbackPendingByYear(ctx context.Context, yearNo int) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&entity.GroupYearState{}).
+		Where("year_no = ? AND rollback_pending = ?", yearNo, true).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *GroupYearStateRepository) ListRollbackPending(ctx context.Context) ([]entity.GroupYearState, error) {
 	var items []entity.GroupYearState
 	if err := r.db.WithContext(ctx).

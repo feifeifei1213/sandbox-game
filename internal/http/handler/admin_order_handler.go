@@ -653,7 +653,7 @@ func abortAdminOrderError(c *gin.Context, err error, fallbackMessage string) {
 func resolveAdminOrderErrorMessage(err error) string {
 	switch {
 	case errors.Is(err, service.ErrAdminOrderMarketConfigLocked):
-		return "订单池已确认或标段已进入开标流程，不能修改市场开启状态"
+		return "该年份订单数据已锁定，不能修改市场开启状态或市场投入上限"
 	case errors.Is(err, service.ErrAdminOrderYearInvalid):
 		return "年份不在可配置订单范围内"
 	case errors.Is(err, service.ErrAdminOrderParseFailed):
@@ -667,9 +667,9 @@ func resolveAdminOrderErrorMessage(err error) string {
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceDuplicated):
 		return "同一年内标段释放顺序不能重复"
 	case errors.Is(err, service.ErrAdminOrderReleaseSequenceLocked):
-		return "该年份已有标段进入开标流程，不能修改释放顺序"
+		return "该年份订单数据已锁定，不能修改释放顺序"
 	case errors.Is(err, service.ErrAdminOrderPoolLocked):
-		return "该年份订单池已确认或已有订单被选择，不能覆盖"
+		return "该年份订单数据已锁定，不能修改订单配置或重新生成订单池"
 	case errors.Is(err, service.ErrAdminOrderConfigNotFound):
 		return "请先保存订单数量与标段释放顺序配置"
 	case errors.Is(err, service.ErrAdminOrderBatchNotFound):
