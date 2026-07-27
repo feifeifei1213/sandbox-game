@@ -113,7 +113,7 @@
                       :class="{ invalid: hasFractionInput(getForecastItem(yearNo, market.code, orderType.code)?.orderCount ?? 0) }"
                       :disabled="savingForecastControl || generatingPool || isForecastYearLocked(yearNo)"
                       data-admin-forecast-nav
-                      @keydown.enter="handleForecastCountEnter(stage.forecastStageCode, yearNo, market.code, orderType.code, $event)"
+                      @keydown="handleForecastCountNavigation"
                       @input="handleForecastCountInput(yearNo, market.code, orderType.code, $event)"
                     >
                   </td>
@@ -221,7 +221,7 @@
         </button>
       </div>
 
-      <div class="table-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
+      <div class="table-scroll" data-enter-nav-scope @keydown="handleSequentialInputNavigation">
         <table class="config-table release-sequence-table">
           <colgroup>
             <col class="release-order-col">
@@ -554,8 +554,9 @@ import type { OrderPoolItem, OrderPoolStatus } from '@/types/sandbox-game-admin'
 import type { AdminOrderSegmentStatus, OrderMarketForecastMarket, OrderTemplateField } from '@/types/sandbox-game-order'
 import {
   confirmInputOnEnter,
-  focusNextInputFromList,
-  focusNextInputOnEnter,
+  focusAdjacentInputFromList,
+  handleSequentialInputNavigation,
+  resolveInputNavigationDirection,
 } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
@@ -842,12 +843,14 @@ function orderedForecastInputKeys() {
   return keys
 }
 
-function handleForecastCountEnter(stageCode: string, yearNo: number, marketCode: string, orderType: string, event: KeyboardEvent) {
-  const currentKey = forecastInputKey(stageCode, yearNo, marketCode, orderType)
+function handleForecastCountNavigation(event: KeyboardEvent) {
+  const direction = resolveInputNavigationDirection(event)
+  if (!direction) {
+    return
+  }
+
   const keys = orderedForecastInputKeys()
-  const currentIndex = keys.indexOf(currentKey)
-  const nextKeys = currentIndex >= 0 ? keys.slice(currentIndex + 1) : []
-  focusNextInputFromList(event, nextKeys.map((key) => forecastInputRefs.get(key)))
+  focusAdjacentInputFromList(event, keys.map((key) => forecastInputRefs.get(key)), direction)
 }
 
 function getForecastNarrative(stageCode: string, marketCode: string) {

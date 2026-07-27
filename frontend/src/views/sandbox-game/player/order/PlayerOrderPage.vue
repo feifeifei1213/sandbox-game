@@ -120,7 +120,7 @@
                 {{ currentView.investmentSubmitted ? '已提交' : submittingInvestment ? '提交中...' : `提交 ${orderSegmentCount} 项投入` }}
               </button>
             </div>
-            <div class="investment-grid" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
+            <div class="investment-grid" data-enter-nav-scope @keydown="handleSequentialInputNavigation">
               <div class="investment-grid-head">市场</div>
               <div v-for="orderType in orderTypeOptions" :key="orderType.code" class="investment-grid-head">{{ orderType.name }}</div>
               <template v-for="market in marketOptions" :key="market.code">
@@ -363,7 +363,7 @@ import type {
   PlayerOrderPoolItem,
   PlayerOrderSegmentView,
 } from '@/types/sandbox-game-order'
-import { focusNextInputOnEnter } from '@/utils/input-navigation'
+import { handleSequentialInputNavigation } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const route = useRoute()

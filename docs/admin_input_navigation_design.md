@@ -5,6 +5,8 @@
 > 适用范围：管理员端赛前配置页字典修改、初始基线录入页、订单管理页数量控制、订单管理页标段释放顺序。
 > 文档定位：本文件是 `docs/input_navigation_design.md` 的后续管理员端专项增强口径，只定义前端输入交互，不改变保存、提交、生成订单、释放标段、后端校验、订单公式或 Excel 规则链。
 
+> 2026-07-24 补充：用户已进一步确认玩家端连续录入区域和管理员端本文件列出的四个连续录入区域都需要支持 `ArrowUp` / `ArrowDown` 方向键跳格。方向键补充口径以 `docs/keyboard_navigation_design.md` 为准；本文继续保留 `I15-01 / I15-02` 的 `Enter` 跳格历史口径。
+
 ## 1. 背景
 
 `I14` 已完成一版“最稳妥”的输入体验优化：
@@ -641,7 +643,7 @@ export function focusNextInputFromList(event: KeyboardEvent, inputs: Array<HTMLI
 
 - `Shift + Enter` 跳到上一个输入框。
 - `Tab / Shift + Tab` 自定义跳转。
-- 方向键导航。
+- 方向键导航（已于 2026-07-24 转入 `docs/keyboard_navigation_design.md` 的 `I15-03 / I15-04` 口径，不再作为未确认候选项）。
 - 最后一格循环回第一个。
 - 管理员端所有页面统一跳格。
 - 订单管理页市场设置的单市场投入上限连续跳格。

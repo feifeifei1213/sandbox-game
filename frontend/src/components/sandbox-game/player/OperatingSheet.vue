@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="sheet-frame">
-    <div class="sheet-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
+    <div class="sheet-scroll" data-enter-nav-scope @keydown="handleSequentialInputNavigation">
       <table class="sheet-table">
         <colgroup>
           <col class="col-index" />
@@ -35,32 +35,32 @@
             <th class="row-head">1</th>
             <td class="section-band band-year-start" rowspan="7">年初工作</td>
             <td class="group-title" colspan="2">1. 支付上年度所得税</td>
-            <td class="note-cell center" colspan="4">{{ labels.taxPolicyNote }}</td>
+            <td class="note-cell rule-note rule-note-short" colspan="4">{{ labels.taxPolicyNote }}</td>
             <td class="result-cell">{{ formatNumber(taxPaymentDisplay) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">2</th>
             <td class="group-title" colspan="2">2. 召开年度经营会议</td>
-            <td class="note-cell center" colspan="3">调整公司战略，制定当年经营和工作计划</td>
-            <td class="note-cell center">计划收入</td>
+            <td class="note-cell instruction-note" colspan="3">调整公司战略，制定当年经营和工作计划</td>
+            <td class="note-cell item-label">计划收入</td>
             <td class="result-cell">{{ formatNumber(planRevenueDisplay) }}</td>
-            <td class="note-cell center">综合费用</td>
+            <td class="note-cell item-label">综合费用</td>
             <td class="result-cell">{{ formatNumber(comprehensiveCostDisplay) }}</td>
           </tr>
           <tr>
             <th class="row-head">3</th>
-            <td class="group-title center" rowspan="5">3. 市场竞标</td>
-            <td class="note-cell center">区域</td>
-            <td v-for="field in marketProductFields" :key="`market-head-${field.key}`" class="note-cell center">{{ field.label }}</td>
-            <td class="note-cell center">区域市场订单总价</td>
-            <td class="note-cell center">订单总额</td>
-            <td class="note-cell center">市场投入</td>
+            <td class="group-title" rowspan="5">3. 市场竞标</td>
+            <td class="note-cell period-label">区域</td>
+            <td v-for="field in marketProductFields" :key="`market-head-${field.key}`" class="note-cell period-label">{{ field.label }}</td>
+            <td class="note-cell period-label">区域市场订单总价</td>
+            <td class="note-cell period-label">订单总额</td>
+            <td class="note-cell period-label">市场投入</td>
             <td class="empty-cell"></td>
           </tr>
           <tr v-for="(region, index) in marketRegions" :key="region.key">
             <th class="row-head">{{ 4 + index }}</th>
-            <td class="note-cell center">{{ region.label }}</td>
+            <td class="note-cell item-label">{{ region.label }}</td>
             <td
               v-for="field in marketProductFields"
               :key="`${region.key}-${field.key}`"
@@ -98,10 +98,10 @@
             <th class="row-head">8</th>
             <td class="section-band band-quarter" rowspan="40">每季度工作</td>
             <td class="group-title" rowspan="4">1. 短期贷款更新账期</td>
-            <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`loan-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
-            <td class="note-cell center">增减</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="quarter in quarterList" :key="`loan-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
+            <td class="note-cell period-label">增减</td>
             <td class="empty-cell"></td>
           </tr>
           <tr v-for="(field, index) in shortTermLoanFields" :key="`loan-${field.key}`">
@@ -129,14 +129,14 @@
           <tr>
             <th class="row-head">13</th>
             <td class="group-title" rowspan="6">{{ labels.materialGroupTitle }}</td>
-            <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`material-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="quarter in quarterList" :key="`material-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr v-for="(field, index) in materialFields" :key="`material-${field.key}`">
             <th class="row-head">{{ 14 + index }}</th>
-            <td class="note-cell">{{ field.label }}</td>
+            <td class="note-cell item-label">{{ field.label }}</td>
             <td v-for="quarter in quarterList" :key="`material-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('materialPayment', quarter.key, field.key))">
               <input
                 :value="displayCell(getQuarterFieldValue('materialPayment', quarter.key, field.key))"
@@ -165,24 +165,24 @@
           <tr>
             <th class="row-head">20</th>
             <td class="group-title" colspan="2">{{ labels.productionAdjustmentGroupTitle }}</td>
-            <td v-for="quarter in quarterList" :key="`line-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td v-for="quarter in quarterList" :key="`line-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr v-for="(field, index) in productionLineRows" :key="`line-${field.key}`">
             <th class="row-head">{{ 21 + index }}</th>
             <template v-if="field.groupLabel">
               <td class="nested-group-cell" :rowspan="field.groupRowspan ?? 1">{{ field.groupLabel }}</td>
-              <td class="note-cell">{{ field.label }}</td>
+              <td class="note-cell item-label">{{ field.label }}</td>
             </template>
             <template v-else-if="field.labelColspan === 2">
-              <td class="note-cell" colspan="2">{{ field.label }}</td>
+              <td class="note-cell item-label" colspan="2">{{ field.label }}</td>
             </template>
             <template v-else-if="field.useExistingGroupCell">
-              <td class="note-cell">{{ field.label }}</td>
+              <td class="note-cell item-label">{{ field.label }}</td>
             </template>
             <template v-else>
-              <td class="note-cell" colspan="2">{{ field.label }}</td>
+              <td class="note-cell item-label" colspan="2">{{ field.label }}</td>
             </template>
             <td v-for="quarter in quarterList" :key="`line-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('productionLineAdjustment', quarter.key, field.key))">
               <input
@@ -201,14 +201,14 @@
           <tr>
             <th class="row-head">27</th>
             <td class="group-title" rowspan="2">{{ labels.humanResourceGroupTitle }}</td>
-            <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`hr-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="quarter in quarterList" :key="`hr-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">28</th>
-            <td class="note-cell">{{ labels.humanResourceLabel }}</td>
+            <td class="note-cell item-label">{{ labels.humanResourceLabel }}</td>
             <td v-for="quarter in quarterList" :key="`hr-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('humanResource', quarter.key, 'staffCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('humanResource', quarter.key, 'staffCost'))"
@@ -226,14 +226,14 @@
           <tr>
             <th class="row-head">29</th>
             <td class="group-title" rowspan="2">{{ labels.salaryGroupTitle }}</td>
-            <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`salary-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="quarter in quarterList" :key="`salary-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">30</th>
-            <td class="note-cell">{{ labels.salaryLabel }}</td>
+            <td class="note-cell item-label">{{ labels.salaryLabel }}</td>
             <td v-for="quarter in quarterList" :key="`salary-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('salaryAndProduction', quarter.key, 'salaryCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('salaryAndProduction', quarter.key, 'salaryCost'))"
@@ -251,14 +251,14 @@
           <tr>
             <th class="row-head">31</th>
             <td class="group-title" rowspan="3">{{ labels.researchAndManagementGroupTitle }}</td>
-            <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`research-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="quarter in quarterList" :key="`research-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr v-for="(field, index) in researchFields" :key="`research-${field.key}`">
             <th class="row-head">{{ 32 + index }}</th>
-            <td class="note-cell">{{ field.label }}</td>
+            <td class="note-cell item-label">{{ field.label }}</td>
             <td v-for="quarter in quarterList" :key="`research-${field.key}-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('researchAndManagement', quarter.key, field.key))">
               <input
                 :value="displayCell(getQuarterFieldValue('researchAndManagement', quarter.key, field.key))"
@@ -275,14 +275,14 @@
           <tr>
             <th class="row-head">34</th>
             <td class="group-title" rowspan="5">{{ labels.newOrderReminder }}</td>
-            <td class="note-cell center">单位：个</td>
-            <td v-for="quarter in quarterList" :key="`supply-order-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell rule-note rule-note-short">单位：个</td>
+            <td v-for="quarter in quarterList" :key="`supply-order-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr v-for="(field, index) in supplyChainOrderFields" :key="`supply-order-${field.key}`">
             <th class="row-head">{{ 35 + index }}</th>
-            <td class="note-cell">{{ field.label }}</td>
+            <td class="note-cell item-label">{{ field.label }}</td>
             <td
               v-for="quarter in quarterList"
               :key="`supply-order-${field.key}-${quarter.key}`"
@@ -305,14 +305,14 @@
           <tr>
             <th class="row-head">39</th>
             <td class="group-title" rowspan="2">{{ labels.receivableGroupTitle }}</td>
-            <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`receivable-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="quarter in quarterList" :key="`receivable-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">40</th>
-            <td class="note-cell">{{ labels.receivableLabel }}</td>
+            <td class="note-cell item-label">{{ labels.receivableLabel }}</td>
             <td v-for="quarter in quarterList" :key="`receivable-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('receivableUpdate', quarter.key, 'receivableCollection'))">
               <input
                 :value="displayCell(getQuarterFieldValue('receivableUpdate', quarter.key, 'receivableCollection'))"
@@ -334,14 +334,14 @@
           <tr>
             <th class="row-head">42</th>
             <td class="group-title" rowspan="3">{{ labels.deliveryGroupTitle }}</td>
-            <td class="note-cell center"></td>
-            <td v-for="quarter in quarterList" :key="`delivery-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="quarter in quarterList" :key="`delivery-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">43</th>
-            <td class="note-cell">{{ labels.deliveryRevenueLabel }}</td>
+            <td class="note-cell item-label">{{ labels.deliveryRevenueLabel }}</td>
             <td v-for="quarter in quarterList" :key="`sales-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))"
@@ -357,7 +357,7 @@
           </tr>
           <tr>
             <th class="row-head">44</th>
-            <td class="note-cell">{{ labels.deliveryCostLabel }}</td>
+            <td class="note-cell item-label">{{ labels.deliveryCostLabel }}</td>
             <td v-for="quarter in quarterList" :key="`cost-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'directCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'directCost'))"
@@ -375,14 +375,14 @@
           <tr>
             <th class="row-head">45</th>
             <td class="group-title" rowspan="2">{{ labels.managementStaffGroupTitle }}</td>
-            <td class="note-cell center">每季 1M</td>
-            <td v-for="quarter in quarterList" :key="`management-head-${quarter.key}`" class="note-cell center">{{ quarter.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell rule-note rule-note-short">每季 1M</td>
+            <td v-for="quarter in quarterList" :key="`management-head-${quarter.key}`" class="note-cell period-label">{{ quarter.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">46</th>
-            <td class="note-cell">管理人员费用</td>
+            <td class="note-cell item-label">管理人员费用</td>
             <td v-for="quarter in quarterList" :key="`management-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'managementStaffCost'))">
               <input
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'managementStaffCost'))"
@@ -412,8 +412,8 @@
             <th class="row-head">48</th>
             <td class="section-band band-year-end" rowspan="12">年末工作</td>
             <td class="group-title" rowspan="3">1. 办理长期贷款账期更新</td>
-            <td class="note-cell">付利息</td>
-            <td class="note-cell center" colspan="5">年利率 5%</td>
+            <td class="note-cell item-label">付利息</td>
+            <td class="note-cell rule-note rule-note-short" colspan="5">年利率 5%</td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('longTermLoan', 'interest'))">
               <input
                 :value="displayCell(getYearEndFieldValue('longTermLoan', 'interest'))"
@@ -429,8 +429,8 @@
           </tr>
           <tr>
             <th class="row-head">49</th>
-            <td class="note-cell">到期还款</td>
-            <td class="note-cell center" colspan="5">------------------------------</td>
+            <td class="note-cell item-label">到期还款</td>
+            <td class="note-cell rule-note rule-note-short" colspan="5">------------------------------</td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('longTermLoan', 'repayment'))">
               <input
                 :value="displayCell(getYearEndFieldValue('longTermLoan', 'repayment'))"
@@ -444,8 +444,8 @@
           </tr>
           <tr>
             <th class="row-head">50</th>
-            <td class="note-cell">办理新贷款</td>
-            <td class="note-cell center" colspan="5">------------------------------</td>
+            <td class="note-cell item-label">办理新贷款</td>
+            <td class="note-cell rule-note rule-note-short" colspan="5">------------------------------</td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('longTermLoan', 'newLoan'))">
               <input
                 :value="displayCell(getYearEndFieldValue('longTermLoan', 'newLoan'))"
@@ -461,7 +461,7 @@
           <tr>
             <th class="row-head">51</th>
             <td class="group-title">{{ labels.lineMaintenanceGroupTitle }}</td>
-            <td class="note-cell center">{{ labels.lineMaintenanceNote }}</td>
+            <td class="note-cell rule-note rule-note-short">{{ labels.lineMaintenanceNote }}</td>
             <td class="empty-cell" colspan="5"></td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'lineMaintenance'))">
               <input
@@ -479,8 +479,8 @@
           <tr>
             <th class="row-head">52</th>
             <td class="group-title" rowspan="2">{{ labels.assetGroupTitle }}</td>
-            <td class="note-cell center">购买</td>
-            <td class="note-cell center" colspan="5">{{ labels.assetValueNote }}</td>
+            <td class="note-cell item-label">购买</td>
+            <td class="note-cell rule-note rule-note-short" colspan="5">{{ labels.assetValueNote }}</td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'purchase'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'purchase'))"
@@ -495,8 +495,8 @@
           </tr>
           <tr>
             <th class="row-head">53</th>
-            <td class="note-cell center">出售</td>
-            <td class="note-cell center" colspan="5">{{ labels.assetValueNote }}</td>
+            <td class="note-cell item-label">出售</td>
+            <td class="note-cell rule-note rule-note-short" colspan="5">{{ labels.assetValueNote }}</td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'sale'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'sale'))"
@@ -513,8 +513,8 @@
           <tr>
             <th class="row-head">54</th>
             <td class="group-title">{{ labels.rentGroupTitle }}</td>
-            <td class="note-cell center">付租金</td>
-            <td class="note-cell center" colspan="5">{{ labels.rentValueNote }}</td>
+            <td class="note-cell item-label">付租金</td>
+            <td class="note-cell rule-note rule-note-short" colspan="5">{{ labels.rentValueNote }}</td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'rent'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'rent'))"
@@ -538,21 +538,21 @@
           <tr>
             <th class="row-head">56</th>
             <td class="group-title" rowspan="3">{{ labels.depreciationGroupTitle }}</td>
-            <td class="note-cell">折旧前待折资产总价值</td>
+            <td class="note-cell item-label">折旧前待折资产总价值</td>
             <td class="empty-cell" colspan="5"></td>
             <td class="result-cell">{{ formatNumber(derivedMetric('depreciableAssetTotal')) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">57</th>
-            <td class="note-cell">折旧费</td>
-            <td class="note-cell center" colspan="5">按待折资产的 1 / 3 取整</td>
+            <td class="note-cell item-label">折旧费</td>
+            <td class="note-cell rule-note rule-note-short" colspan="5">按待折资产的 1 / 3 取整</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('depreciation')) }}</td>
             <td class="empty-cell" colspan="2"></td>
           </tr>
           <tr>
             <th class="row-head">58</th>
-            <td class="note-cell">{{ labels.workInConstructionLabel }}</td>
+            <td class="note-cell item-label">{{ labels.workInConstructionLabel }}</td>
             <td class="empty-cell" colspan="5"></td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'workInConstruction'))">
               <input
@@ -571,7 +571,7 @@
             <th class="row-head">59</th>
             <td class="group-title">7. 新市场培育</td>
             <td class="empty-cell"></td>
-            <td class="note-cell center" colspan="5">每年可向区域、全国、全球各投 1M</td>
+            <td class="note-cell rule-note rule-note-long" colspan="5">每年可向区域、全国、全球各投 1M</td>
             <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'marketCultivation'))">
               <input
                 :value="displayCell(getYearEndFieldValue('assetAdjustment', 'marketCultivation'))"
@@ -589,14 +589,14 @@
             <th class="row-head">60</th>
             <td class="section-band band-misc" rowspan="4">其他收支</td>
             <td class="group-title" rowspan="4">额外收入 / 罚款</td>
-            <td class="note-cell center"></td>
-            <td v-for="period in extraPeriodList" :key="`extra-head-${period.key}`" class="note-cell center">{{ period.label }}</td>
-            <td class="note-cell center">总计</td>
+            <td class="note-cell item-label"></td>
+            <td v-for="period in extraPeriodList" :key="`extra-head-${period.key}`" class="note-cell period-label">{{ period.label }}</td>
+            <td class="note-cell period-label">总计</td>
             <td class="empty-cell"></td>
           </tr>
           <tr v-for="(field, index) in extraFields" :key="`extra-${field.key}`">
             <th class="row-head">{{ 61 + index }}</th>
-            <td class="note-cell">{{ field.label }}</td>
+            <td class="note-cell item-label">{{ field.label }}</td>
             <td v-for="period in extraPeriodList" :key="`extra-${field.key}-${period.key}`" :class="extraCellClass(field.key, period.scope)">
               <template v-if="field.key === 'discountExpense' && period.key === 'year_end'">
                 <span class="cell-readonly-value">--</span>
@@ -677,7 +677,7 @@ import { computed } from 'vue'
 
 import { serviceOperatingLabels, type SandboxGameOperatingLabels } from '@/configs/sandbox-game-service-labels'
 import { cloneOperatingPayload, type CellValue, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
-import { focusNextInputOnEnter } from '@/utils/input-navigation'
+import { handleSequentialInputNavigation } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 type MarketBidKey =
@@ -1164,6 +1164,15 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   border-radius: 18px;
   overflow: hidden;
   background: #ffffff;
+  --operating-font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+  --operating-section-title-font-size: 14px;
+  --operating-group-title-font-size: 16px;
+  --operating-body-font-size: 14px;
+  --operating-cell-padding-y: 9px;
+  --operating-cell-padding-x: 11px;
+  --operating-title-padding-y: 10px;
+  --operating-title-padding-x: 12px;
+  --operating-input-min-height: 34px;
 }
 
 .sheet-scroll {
@@ -1176,6 +1185,9 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   table-layout: fixed;
   border-collapse: collapse;
   background: #ffffff;
+  color: #243447;
+  font-family: var(--operating-font-family);
+  font-size: var(--operating-body-font-size);
 }
 
 .col-index {
@@ -1211,6 +1223,8 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   border: 1px solid var(--line);
   padding: 0;
   vertical-align: middle;
+  box-sizing: border-box;
+  word-break: break-word;
 }
 
 .corner,
@@ -1236,9 +1250,11 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   writing-mode: vertical-rl;
   text-orientation: upright;
   text-align: center;
-  letter-spacing: 2px;
+  padding: 10px 6px;
+  letter-spacing: 1.8px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: var(--operating-section-title-font-size);
+  line-height: 1.25;
 }
 
 .band-year-start {
@@ -1265,8 +1281,8 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 .empty-cell,
 .nested-group-cell,
 .reminder-cell {
-  padding: 8px 10px;
-  font-size: 13px;
+  padding: var(--operating-cell-padding-y) var(--operating-cell-padding-x);
+  font-size: var(--operating-body-font-size);
   line-height: 1.45;
 }
 
@@ -1274,6 +1290,20 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 .result-title {
   background: #fbfbfc;
   font-weight: 700;
+  text-align: center;
+}
+
+.group-title {
+  height: 40px;
+  padding: var(--operating-title-padding-y) var(--operating-title-padding-x);
+  font-size: var(--operating-group-title-font-size);
+  line-height: 1.45;
+}
+
+.result-title {
+  height: 36px;
+  font-size: var(--operating-body-font-size);
+  line-height: 1.45;
 }
 
 .note-cell,
@@ -1281,10 +1311,57 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   background: #f8fafc;
 }
 
+.note-cell {
+  height: 36px;
+  padding: var(--operating-cell-padding-y) var(--operating-cell-padding-x);
+  text-align: center;
+  font-size: var(--operating-body-font-size);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.item-label {
+  text-align: center;
+  font-weight: 500;
+}
+
+.period-label {
+  height: 36px;
+  text-align: center;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.instruction-note {
+  height: 40px;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.rule-note {
+  padding: 10px 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rule-note-short {
+  text-align: center;
+  line-height: 1.5;
+}
+
+.rule-note-long {
+  text-align: left;
+  line-height: 1.55;
+}
+
 .nested-group-cell {
   background: #f3f6fa;
   text-align: center;
   font-weight: 700;
+  font-size: var(--operating-body-font-size);
+  line-height: 1.45;
   color: #314458;
 }
 
@@ -1294,6 +1371,8 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   color: #8f3f00;
   font-size: 15px;
   font-weight: 800;
+  line-height: 1.5;
+  padding: 10px 12px;
   letter-spacing: 0.02em;
 }
 
@@ -1305,6 +1384,8 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 .metric-label {
   text-align: center;
   font-weight: 700;
+  font-size: var(--operating-body-font-size);
+  line-height: 1.45;
 }
 
 .metric-stack-line {
@@ -1312,7 +1393,7 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   justify-content: space-between;
   gap: 8px;
   align-items: center;
-  font-size: 12px;
+  font-size: 13px;
   color: #33475b;
   font-variant-numeric: tabular-nums;
 }
@@ -1331,10 +1412,6 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   background: #ffffff;
 }
 
-.center {
-  text-align: center;
-}
-
 .input-cell,
 .locked-cell,
 .invalid-draft-cell,
@@ -1342,6 +1419,7 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 .orange-cell,
 .quarter-cash-cell {
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .input-cell,
@@ -1377,7 +1455,13 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   background: transparent;
   padding: 8px 10px;
   outline: none;
+  min-height: var(--operating-input-min-height);
+  box-sizing: border-box;
   font: inherit;
+  font-size: var(--operating-body-font-size);
+  font-weight: 500;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
   color: inherit;
   text-align: center;
 }
@@ -1387,6 +1471,10 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   color: #526175;
   font-weight: 700;
   padding: 8px 10px;
+  font-size: var(--operating-body-font-size);
+  line-height: 1.4;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .not-applicable-cell {
@@ -1394,12 +1482,17 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   color: #8491a6;
   font-weight: 700;
   padding: 8px 10px;
+  font-size: var(--operating-body-font-size);
+  line-height: 1.4;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .cell-readonly-value {
   display: block;
-  min-height: 20px;
+  min-height: var(--operating-input-min-height);
+  line-height: var(--operating-input-min-height);
+  font-variant-numeric: tabular-nums;
 }
 .locked-cell input {
   color: #8491a6;
@@ -1425,8 +1518,10 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 .quarter-cash-cell {
   background: var(--calc-bg);
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--operating-body-font-size);
   font-weight: 700;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 
 .quarter-cash-cell {
@@ -1436,8 +1531,10 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 .orange-cell {
   background: #f8c15d;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--operating-body-font-size);
   font-weight: 700;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 1400px) {

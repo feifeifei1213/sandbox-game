@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="sheet-frame">
-    <div class="sheet-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
+    <div class="sheet-scroll" data-enter-nav-scope @keydown="handleSequentialInputNavigation">
       <table class="sheet-table">
         <colgroup>
           <col class="col-index" />
@@ -156,7 +156,7 @@ import { computed } from 'vue'
 import { serviceReportLabels, type SandboxGameReportLabels } from '@/configs/sandbox-game-service-labels'
 import type { ReportComputedPayload, ReportManualPayload } from '@/types/sandbox-game'
 import { cloneReportManualPayload } from '@/types/sandbox-game'
-import { focusNextInputOnEnter } from '@/utils/input-navigation'
+import { handleSequentialInputNavigation } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 type ManualKey = keyof ReportManualPayload

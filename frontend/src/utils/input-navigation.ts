@@ -22,8 +22,30 @@ function canFocusInput(input: HTMLInputElement) {
   return !input.disabled && !input.readOnly && isVisibleInput(input)
 }
 
+export type InputNavigationDirection = 'next' | 'previous'
+
 export function shouldHandleEnterNavigation(event: KeyboardEvent) {
   return !isKeyboardComposing(event)
+}
+
+export function shouldHandleInputNavigation(event: KeyboardEvent) {
+  return !isKeyboardComposing(event)
+}
+
+export function resolveInputNavigationDirection(event: KeyboardEvent): InputNavigationDirection | null {
+  if (!shouldHandleInputNavigation(event)) {
+    return null
+  }
+
+  if (event.key === 'Enter' || event.key === 'ArrowDown') {
+    return 'next'
+  }
+
+  if (event.key === 'ArrowUp') {
+    return 'previous'
+  }
+
+  return null
 }
 
 export function canFocusEnterInput(input: HTMLInputElement | null | undefined): input is HTMLInputElement {
@@ -97,8 +119,40 @@ export function focusNextInputOnEnter(event: KeyboardEvent) {
   focusNextInputFromList(event, inputs)
 }
 
+export function handleSequentialInputNavigation(event: KeyboardEvent) {
+  const direction = resolveInputNavigationDirection(event)
+  if (!direction) {
+    return
+  }
+
+  const current = event.target
+  if (!(current instanceof HTMLInputElement) || !isEnterNavigableInput(current)) {
+    return
+  }
+
+  event.preventDefault()
+
+  const scope = current.closest('[data-enter-nav-scope]')
+  if (!scope) {
+    current.blur()
+    return
+  }
+
+  const inputs = Array.from(scope.querySelectorAll<HTMLInputElement>('input[data-enter-nav]'))
+
+  focusAdjacentInputFromList(event, inputs, direction)
+}
+
 export function focusNextInputFromList(event: KeyboardEvent, inputs: Array<HTMLInputElement | null | undefined>) {
-  if (!shouldHandleEnterNavigation(event)) {
+  focusAdjacentInputFromList(event, inputs, 'next')
+}
+
+export function focusAdjacentInputFromList(
+  event: KeyboardEvent,
+  inputs: Array<HTMLInputElement | null | undefined>,
+  direction: InputNavigationDirection,
+) {
+  if (!shouldHandleInputNavigation(event)) {
     return
   }
 
@@ -111,7 +165,13 @@ export function focusNextInputFromList(event: KeyboardEvent, inputs: Array<HTMLI
 
   const focusableInputs = inputs.filter(canFocusEnterInput)
   const currentIndex = focusableInputs.indexOf(current)
-  const candidates = currentIndex >= 0 ? focusableInputs.slice(currentIndex + 1) : focusableInputs
+  const candidates = currentIndex >= 0
+    ? direction === 'next'
+      ? focusableInputs.slice(currentIndex + 1)
+      : focusableInputs.slice(0, currentIndex).reverse()
+    : direction === 'next'
+      ? focusableInputs
+      : [...focusableInputs].reverse()
   const next = candidates.find((input) => input !== current) ?? null
 
   if (!focusInputElement(next)) {

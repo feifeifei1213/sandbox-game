@@ -60,7 +60,7 @@
                 :readonly="readonly || !row.item.editable"
                 :aria-label="`${row.item.defaultName} 修改后名称`"
                 data-admin-dictionary-nav
-                @keydown.enter="handleDictionaryInputEnter(row.item.itemCode, $event)"
+                @keydown="handleDictionaryInputNavigation(row.item.itemCode, $event)"
                 @input="handleInput(row.item.itemCode, $event)"
               >
             </label>
@@ -108,7 +108,7 @@ import type { AdminDictionaryItem } from '@/types/sandbox-game-admin'
 import {
   canFocusEnterInput,
   focusInputElement,
-  shouldHandleEnterNavigation,
+  resolveInputNavigationDirection,
 } from '@/utils/input-navigation'
 
 type DictionaryRow = {
@@ -261,8 +261,9 @@ function visibleEditableRows() {
   )
 }
 
-async function handleDictionaryInputEnter(itemCode: string, event: KeyboardEvent) {
-  if (!shouldHandleEnterNavigation(event)) {
+async function handleDictionaryInputNavigation(itemCode: string, event: KeyboardEvent) {
+  const direction = resolveInputNavigationDirection(event)
+  if (!direction) {
     return
   }
 
@@ -275,9 +276,19 @@ async function handleDictionaryInputEnter(itemCode: string, event: KeyboardEvent
 
   const rows = visibleEditableRows()
   const currentIndex = rows.findIndex((row) => row.itemCode === itemCode)
-  const nextRows = currentIndex >= 0 ? rows.slice(currentIndex + 1) : []
+  const nextRows = currentIndex >= 0
+    ? direction === 'next'
+      ? rows.slice(currentIndex + 1)
+      : rows.slice(0, currentIndex).reverse()
+    : direction === 'next'
+      ? rows
+      : [...rows].reverse()
 
   for (const row of nextRows) {
+    if (row.itemCode === itemCode) {
+      continue
+    }
+
     expandedCategories.value = {
       ...expandedCategories.value,
       [row.category]: true,

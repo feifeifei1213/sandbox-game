@@ -28,7 +28,7 @@
         </div>
 
         <div v-if="loading" class="empty-state">正在读取初始基线...</div>
-        <div v-else class="table-scroll" data-enter-nav-scope @keydown.enter="focusNextInputOnEnter">
+        <div v-else class="table-scroll" data-enter-nav-scope @keydown="handleSequentialInputNavigation">
           <table class="baseline-table">
             <thead>
               <tr>
@@ -111,7 +111,7 @@ import { useAdminBaselineStore } from '@/stores/admin-baseline'
 import { useAdminShellStore } from '@/stores/admin-shell'
 import { useDictionaryStore } from '@/stores/dictionary'
 import type { BaselinePayload } from '@/types/sandbox-game-admin'
-import { focusNextInputOnEnter } from '@/utils/input-navigation'
+import { handleSequentialInputNavigation } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
 const shellStore = useAdminShellStore()

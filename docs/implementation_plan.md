@@ -1,6 +1,6 @@
 ﻿# 沙盘经营系统需求驱动实施计划（首版）
 
-> 更新日期：2026-07-24
+> 更新日期：2026-07-27
 > 适用方式：基于当前已确认的业务共识、Excel 规则底稿和原型方向，持续把沙盘经营系统首版需求拆成可执行任务，并同步更新状态。
 
 ## 计划规则
@@ -20,12 +20,12 @@
 
 ## 开发执行层任务总览
 
-- 总任务数：`79`
-- 已完成：`78`
+- 总任务数：`83`
+- 已完成：`82`
 - 部分完成：`1`
 - 未开始：`0`
 - 阻塞：`0`
-- 当前状态：`I13-02 ~ I13-07、I13-09、I14-01、I15-01、I15-02 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善；等待用户按订单验收清单复测，并可人工复测输入导航体验`
+- 当前状态：`I13-02 ~ I13-07、I13-09、I14-01、I15-01 ~ I15-04、I16-01 ~ I16-02 已完成；I13-08 订单专项造数命令已进入手动版实现，待继续完善`
 
 ---
 
@@ -611,11 +611,26 @@
 |---|---|---|---|---|---|---|---|
 | I15-01 | 冻结管理员端字典、初始基线、订单数量和释放顺序的回车导航口径 | P1 | 已完成 | 用户 2026-07-24 分页面输入体验确认；`I14-01` 已有输入导航工具 | `docs/admin_input_navigation_design.md`、`docs/input_navigation_design.md`、`docs/README.md`、`docs/implementation_plan.md` | 已明确管理员端只在赛前配置字典、初始基线、订单数量控制、释放顺序四个区域做局部 `Enter` 跳格和蓝色高亮；字典支持折叠分类自动展开；订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 顺序，即在每个阶段内先填完 `1年数量` 这一列，再进入 `2年数量`；搜索框、按钮、select、checkbox、textarea、确认/原因输入和其他管理员页面不参与跳转 | 无；本任务只写文档，不修改前端代码 |
 | I15-02 | 实现管理员端指定区域回车跳格、自动展开和当前格高亮 | P1 | 已完成 | `I15-01` | `frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/admin/DictionaryEditor.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`docs/admin_input_navigation_design.md`、`docs/implementation_plan.md` | 已实现赛前配置字典按当前筛选结果和分类顺序跳转，必要时自动展开分类；初始基线从上到下跳转；订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 显式序列跳转并跳过锁定年份；释放顺序从上到下跳转并跳过市场未开启 / 不可编辑行；最后一格只失焦；所有行为不触发保存、提交、生成、释放或按钮动作；前端构建通过，待页面人工复测 | 无 |
+| I15-03 | 冻结玩家端 + 管理员端统一方向键导航口径 | P1 | 已完成 | 用户 2026-07-24 确认“玩家端也是要方向键跳格”；`I14-01`、`I15-02` | `docs/keyboard_navigation_design.md`、`docs/input_navigation_design.md`、`docs/admin_input_navigation_design.md`、`docs/README.md`、`docs/implementation_plan.md` | 已明确玩家端经营页、财报页、订单页市场投入以及管理员端字典、初始基线、订单数量控制、释放顺序均支持 `Enter / ArrowDown` 跳到输入顺序下一格、`ArrowUp` 跳到上一格；边界只失焦不循环；跳过锁定、禁用、只读、隐藏和不可编辑输入框；中文输入法组合态不接管方向键；方向键跳格不触发保存、提交、生成、释放、选单或交付；管理员端其他普通输入框仍不纳入方向键跳格 | 无；本任务只写文档，不修改前端代码 |
+| I15-04 | 实现玩家端 + 管理员端统一方向键导航 | P1 | 已完成 | `I15-03` | `frontend/src/utils/input-navigation.ts`、玩家端经营/财报/订单页面、管理员端字典/初始基线/订单页面、`docs/implementation_plan.md` | 已完成玩家端经营页、财报页、订单页市场投入，以及管理员端字典、初始基线、订单数量控制、释放顺序的 `Enter / ArrowDown / ArrowUp` 导航；`type=number` 连续录入区方向键默认加减被拦截；边界只失焦不循环；不触发保存、提交、生成、释放、选单或交付；前端构建通过，待页面人工复测 | 无 |
+
+### 9.18 I16：玩家端经营页文字层级与间距优化
+
+> 最新口径以 `docs/player_operating_typography_spacing_design.md` 为主；本迭代只调整玩家端经营页主表的文字层级、字号、字重、行距、对齐方式和格子内部留白，不改变业务结构、字段顺序、列顺序、颜色语义、保存提交、后端校验、接口或 Excel 公式链。
+
+| Task ID | 任务 | 优先级 | 状态 | 依赖 | 建议交付物 | 完成标准 | 阻塞情况 |
+|---|---|---|---|---|---|---|---|
+| I16-01 | 冻结玩家端经营页文字层级与间距优化口径 | P1 | 已完成 | 用户 2026-07-27 确认“在原有前端页面基础上优化文字分类、字体、间距和对齐方式” | `docs/player_operating_typography_spacing_design.md`、`docs/README.md`、`docs/implementation_plan.md` | 已明确一级区域标题、二级任务标题、普通业务内容、阶段短标签、流程说明、规则参数说明、输入数字、计算数字和提醒强调行的字号、字重、行距、对齐、留白口径；二级任务标题首选居中 `16px`，普通业务内容和阶段短标签居中，流程说明左对齐，规则参数说明短句居中 / 长句左对齐；首版不大幅改列宽，优先通过 padding、line-height、min-height 改善细长格子观感 | 无；本任务只写文档，不修改正式前端代码 |
+| I16-02 | 实现玩家端经营页文字层级、字号、行距、对齐和留白优化 | P1 | 已完成 | `I16-01` | `frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`docs/implementation_plan.md` | 已在正式经营页主表新增 `item-label`、`period-label`、`instruction-note`、`rule-note` 等必要语义修饰类；通过 CSS 变量集中调整一级区域标题、二级任务标题、普通业务内容、阶段短标签、流程说明、规则参数说明、输入数字、计算数字和提醒强调行的字号、字重、行距、对齐和留白；保留现有 Excel 风格、颜色语义、输入焦点、字段顺序和业务逻辑；`npm.cmd run build` 已通过 | 下一步：用户在真实页面验收标题、内容、说明、规则参数、数字和输入格的可读性 |
 
 ### 12.1 本轮新增记录
 
 | 日期 | 记录 |
 |---|---|
+| 2026-07-27 | 任务状态：✅ 已完成；落点：`frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/components/sandbox-game/admin/DictionaryEditor.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`docs/implementation_plan.md`；偏差说明：本轮按 `docs/keyboard_navigation_design.md` 实现 `I15-04`，只修改前端输入导航交互和计划回写，不修改后端接口、保存/提交、订单生成、释放标段、选单、交付、公式或 Excel 规则链。公共输入导航工具扩展为 `Enter / ArrowDown` 跳下一格、`ArrowUp` 退上一格，并保留中文输入法组合态保护、跳过禁用/只读/隐藏输入、首尾边界只失焦不循环；玩家端经营页、财报页、订单市场投入接入统一 DOM 顺序导航并保留蓝色当前格高亮；管理员端字典支持方向键上/下导航，目标在折叠分类中时先展开再聚焦；管理员初始基线和释放顺序接入统一 DOM 顺序导航；管理员订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 的显式序列导航，并跳过锁定年份。验证：`frontend/npm.cmd run build` 通过。下一步：用户在真实页面人工复测玩家端三个录入区和管理员端四个录入区，重点检查方向键不导致数字加减、不触发保存/提交/生成/释放。 |
+| 2026-07-27 | 任务状态：✅ 已完成；落点：`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`docs/implementation_plan.md`；偏差说明：本轮按 `I16-01` 文档只优化玩家端经营页主表文字层级与格子内部留白，不修改后端接口、保存/提交逻辑、字段顺序、列宽、颜色语义、输入焦点或 Excel 公式链。实现上新增 `item-label`、`period-label`、`instruction-note`、`rule-note` / `rule-note-short` / `rule-note-long` 等语义修饰类，替代原先大量 `note-cell center` 混用；CSS 新增经营页字号与间距变量，二级任务标题提升到 `16px` 并居中，普通项目和阶段短标签居中，流程说明左对齐，规则说明按短句居中 / 长句左对齐处理，输入和计算数字统一使用等宽数字。验证：`cd frontend && npm.cmd run build` 通过。下一步：用户在真实页面验收可读性，如长标题导致表格高度偏高，可只回调 CSS 变量。 |
+| 2026-07-27 | 任务状态：✅ 已完成；落点：`docs/player_operating_typography_spacing_design.md`、`docs/README.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写玩家端经营页文字层级与格子间距优化文档，不修改正式前端代码。已明确本优化不是重做页面，而是在现有 `OperatingSheet.vue` Excel 风格主表基础上分类处理文字：二级任务标题居中并首选 `16px`、上下左右留白更明显；普通业务内容和阶段短标签居中并适度放大；流程说明优先左对齐、`14px`、中等加粗和更舒展行距；规则参数说明按短句居中 / 长句左对齐处理；输入和计算数字保持居中并建议使用等宽数字；首版不大幅调整列宽，优先通过 padding、line-height 和 min-height 解决细长格子贴边问题。下一步：用户确认后进入 `I16-02`，修改正式经营页样式和必要语义类，并通过前端构建与真实页面人工验收。 |
+| 2026-07-24 | 任务状态：✅ 已完成；落点：`docs/keyboard_navigation_design.md`、`docs/input_navigation_design.md`、`docs/admin_input_navigation_design.md`、`docs/README.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写玩家端 + 管理员端统一方向键导航文档，不修改前端代码。已明确玩家端经营页、财报页、订单页市场投入，以及管理员端赛前配置字典、初始基线、订单数量控制、标段释放顺序均支持 `Enter / ArrowDown` 跳输入顺序下一格、`ArrowUp` 退回上一格；方向键只在指定连续录入区域局部接管，跳过禁用、只读、隐藏、锁定和不可编辑输入框，边界只失焦不循环，不触发保存、提交、生成、释放、选单或交付；中文输入法组合态不接管方向键，`type=number` 区域需要阻止方向键默认加减。下一步：用户确认后进入 `I15-04` 前端开发。 |
 | 2026-07-24 | 任务状态：✅ 已完成；落点：`frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/admin/DictionaryEditor.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`docs/admin_input_navigation_design.md`、`docs/implementation_plan.md`；偏差说明：本轮完成 `I15-02` 管理员端指定区域输入体验开发，只改前端输入导航和局部高亮，不修改后端接口、保存/提交/生成/释放按钮语义、订单公式或 Excel 规则链。公共工具新增可复用的可聚焦判断、聚焦并选中文本、自定义列表跳转能力；赛前配置页字典输入支持中文输入法组合态保护、按当前筛选结果跳转、折叠分类自动展开后聚焦；初始基线按表格从上到下跳转；订单数量控制按 `阶段 → 年份 → 市场 → 订单类型` 显式序列跳转，先填完 `1年数量` 列再进入后续年份；释放顺序按 `sortedItems` 页面顺序跳转；四个区域均采用蓝色描边 / 浅蓝光晕叠加当前格高亮，并跳过锁定、禁用、只读、隐藏和不可填写输入框。验证：`npm.cmd run build` 已通过，`git diff --check` 已通过（仅提示 Windows 换行转换警告）；下一步：用户在管理员端四个目标区域做人工复测，重点检查最后一格只失焦且不触发保存、提交、生成或释放。 |
 | 2026-07-24 | 任务状态：✅ 已完成；落点：`docs/admin_input_navigation_design.md`、`docs/input_navigation_design.md`、`docs/README.md`、`docs/implementation_plan.md`；偏差说明：本轮只按用户确认口径写管理员端分页面输入体验优化文档，不修改前端代码。已明确赛前配置页字典修改支持中文输入后 `Enter` 跳到下一个可编辑字典输入框，遇到折叠分类先展开再聚焦；初始基线按表格从上到下跳转；订单管理页数量控制按用户修正后的 `阶段 → 年份 → 市场 → 订单类型` 顺序跳转，即每个阶段内先纵向填完 `1年数量` 列：本地市场 A/B/C/D → 区域市场 A/B/C/D → 后续市场，再进入 `2年数量`；标段释放顺序按从上到下跳转；四个区域均做蓝色当前格高亮并跳过锁定、禁用、只读、隐藏和不可填写输入框。下一步：用户确认后进入 `I15-02` 前端开发，实现工具函数扩展、页面接入、构建验证与人工验收。 |
 | 2026-07-24 | 任务状态：✅ 已完成；落点：`frontend/src/utils/input-navigation.ts`、`frontend/src/components/sandbox-game/player/OperatingSheet.vue`、`frontend/src/components/sandbox-game/player/ReportSheet.vue`、`frontend/src/views/sandbox-game/player/order/PlayerOrderPage.vue`、`frontend/src/views/sandbox-game/admin/baseline/AdminBaselinePage.vue`、`frontend/src/views/sandbox-game/admin/order/AdminOrderPage.vue`、`frontend/src/views/sandbox-game/admin/notice/AdminNoticePage.vue`、`frontend/src/views/sandbox-game/admin/control/AdminControlPage.vue`、`frontend/src/views/sandbox-game/admin/setup/AdminSetupPage.vue`、`frontend/src/views/sandbox-game/admin/AdminRollbackPage.vue`、`docs/input_navigation_design.md`、`docs/implementation_plan.md`；偏差说明：按用户确认只做首版最省事、最稳妥口径。玩家端经营页、财报页、订单页市场投入矩阵通过 `data-enter-nav-scope` / `data-enter-nav` 接入回车跳下一可编辑输入格，最后一格只失焦；焦点高亮采用蓝色描边/浅蓝光晕叠加，不替换绿色/红色/灰色等原业务底色；管理员端仅数字输入框接入 `Enter` 失焦，不做跳格和高亮；搜索框、确认文本框、textarea、select、checkbox、按钮、订单卡片和交付面板未接管。验证：`frontend/npm.cmd run build` 通过。下一步：用户在前端人工复测经营页、财报页、订单市场投入和管理员数字表单的回车手感。 |
