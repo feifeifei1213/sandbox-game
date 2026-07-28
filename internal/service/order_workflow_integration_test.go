@@ -321,6 +321,9 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	if selectionStatus.CurrentSegment == nil {
 		t.Fatalf("expected round-ready segment to remain the current operable segment")
 	}
+	if selectionStatus.MarketBidStatus != enum.OrderSegmentStatusRoundReady {
+		t.Fatalf("expected market selection status to expose round-ready, got %s", selectionStatus.MarketBidStatus)
+	}
 	if selectionStatus.CurrentSegment.SegmentStatus != enum.OrderSegmentStatusRoundReady {
 		t.Fatalf("expected current segment status round-ready, got %#v", selectionStatus.CurrentSegment)
 	}

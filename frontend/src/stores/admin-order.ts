@@ -32,7 +32,7 @@ import type {
   OrderPoolResult,
   UploadOrderExcelResult,
 } from '@/types/sandbox-game-admin'
-import type { AdminMarketSelectionStatus, OrderTemplateMeta } from '@/types/sandbox-game-order'
+import type { AdminMarketSelectionStatus, AdminOrderSegmentStatus, OrderTemplateMeta } from '@/types/sandbox-game-order'
 import { hasFractionInput } from '@/utils/manual-integer'
 import { DEFAULT_PLAYER_ORDER_TEMPLATE } from '@/stores/player-order'
 
@@ -65,6 +65,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const uploadResult = ref<UploadOrderExcelResult | null>(null)
   const orderPool = ref<OrderPoolResult | null>(null)
   const marketSelectionStatus = ref<AdminMarketSelectionStatus | null>(null)
+  const marketSelectionStatusSnapshots = ref<AdminMarketSelectionStatus[]>([])
   const loading = ref(false)
   const uploading = ref(false)
   const savingConfig = ref(false)
@@ -85,6 +86,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const poolFilter = reactive({
     marketCode: 'ALL' as OrderMarketCode | 'ALL',
     orderType: 'ALL' as AdminOrderType | 'ALL',
+    selectedGroupKey: 'ALL',
   })
   const controlForm = reactive({
     marketCode: 'LOCAL' as OrderMarketCode,
@@ -402,7 +404,12 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       pageMessage.value = null
     }
     try {
-      orderPool.value = await getAdminOrderPool(selectedYearNo.value, poolFilter.marketCode, poolFilter.orderType)
+      const groupFilter = resolvePoolGroupFilter(poolFilter.selectedGroupKey)
+      orderPool.value = await getAdminOrderPool(selectedYearNo.value, {
+        marketCode: poolFilter.marketCode,
+        orderType: poolFilter.orderType,
+        ...groupFilter,
+      })
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '获取订单池失败')
       throw error
@@ -411,7 +418,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     }
   }
 
-  async function loadSelectionStatus(options?: { silent?: boolean }) {
+  async function loadSelectionStatus(options?: { silent?: boolean; skipFocus?: boolean }) {
     if (options?.silent) {
       if (silentLoadingSelectionStatus.value || loadingSelectionStatus.value) {
         return
@@ -424,7 +431,10 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
       pageMessage.value = null
     }
     try {
-      marketSelectionStatus.value = await getAdminMarketSelectionStatus(selectedYearNo.value, controlForm.marketCode)
+      const focusedStatus = options?.skipFocus ? null : await syncControlMarketToOrderFocus()
+      marketSelectionStatus.value = focusedStatus?.marketCode === controlForm.marketCode
+        ? focusedStatus
+        : await getAdminMarketSelectionStatus(selectedYearNo.value, controlForm.marketCode)
     } catch (error) {
       marketSelectionStatus.value = null
       if (!options?.silent) {
@@ -440,6 +450,35 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
         loadingSelectionStatus.value = false
       }
     }
+  }
+
+  async function syncControlMarketToOrderFocus() {
+    const snapshots = await loadAllMarketSelectionStatusSnapshots()
+    const focusSegment = resolveAdminFocusSegment(snapshots)
+    if (!focusSegment) {
+      return snapshots.find((item) => item.marketCode === controlForm.marketCode) ?? null
+    }
+    if (controlForm.marketCode !== focusSegment.marketCode) {
+      controlForm.marketCode = focusSegment.marketCode
+    }
+    return snapshots.find((item) => item.marketCode === controlForm.marketCode) ?? null
+  }
+
+  async function loadAllMarketSelectionStatusSnapshots() {
+    const markets = marketOptions.value
+    if (markets.length === 0) {
+      return []
+    }
+    const results = await Promise.allSettled(
+      markets.map((market) => getAdminMarketSelectionStatus(selectedYearNo.value, market.code)),
+    )
+    const snapshots = results
+      .filter((item): item is PromiseFulfilledResult<AdminMarketSelectionStatus> => item.status === 'fulfilled')
+      .map((item) => item.value)
+    if (snapshots.length > 0) {
+      marketSelectionStatusSnapshots.value = snapshots
+    }
+    return snapshots
   }
 
   async function openMarket() {
@@ -485,6 +524,16 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   }
 
   async function releaseNextSegment() {
+    const segment = currentSegment.value
+    if (segment?.segmentStatus === 'SELECTING' || segment?.segmentStatus === 'ROUND_READY') {
+      pageMessage.value = {
+        type: 'error',
+        text: segment.segmentStatus === 'ROUND_READY'
+          ? '当前标段还有等待开启的下一轮，请先开启下一轮。'
+          : '当前标段正在选单中，不能释放下一个标段。',
+      }
+      return
+    }
     releasingSegment.value = true
     pageMessage.value = null
     try {
@@ -612,6 +661,7 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     uploadResult,
     orderPool,
     marketSelectionStatus,
+    marketSelectionStatusSnapshots,
     loading,
     uploading,
     savingConfig,
@@ -667,6 +717,51 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
     setControlMarket,
   }
 })
+
+function resolveAdminFocusSegment(statuses: AdminMarketSelectionStatus[]) {
+  return statuses
+    .flatMap((status) => status.segments)
+    .map((segment) => ({
+      segment,
+      priority: adminSegmentFocusPriority(segment.segmentStatus),
+    }))
+    .filter((item) => item.priority > 0)
+    .sort((a, b) => a.priority - b.priority || a.segment.releaseSequenceNo - b.segment.releaseSequenceNo)[0]?.segment ?? null
+}
+
+function adminSegmentFocusPriority(segmentStatus: AdminOrderSegmentStatus['segmentStatus']) {
+  switch (segmentStatus) {
+    case 'SELECTING':
+      return 1
+    case 'ROUND_READY':
+      return 2
+    case 'SEQUENCE_READY':
+    case 'WAITING_RELEASE':
+      return 3
+    default:
+      return 0
+  }
+}
+
+function resolvePoolGroupFilter(selectedGroupKey: string) {
+  if (selectedGroupKey === 'SELECTED') {
+    return {
+      selectedOnly: true,
+      selectedGroupId: null,
+    }
+  }
+  if (selectedGroupKey.startsWith('GROUP:')) {
+    const groupId = Number(selectedGroupKey.slice('GROUP:'.length))
+    return {
+      selectedOnly: true,
+      selectedGroupId: Number.isFinite(groupId) && groupId > 0 ? groupId : null,
+    }
+  }
+  return {
+    selectedOnly: false,
+    selectedGroupId: null,
+  }
+}
 
 function marketName(code: OrderMarketCode) {
   return MARKET_OPTIONS.find((item) => item.code === code)?.name ?? code

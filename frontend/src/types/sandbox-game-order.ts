@@ -133,6 +133,7 @@ export interface PlayerOrderSegmentView {
   segmentStatus: OrderSegmentStatus
   currentRoundNo: number
   nextRoundNo?: number | null
+  completionReason?: string | null
   selfRoundStatus: OrderSelectionStatus | ''
   ordersVisible: boolean
   selectionOrder: PlayerOrderSequenceView[]

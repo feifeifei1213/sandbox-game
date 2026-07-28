@@ -396,13 +396,18 @@ func (r *OrderPoolRepository) ListBySegment(ctx context.Context, yearNo int, mar
 	return items, nil
 }
 
-func (r *OrderPoolRepository) ListByYearWithOptionalFilters(ctx context.Context, yearNo int, marketCode string, orderType string) ([]entity.OrderPool, error) {
+func (r *OrderPoolRepository) ListByYearWithOptionalFilters(ctx context.Context, yearNo int, marketCode string, orderType string, selectedOnly bool, selectedGroupID *int64) ([]entity.OrderPool, error) {
 	query := r.db.WithContext(ctx).Where("year_no = ?", yearNo)
 	if marketCode != "" {
 		query = query.Where("market_code = ?", marketCode)
 	}
 	if orderType != "" {
 		query = query.Where("order_type = ?", orderType)
+	}
+	if selectedGroupID != nil {
+		query = query.Where("selected_group_id = ?", *selectedGroupID)
+	} else if selectedOnly {
+		query = query.Where("selected_group_id IS NOT NULL")
 	}
 	var items []entity.OrderPool
 	if err := query.

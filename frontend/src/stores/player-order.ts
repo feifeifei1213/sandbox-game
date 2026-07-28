@@ -24,6 +24,7 @@ import type {
 } from '@/types/sandbox-game-order'
 
 type MessageType = 'success' | 'error' | 'info'
+type MarketFocusMode = 'force' | 'preserve-current'
 
 export interface PageMessage {
   type: MessageType
@@ -87,7 +88,10 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
   )
   const currentSegment = computed<PlayerOrderSegmentView | null>(() => {
     const segments = selectedMarket.value?.segments ?? []
-    return segments.find((item) => item.segmentStatus === 'SELECTING') ?? segments.find((item) => item.canSelectOrder || item.canPassSegment) ?? null
+    return segments.find((item) => item.segmentStatus === 'SELECTING')
+      ?? segments.find((item) => item.segmentStatus === 'ROUND_READY')
+      ?? segments.find((item) => item.canSelectOrder || item.canPassSegment)
+      ?? null
   })
   const selectableSegments = computed(() =>
     markets.value.flatMap((market) => market.segments).filter((segment) => segment.segmentStatus === 'SELECTING'),
@@ -108,7 +112,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
       yearTabs.value = tabsResult.tabs
       marketForecast.value = forecast
       const nextYear = Math.max(resolveInitialYear(tabsResult, preferredYear), 0)
-      await loadYearView(nextYear, { silent: true })
+      await loadYearView(nextYear, { silent: true, focusMode: 'force' })
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '初始化年度订单页失败')
       throw error
@@ -123,7 +127,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     return tabsResult
   }
 
-  async function loadYearView(yearNo: number, options?: { silent?: boolean }) {
+  async function loadYearView(yearNo: number, options?: { silent?: boolean; focusMode?: MarketFocusMode }) {
     const showLoading = !options?.silent
     if (showLoading) {
       yearViewLoading.value = true
@@ -141,6 +145,7 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
       if (!selectedExists && view.markets?.[0]) {
         selectedMarketCode.value = view.markets[0].marketCode
       }
+      syncSelectedMarketToOrderFocus(view, options?.focusMode ?? (options?.silent ? 'preserve-current' : 'force'))
     } catch (error) {
       pageMessage.value = toErrorMessage(error, `读取 ${yearNo} 年订单页失败`)
       throw error
@@ -271,6 +276,18 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     selectedMarketCode.value = marketCode
   }
 
+  function syncSelectedMarketToOrderFocus(view: PlayerOrderYearView, mode: MarketFocusMode) {
+    const focusSegment = resolveFocusSegment(view.markets ?? [])
+    if (!focusSegment) {
+      return
+    }
+    const selectedMarket = view.markets?.find((item) => item.marketCode === selectedMarketCode.value) ?? null
+    if (mode === 'preserve-current' && selectedMarket && marketHasFocusPoint(selectedMarket)) {
+      return
+    }
+    selectedMarketCode.value = focusSegment.marketCode
+  }
+
   function setInvestmentDraft(marketCode: OrderMarketCode, orderType: OrderTypeCode, value: number | null) {
     investmentDraft[investmentKey(marketCode, orderType)] = value
     investmentErrors.value = {}
@@ -329,6 +346,35 @@ function applyInvestmentDraft(view: PlayerOrderYearView, draft: Record<string, n
         draft[key] = segment.investmentSubmitted ? segment.marketInvestment : previousDraft[key] ?? 0
       }
     }
+  }
+}
+
+function resolveFocusSegment(markets: PlayerOrderMarketView[]) {
+  return markets
+    .flatMap((market) => market.segments)
+    .map((segment) => ({
+      segment,
+      priority: segmentFocusPriority(segment.segmentStatus),
+    }))
+    .filter((item) => item.priority > 0)
+    .sort((a, b) => a.priority - b.priority || a.segment.releaseSequenceNo - b.segment.releaseSequenceNo)[0]?.segment ?? null
+}
+
+function marketHasFocusPoint(market: PlayerOrderMarketView) {
+  return market.segments.some((segment) => segmentFocusPriority(segment.segmentStatus) > 0)
+}
+
+function segmentFocusPriority(segmentStatus: string) {
+  switch (segmentStatus) {
+    case 'SELECTING':
+      return 1
+    case 'ROUND_READY':
+      return 2
+    case 'SEQUENCE_READY':
+    case 'WAITING_RELEASE':
+      return 3
+    default:
+      return 0
   }
 }
 

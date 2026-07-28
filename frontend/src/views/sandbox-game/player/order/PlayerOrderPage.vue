@@ -183,7 +183,7 @@
                   :class="{ current: segment.segmentStatus === 'SELECTING' }"
                 >
                   <span>#{{ segment.releaseSequenceNo }} {{ segment.orderTypeName }}</span>
-                  <em>{{ formatSegmentStatus(segment.segmentStatus) }}</em>
+                  <em>{{ formatSegmentStatus(segment.segmentStatus, segment.completionReason) }}</em>
                 </button>
               </div>
             </aside>
@@ -207,14 +207,19 @@
               <template v-else>
                 <div class="segment-summary">
                   <span>释放顺序 #{{ visibleSegment.releaseSequenceNo }}</span>
-                  <span>{{ formatSegmentStatus(visibleSegment.segmentStatus) }}</span>
+                  <span>{{ formatSegmentStatus(visibleSegment.segmentStatus, visibleSegment.completionReason) }}</span>
                   <span v-if="visibleSegment.currentRoundNo">当前第 {{ visibleSegment.currentRoundNo }} 轮</span>
                   <span v-if="visibleSegment.nextRoundNo">下一轮：第 {{ visibleSegment.nextRoundNo }} 轮</span>
-                  <span>{{ formatSelectionStatus(visibleSegment.selfRoundStatus) }}</span>
+                  <span>{{ formatSelectionStatusForSegment(visibleSegment.selfRoundStatus, visibleSegment) }}</span>
                   <template v-if="visibleSegment.ordersVisible">
                     <span>可选 {{ visibleSegment.availableOrders.length }} 单</span>
                     <span>已锁定 {{ visibleSegment.lockedOrders.length }} 单</span>
                   </template>
+                </div>
+
+                <div v-if="visibleSegmentCompletionNotice" class="completion-notice">
+                  <strong>{{ visibleSegmentCompletionNotice.title }}</strong>
+                  <span>{{ visibleSegmentCompletionNotice.detail }}</span>
                 </div>
 
                 <div class="sequence-list">
@@ -222,11 +227,11 @@
                     v-for="item in visibleSegment.selectionOrder"
                     :key="item.groupId"
                     class="sequence-card"
-                    :class="{ self: item.isSelf, current: item.selectionStatus === 'CURRENT' }"
+                    :class="{ self: item.isSelf, current: isCurrentSelectionStatus(item.selectionStatus, visibleSegment) }"
                   >
                     <span>#{{ item.sequenceNo }}</span>
                     <strong>{{ item.groupName }}</strong>
-                    <em>{{ formatSelectionStatus(item.selectionStatus) }}</em>
+                    <em>{{ formatSelectionStatusForSegment(item.selectionStatus, visibleSegment) }}</em>
                     <small v-if="item.isMarketLeader">市场龙头</small>
                   </article>
                 </div>
@@ -279,6 +284,7 @@
 
                 <div v-if="visibleSegment.ordersVisible" class="action-line">
                   <button
+                    v-if="visibleSegment.segmentStatus === 'SELECTING'"
                     type="button"
                     class="btn danger"
                     :disabled="!visibleSegment.canPassSegment || passingSegment"
@@ -286,7 +292,7 @@
                   >
                     {{ passingSegment ? '放弃中...' : '放弃本轮' }}
                   </button>
-                  <span>{{ visibleSegment.canPassSegment ? '当前轮到本组，可选择或放弃。' : '未轮到本组时只能查看。' }}</span>
+                  <span>{{ visibleSegmentActionText }}</span>
                 </div>
               </template>
             </section>
@@ -420,7 +426,9 @@ const orderDisplayFields = computed(() => {
 
 const visibleSegment = computed(() => currentSegment.value ?? selectedMarket.value?.segments[0] ?? null)
 const activeSegmentTitle = computed(() => {
-  const segment = markets.value.flatMap((market) => market.segments).find((item) => item.segmentStatus === 'SELECTING')
+  const segments = markets.value.flatMap((market) => market.segments)
+  const segment = segments.find((item) => item.segmentStatus === 'SELECTING')
+    ?? segments.find((item) => item.segmentStatus === 'ROUND_READY')
   return segment ? `${segment.marketName} ${segment.orderTypeName}` : '暂无'
 })
 const currentSegmentTitle = computed(() => {
@@ -428,6 +436,38 @@ const currentSegmentTitle = computed(() => {
     return '标段选单'
   }
   return `${visibleSegment.value.marketName} · ${visibleSegment.value.orderTypeName}`
+})
+const visibleSegmentActionText = computed(() => {
+  const segment = visibleSegment.value
+  if (!segment) {
+    return ''
+  }
+  if (segment.canPassSegment) {
+    return '当前轮到本组，可选择或放弃。'
+  }
+  if (segment.segmentStatus === 'ROUND_READY') {
+    return '当前轮已结束，等待管理员开启下一轮。'
+  }
+  if (segment.segmentStatus === 'COMPLETED') {
+    if (segment.selectedOrders.length > 0) {
+      return `本标段选单已结束，本组已获得 ${segment.selectedOrders.length} 个订单，可查看交付状态。`
+    }
+    return `本标段选单已结束，${formatCompletionReasonShort(segment.completionReason)}，本组未获得该标段订单。`
+  }
+  return '未轮到本组时只能查看。'
+})
+const visibleSegmentCompletionNotice = computed(() => {
+  const segment = visibleSegment.value
+  if (!segment || segment.segmentStatus !== 'COMPLETED') {
+    return null
+  }
+  const orderResult = segment.selectedOrders.length > 0
+    ? `本组已获得 ${segment.selectedOrders.length} 个订单，可继续查看交付状态。`
+    : '本组未获得该标段订单。'
+  return {
+    title: `${segment.marketName} · ${segment.orderTypeName} 选单已结束`,
+    detail: `结束原因：${formatCompletionReason(segment.completionReason)}。${orderResult}`,
+  }
 })
 const hasVisibleOrderDetails = computed(() =>
   markets.value.some((market) => market.segments.some((segment) => segment.ordersVisible)),
@@ -697,7 +737,10 @@ function formatOrderNo(order: PlayerOrderPoolItem) {
   return order.businessOrderNo || `#${order.orderId}`
 }
 
-function formatSegmentStatus(value?: string) {
+function formatSegmentStatus(value?: string, completionReason?: string | null) {
+  if (value === 'COMPLETED' && completionReason) {
+    return `已完成（${formatCompletionReasonShort(completionReason)}）`
+  }
   const map: Record<string, string> = {
     MARKET_DISABLED: '市场未开启',
     NO_ORDER_CONFIG: '未配置订单',
@@ -714,6 +757,17 @@ function formatSegmentStatus(value?: string) {
   return value ? map[value] ?? value : '未开始'
 }
 
+function formatSelectionStatusForSegment(value: string, segment?: PlayerOrderSegmentView | null) {
+  if (isUnexecutedSelectionByCompletedSegment(value, segment)) {
+    return `未执行（${formatCompletionReasonShort(segment?.completionReason)}）`
+  }
+  return formatSelectionStatus(value)
+}
+
+function isCurrentSelectionStatus(value: string, segment?: PlayerOrderSegmentView | null) {
+  return value === 'CURRENT' && !isUnexecutedSelectionByCompletedSegment(value, segment)
+}
+
 function formatSelectionStatus(value: string) {
   const map: Record<string, string> = {
     INELIGIBLE: '无资格',
@@ -725,6 +779,28 @@ function formatSelectionStatus(value: string) {
     INELIGIBLE_BANKRUPT: '已破产，本轮无资格',
   }
   return map[value] ?? value
+}
+
+function isUnexecutedSelectionByCompletedSegment(value: string, segment?: PlayerOrderSegmentView | null) {
+  return segment?.segmentStatus === 'COMPLETED' && (value === 'WAITING' || value === 'CURRENT')
+}
+
+function formatCompletionReason(value?: string | null) {
+  const map: Record<string, string> = {
+    ALL_ROUNDS_COMPLETED: '全部有效轮次已完成',
+    ORDER_POOL_EXHAUSTED: '订单池已提前选空',
+    NO_ELIGIBLE_PARTICIPANTS: '后续无可参与小组',
+  }
+  return value ? map[value] ?? '选单流程已完成' : '选单流程已完成'
+}
+
+function formatCompletionReasonShort(value?: string | null) {
+  const map: Record<string, string> = {
+    ALL_ROUNDS_COMPLETED: '全部轮次完成',
+    ORDER_POOL_EXHAUSTED: '订单池已空',
+    NO_ELIGIBLE_PARTICIPANTS: '无可参与小组',
+  }
+  return value ? map[value] ?? '选单已结束' : '选单已结束'
 }
 
 function formatDeliveryStatus(value: string) {
@@ -1270,6 +1346,27 @@ function formatDeliveryStage(value: string) {
   background: #ffffff;
   padding: 7px 10px;
   font-size: 13px;
+}
+
+.completion-notice {
+  display: grid;
+  gap: 6px;
+  margin: 0 16px 16px;
+  padding: 12px 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.completion-notice strong {
+  font-size: 14px;
+}
+
+.completion-notice span {
+  color: #15803d;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .sequence-list {

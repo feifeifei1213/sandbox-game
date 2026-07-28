@@ -44,6 +44,11 @@
 - `demo 网页/`：静态页面原型与演示稿
 - `game doc/`：Excel、规则文档与原始业务资料
 
+订单模块近期补充设计：
+
+- `docs/order_market_auto_focus_design.md`：订单竞标阶段管理员端和玩家端按真实流程自动聚焦当前市场的开发设计。
+- `docs/admin_order_pool_group_filter_design.md`：管理员端订单池按小组筛选查看已选订单的开发设计。
+
 ---
 
 ## 4. 如何快速启动
@@ -117,6 +122,7 @@ npm run dev
 - [admin_input_navigation_design.md](E:\project\sand box game\docs\admin_input_navigation_design.md)
 - [keyboard_navigation_design.md](E:\project\sand box game\docs\keyboard_navigation_design.md)
 - [order_multi_round_upgrade_design.md](E:\project\sand box game\docs\order_multi_round_upgrade_design.md)
+- [admin_order_pool_group_filter_design.md](E:\project\sand box game\docs\admin_order_pool_group_filter_design.md)
 - [order_template_airport_plan.md](E:\project\sand box game\docs\order_template_airport_plan.md)
 - [airport_order_module_acceptance_checklist.md](E:\project\sand box game\docs\airport_order_module_acceptance_checklist.md)
 

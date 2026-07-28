@@ -421,7 +421,7 @@ func (h *AdminOrderHandler) GetOrderPool(c *gin.Context) {
 		return
 	}
 
-	result, err := h.queryService.GetOrderPool(c.Request.Context(), *req.YearNo, req.MarketCode, req.OrderType)
+	result, err := h.queryService.GetOrderPool(c.Request.Context(), *req.YearNo, req.MarketCode, req.OrderType, req.SelectedOnly, req.SelectedGroupID)
 	if err != nil {
 		abortAdminOrderError(c, err, "获取订单池失败")
 		return

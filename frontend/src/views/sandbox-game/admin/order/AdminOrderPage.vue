@@ -332,7 +332,13 @@
           </select>
         </label>
         <div class="control-actions">
-          <button type="button" class="btn primary" :disabled="releasingSegment" @click="handleReleaseNextSegment">
+          <button
+            type="button"
+            class="btn primary"
+            :disabled="releaseNextSegmentDisabled"
+            :title="releaseNextSegmentTitle"
+            @click="handleReleaseNextSegment"
+          >
             {{ releasingSegment ? '释放中...' : '释放下一个标段' }}
           </button>
           <button
@@ -375,11 +381,17 @@
         </article>
       </div>
 
+      <div v-if="selectionCompletionNotice" class="completion-notice">
+        <strong>{{ selectionCompletionNotice.title }}</strong>
+        <span>{{ selectionCompletionNotice.detail }}</span>
+        <em v-if="selectionCompletionNotice.extra">{{ selectionCompletionNotice.extra }}</em>
+      </div>
+
       <div v-if="selectedSequenceSegment?.warnings?.length" class="warning-list">
         <span v-for="warning in selectedSequenceSegment.warnings" :key="warning">{{ warning }}</span>
       </div>
 
-      <div class="skip-row">
+      <div v-if="canSkipCurrentGroup" class="skip-row">
         <input v-model="store.controlForm.skipReason" type="text" placeholder="代跳过原因，必填">
         <button type="button" class="btn danger" :disabled="!currentSegment?.currentGroupId || skippingGroup" @click="handleSkipCurrentGroup">
           {{ skippingGroup ? '跳过中...' : '跳过当前小组' }}
@@ -413,7 +425,7 @@
               <td>#{{ segment.releaseSequenceNo }}</td>
               <td>{{ segment.marketName }}</td>
               <td>{{ segment.orderTypeName }}</td>
-              <td>{{ formatSegmentStatus(segment.segmentStatus) }}</td>
+              <td>{{ formatSegmentStatus(segment.segmentStatus, segment.completionReason) }}</td>
               <td>{{ formatGroupName(segment.currentGroupId) }}</td>
               <td class="number-cell">{{ segment.availableCount }}</td>
               <td class="number-cell">{{ segment.selectedCount }}</td>
@@ -457,7 +469,7 @@
                 <td class="number-cell">{{ formatAmount(item.marketInvestment) }}</td>
                 <td class="number-cell">{{ formatIntegerAmount(item.previousMarketOrderAmount) }}</td>
                 <td>{{ item.isMarketLeader ? '是' : '否' }}</td>
-                <td>{{ formatSelectionStatus(item.selectionStatus) }}</td>
+                <td>{{ formatSelectionStatusForSegment(item.selectionStatus, selectedSequenceSegment) }}</td>
                 <td>{{ item.selectedOrderNo || (item.selectedOrderId ? `#${item.selectedOrderId}` : '--') }}</td>
               </tr>
             </template>
@@ -472,7 +484,7 @@
       <div class="panel-head">
         <div>
           <strong>订单池查看</strong>
-          <span>默认查看全部订单，可按年份、市场和订单类型筛选。</span>
+          <span>默认查看全部订单，可按年份、市场、订单类型和小组筛选。</span>
         </div>
         <div class="hero-actions">
           <select v-model.number="store.selectedYearNo" class="year-select" :disabled="loading || loadingPool" @change="handleYearChange">
@@ -499,6 +511,16 @@
             <option v-for="item in orderTypeOptions" :key="item.code" :value="item.code">{{ item.name }}</option>
           </select>
         </label>
+        <label class="field">
+          <span>小组</span>
+          <select v-model="store.poolFilter.selectedGroupKey" @change="handleLoadPool">
+            <option value="ALL">全部订单</option>
+            <option value="SELECTED">全部已选小组</option>
+            <option v-for="item in orderPoolGroupOptions" :key="item.groupId" :value="`GROUP:${item.groupId}`">
+              {{ item.groupName || `第${item.groupNo || item.groupId}组` }}
+            </option>
+          </select>
+        </label>
       </div>
 
       <div class="table-scroll">
@@ -520,7 +542,7 @@
           </thead>
           <tbody>
             <tr v-if="!orderPool || orderPool.list.length === 0">
-              <td :colspan="10 + extraPoolFields.length" class="empty-row">当前筛选下没有订单池记录。</td>
+              <td :colspan="10 + extraPoolFields.length" class="empty-row">{{ poolEmptyText }}</td>
             </tr>
             <tr v-for="item in orderPool?.list ?? []" :key="item.orderId">
               <td>{{ item.businessOrderNo || `#${item.orderId}` }}</td>
@@ -532,7 +554,7 @@
               <td>{{ item.accountTerm }}季度</td>
               <td v-for="field in extraPoolFields" :key="field.code">{{ formatOrderField(item, field) }}</td>
               <td>{{ formatPoolStatus(item.poolStatus) }}</td>
-              <td>{{ item.selectedGroupId ? `组ID ${item.selectedGroupId}` : '--' }}</td>
+              <td>{{ formatSelectedGroup(item) }}</td>
               <td>{{ item.sourceSheetName }} {{ item.sourceCell }}</td>
             </tr>
           </tbody>
@@ -617,6 +639,12 @@ const extraPoolFields = computed(() =>
     .filter((field) => !['orderAmount', 'orderQuantity', 'unitPrice', 'accountTerm'].includes(field.code))
     .sort((a, b) => a.order - b.order),
 )
+const orderPoolGroupOptions = computed(() => orderPool.value?.groupOptions ?? [])
+const poolEmptyText = computed(() =>
+  store.poolFilter.selectedGroupKey === 'ALL'
+    ? '当前筛选下没有订单池记录。'
+    : '当前筛选下没有小组已选订单记录。',
+)
 const selectedSequenceSegmentKey = ref('')
 const activeOrderTab = ref<'forecast' | 'market' | 'sequence' | 'pool' | 'bidding'>('market')
 const forecastInputRefs = new Map<string, HTMLInputElement>()
@@ -631,6 +659,22 @@ const yearOptions = computed(() => {
   }))
 })
 const currentGroupName = computed(() => formatGroupName(currentSegment.value?.currentGroupId ?? null))
+const releaseBlockedByActiveSegment = computed(() => {
+  const status = currentSegment.value?.segmentStatus
+  return status === 'SELECTING' || status === 'ROUND_READY'
+})
+const releaseNextSegmentDisabled = computed(() => releasingSegment.value || releaseBlockedByActiveSegment.value)
+const releaseNextSegmentTitle = computed(() => {
+  if (!releaseBlockedByActiveSegment.value) {
+    return ''
+  }
+  return currentSegment.value?.segmentStatus === 'ROUND_READY'
+    ? '当前标段还有等待开启的下一轮，请先开启下一轮'
+    : '当前标段正在选单中，不能释放下一个标段'
+})
+const canSkipCurrentGroup = computed(() =>
+  currentSegment.value?.segmentStatus === 'SELECTING' && Boolean(currentSegment.value.currentGroupId),
+)
 const selectedSequenceSegment = computed(() => {
   const segments = marketSelectionStatus.value?.segments ?? []
   if (selectedSequenceSegmentKey.value) {
@@ -643,6 +687,23 @@ const selectedSequenceSegment = computed(() => {
     ?? segments.find((item) => item.selectionOrder.length > 0 && item.segmentStatus === 'SEQUENCE_READY')
     ?? segments.find((item) => item.selectionOrder.length > 0)
     ?? null
+})
+const selectionCompletionNotice = computed(() => {
+  const segment = selectedSequenceSegment.value
+  if (!segment || segment.segmentStatus !== 'COMPLETED') {
+    return null
+  }
+  let detail = `结束原因：${formatCompletionReason(segment.completionReason)}。已选订单 ${segment.selectedCount} 个，剩余订单 ${segment.availableCount} 个。`
+  if (segment.completionReason === 'ORDER_POOL_EXHAUSTED') {
+    detail += '后续未执行机会不再进入选单。'
+  }
+  const marketSegments = marketSelectionStatus.value?.segments ?? []
+  const marketCompleted = marketSegments.length > 0 && marketSegments.every((item) => item.segmentStatus === 'COMPLETED')
+  return {
+    title: `${segment.marketName} · ${segment.orderTypeName} 选单已结束`,
+    detail,
+    extra: marketCompleted ? `${marketSelectionStatus.value?.marketName ?? segment.marketName}全部标段已结束。` : '',
+  }
 })
 const selectionRoundNumbers = computed(() => {
   const maxRounds = Math.max(1, Number(selectedSequenceSegment.value ? store.orderTemplate.maxSelectionRounds : 1) || 1)
@@ -938,7 +999,7 @@ async function handleLoadSelectionStatus() {
 async function handleControlMarketChange() {
   try {
     selectedSequenceSegmentKey.value = ''
-    await store.loadSelectionStatus()
+    await store.loadSelectionStatus({ skipFocus: true })
     restartSelectionStatusPolling()
   } catch {
     // 页面消息由 store 统一处理。
@@ -1123,6 +1184,13 @@ function formatPoolStatus(value: OrderPoolStatus) {
   return value
 }
 
+function formatSelectedGroup(item: OrderPoolItem) {
+  if (item.selectedGroupName?.trim()) {
+    return item.selectedGroupName.trim()
+  }
+  return item.selectedGroupId ? `组ID ${item.selectedGroupId}` : '--'
+}
+
 function formatGenerationStatus(value?: string) {
   const map: Record<string, string> = {
     NOT_GENERATED: '未生成',
@@ -1135,7 +1203,10 @@ function formatGenerationStatus(value?: string) {
   return value ? map[value] ?? value : '--'
 }
 
-function formatSegmentStatus(value?: string) {
+function formatSegmentStatus(value?: string, completionReason?: string | null) {
+  if (value === 'COMPLETED' && completionReason) {
+    return `已完成（${formatCompletionReasonShort(completionReason)}）`
+  }
   const map: Record<string, string> = {
     WAITING_INVESTMENT: '等待投入',
     MARKET_DISABLED: '市场未开启',
@@ -1145,10 +1216,18 @@ function formatSegmentStatus(value?: string) {
     SEQUENCE_READY: '顺序已生成',
     WAITING_RELEASE: '等待释放',
     SELECTING: '选单中',
+    ROUND_READY: '下一轮待开启',
     COMPLETED: '已完成',
     SKIPPED: '已跳过',
   }
   return value ? map[value] ?? value : '--'
+}
+
+function formatSelectionStatusForSegment(value: string, segment?: AdminOrderSegmentStatus | null) {
+  if (isUnexecutedSelectionByCompletedSegment(value, segment)) {
+    return `未执行（${formatCompletionReasonShort(segment?.completionReason)}）`
+  }
+  return formatSelectionStatus(value)
 }
 
 function formatSelectionStatus(value: string) {
@@ -1162,6 +1241,28 @@ function formatSelectionStatus(value: string) {
     INELIGIBLE_BANKRUPT: '已破产，本轮无资格',
   }
   return map[value] ?? value
+}
+
+function isUnexecutedSelectionByCompletedSegment(value: string, segment?: AdminOrderSegmentStatus | null) {
+  return segment?.segmentStatus === 'COMPLETED' && (value === 'WAITING' || value === 'CURRENT')
+}
+
+function formatCompletionReason(value?: string | null) {
+  const map: Record<string, string> = {
+    ALL_ROUNDS_COMPLETED: '全部有效轮次已完成',
+    ORDER_POOL_EXHAUSTED: '订单池已提前选空',
+    NO_ELIGIBLE_PARTICIPANTS: '后续无可参与小组',
+  }
+  return value ? map[value] ?? '选单流程已完成' : '选单流程已完成'
+}
+
+function formatCompletionReasonShort(value?: string | null) {
+  const map: Record<string, string> = {
+    ALL_ROUNDS_COMPLETED: '全部轮次完成',
+    ORDER_POOL_EXHAUSTED: '订单池已空',
+    NO_ELIGIBLE_PARTICIPANTS: '无可参与小组',
+  }
+  return value ? map[value] ?? '选单已结束' : '选单已结束'
 }
 
 function formatGroupName(groupId?: number | null) {
@@ -1406,6 +1507,28 @@ function formatGroupName(groupId?: number | null) {
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.completion-notice {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.completion-notice strong {
+  font-size: 14px;
+}
+
+.completion-notice span,
+.completion-notice em {
+  color: #15803d;
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.55;
 }
 
 .table-scroll {

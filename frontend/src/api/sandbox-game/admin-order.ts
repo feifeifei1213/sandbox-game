@@ -78,15 +78,28 @@ export function generateAdminSelectionSequence(payload: { yearNo: number }) {
   })
 }
 
-export function getAdminOrderPool(yearNo: number, marketCode?: OrderMarketCode | 'ALL', orderType?: AdminOrderType | 'ALL') {
+export interface GetAdminOrderPoolOptions {
+  marketCode?: OrderMarketCode | 'ALL'
+  orderType?: AdminOrderType | 'ALL'
+  selectedOnly?: boolean
+  selectedGroupId?: number | null
+}
+
+export function getAdminOrderPool(yearNo: number, options?: GetAdminOrderPoolOptions) {
   const params = new URLSearchParams({
     yearNo: String(yearNo),
   })
-  if (marketCode && marketCode !== 'ALL') {
-    params.set('marketCode', marketCode)
+  if (options?.marketCode && options.marketCode !== 'ALL') {
+    params.set('marketCode', options.marketCode)
   }
-  if (orderType && orderType !== 'ALL') {
-    params.set('orderType', orderType)
+  if (options?.orderType && options.orderType !== 'ALL') {
+    params.set('orderType', options.orderType)
+  }
+  if (options?.selectedOnly) {
+    params.set('selectedOnly', 'true')
+  }
+  if (options?.selectedGroupId) {
+    params.set('selectedGroupId', String(options.selectedGroupId))
   }
   return request<OrderPoolResult>(`/api/v1/sandbox-game/admin-order/get-order-pool?${params.toString()}`)
 }

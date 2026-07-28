@@ -728,6 +728,7 @@ export interface OrderPoolItem {
   accountTerm: number
   poolStatus: OrderPoolStatus
   selectedGroupId: number | null
+  selectedGroupName: string
   sourceSheetName: string
   sourceCell: string
   orderPayload?: Record<string, unknown>
@@ -740,6 +741,9 @@ export interface OrderPoolResult {
   marketName: string
   orderType: AdminOrderType | ''
   orderTypeName: string
+  selectedOnly: boolean
+  selectedGroupId: number | null
+  groupOptions: AdminGroupOption[]
   list: OrderPoolItem[]
 }
 

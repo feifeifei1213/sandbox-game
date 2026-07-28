@@ -347,33 +347,44 @@ type ConfirmOrderPoolResult struct {
 }
 
 type OrderPoolItem struct {
-	OrderID         int64          `json:"orderId"`
-	BusinessOrderNo string         `json:"businessOrderNo"`
-	CardSequenceNo  int            `json:"cardSequenceNo"`
-	YearNo          int            `json:"yearNo"`
-	MarketCode      string         `json:"marketCode"`
-	MarketName      string         `json:"marketName"`
-	OrderType       string         `json:"orderType"`
-	OrderTypeName   string         `json:"orderTypeName"`
-	OrderAmount     float64        `json:"orderAmount"`
-	OrderQuantity   float64        `json:"orderQuantity"`
-	UnitPrice       float64        `json:"unitPrice"`
-	AccountTerm     int            `json:"accountTerm"`
-	PoolStatus      string         `json:"poolStatus"`
-	SelectedGroupID *int64         `json:"selectedGroupId"`
-	SourceSheetName string         `json:"sourceSheetName"`
-	SourceCell      string         `json:"sourceCell"`
-	OrderPayload    map[string]any `json:"orderPayload,omitempty"`
+	OrderID           int64          `json:"orderId"`
+	BusinessOrderNo   string         `json:"businessOrderNo"`
+	CardSequenceNo    int            `json:"cardSequenceNo"`
+	YearNo            int            `json:"yearNo"`
+	MarketCode        string         `json:"marketCode"`
+	MarketName        string         `json:"marketName"`
+	OrderType         string         `json:"orderType"`
+	OrderTypeName     string         `json:"orderTypeName"`
+	OrderAmount       float64        `json:"orderAmount"`
+	OrderQuantity     float64        `json:"orderQuantity"`
+	UnitPrice         float64        `json:"unitPrice"`
+	AccountTerm       int            `json:"accountTerm"`
+	PoolStatus        string         `json:"poolStatus"`
+	SelectedGroupID   *int64         `json:"selectedGroupId"`
+	SelectedGroupName string         `json:"selectedGroupName"`
+	SourceSheetName   string         `json:"sourceSheetName"`
+	SourceCell        string         `json:"sourceCell"`
+	OrderPayload      map[string]any `json:"orderPayload,omitempty"`
+}
+
+type OrderPoolGroupOption struct {
+	GroupID        int64  `json:"groupId"`
+	GroupNo        int    `json:"groupNo"`
+	GroupName      string `json:"groupName"`
+	BusinessStatus string `json:"businessStatus"`
 }
 
 type OrderPoolResult struct {
-	YearNo        int               `json:"yearNo"`
-	OrderTemplate OrderTemplateView `json:"orderTemplate"`
-	MarketCode    string            `json:"marketCode"`
-	MarketName    string            `json:"marketName"`
-	OrderType     string            `json:"orderType"`
-	OrderTypeName string            `json:"orderTypeName"`
-	List          []OrderPoolItem   `json:"list"`
+	YearNo          int                    `json:"yearNo"`
+	OrderTemplate   OrderTemplateView      `json:"orderTemplate"`
+	MarketCode      string                 `json:"marketCode"`
+	MarketName      string                 `json:"marketName"`
+	OrderType       string                 `json:"orderType"`
+	OrderTypeName   string                 `json:"orderTypeName"`
+	SelectedOnly    bool                   `json:"selectedOnly"`
+	SelectedGroupID *int64                 `json:"selectedGroupId"`
+	GroupOptions    []OrderPoolGroupOption `json:"groupOptions"`
+	List            []OrderPoolItem        `json:"list"`
 }
 
 type AdminOrderQueryService struct {
@@ -558,7 +569,7 @@ func (s *AdminOrderQueryService) GetControlConfig(ctx context.Context, yearNo in
 	}, nil
 }
 
-func (s *AdminOrderQueryService) GetOrderPool(ctx context.Context, yearNo int, marketCode string, orderType string) (*OrderPoolResult, error) {
+func (s *AdminOrderQueryService) GetOrderPool(ctx context.Context, yearNo int, marketCode string, orderType string, selectedOnly bool, selectedGroupID *int64) (*OrderPoolResult, error) {
 	if err := s.validateYear(ctx, yearNo); err != nil {
 		return nil, err
 	}
@@ -569,6 +580,12 @@ func (s *AdminOrderQueryService) GetOrderPool(ctx context.Context, yearNo int, m
 	}
 	if orderType == "ALL" {
 		orderType = ""
+	}
+	if selectedGroupID != nil {
+		if *selectedGroupID <= 0 {
+			return nil, ErrAdminOrderConfigInvalid
+		}
+		selectedOnly = true
 	}
 	gameConfig, err := s.gameConfigRepo.GetCurrent(ctx)
 	if err != nil {
@@ -584,22 +601,35 @@ func (s *AdminOrderQueryService) GetOrderPool(ctx context.Context, yearNo int, m
 	if orderType != "" && !template.IsValidOrderType(orderType) {
 		return nil, ErrAdminOrderConfigInvalid
 	}
-	items, err := s.poolRepo.ListByYearWithOptionalFilters(ctx, yearNo, marketCode, orderType)
+	groups, err := s.groupRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list groups: %w", err)
+	}
+	groupOptions, groupNameMap := buildOrderPoolGroupOptions(groups)
+	if selectedGroupID != nil {
+		if _, exists := groupNameMap[*selectedGroupID]; !exists {
+			return nil, ErrAdminOrderConfigInvalid
+		}
+	}
+	items, err := s.poolRepo.ListByYearWithOptionalFilters(ctx, yearNo, marketCode, orderType, selectedOnly, selectedGroupID)
 	if err != nil {
 		return nil, fmt.Errorf("list order pool: %w", err)
 	}
 	resultItems := make([]OrderPoolItem, 0, len(items))
 	for _, item := range items {
-		resultItems = append(resultItems, buildOrderPoolItem(item))
+		resultItems = append(resultItems, buildOrderPoolItem(item, groupNameMap))
 	}
 	return &OrderPoolResult{
-		YearNo:        yearNo,
-		OrderTemplate: BuildOrderTemplateView(template),
-		MarketCode:    marketCode,
-		MarketName:    template.MarketName(marketCode),
-		OrderType:     orderType,
-		OrderTypeName: template.OrderTypeName(orderType),
-		List:          resultItems,
+		YearNo:          yearNo,
+		OrderTemplate:   BuildOrderTemplateView(template),
+		MarketCode:      marketCode,
+		MarketName:      template.MarketName(marketCode),
+		OrderType:       orderType,
+		OrderTypeName:   template.OrderTypeName(orderType),
+		SelectedOnly:    selectedOnly,
+		SelectedGroupID: selectedGroupID,
+		GroupOptions:    groupOptions,
+		List:            resultItems,
 	}, nil
 }
 
@@ -2704,29 +2734,56 @@ func countGeneratedByYearWithRepoForTemplate(ctx context.Context, repo *reposito
 	return counts, nil
 }
 
-func buildOrderPoolItem(item entity.OrderPool) OrderPoolItem {
+func buildOrderPoolGroupOptions(groups []entity.Group) ([]OrderPoolGroupOption, map[int64]string) {
+	options := make([]OrderPoolGroupOption, 0, len(groups))
+	groupNameMap := make(map[int64]string, len(groups))
+	for _, group := range groups {
+		groupName := strings.TrimSpace(group.GroupName)
+		if groupName == "" && group.GroupNo > 0 {
+			groupName = fmt.Sprintf("第%d组", group.GroupNo)
+		}
+		if groupName == "" {
+			groupName = fmt.Sprintf("组ID %d", group.ID)
+		}
+		options = append(options, OrderPoolGroupOption{
+			GroupID:        group.ID,
+			GroupNo:        group.GroupNo,
+			GroupName:      groupName,
+			BusinessStatus: group.BusinessStatus,
+		})
+		groupNameMap[group.ID] = groupName
+	}
+	return options, groupNameMap
+}
+
+func buildOrderPoolItem(item entity.OrderPool, groupNameMap map[int64]string) OrderPoolItem {
 	payload := map[string]any(nil)
 	if len(item.OrderPayloadJSON) > 0 {
 		_ = json.Unmarshal(item.OrderPayloadJSON, &payload)
 	}
+	selectedGroupName := ""
+	if item.SelectedGroupID != nil {
+		selectedGroupName = groupNameMap[*item.SelectedGroupID]
+	}
 	return OrderPoolItem{
-		OrderID:         item.ID,
-		BusinessOrderNo: formatBusinessOrderNo(item),
-		CardSequenceNo:  item.CardSequenceNo,
-		YearNo:          item.YearNo,
-		MarketCode:      item.MarketCode,
-		MarketName:      marketName(item.MarketCode),
-		OrderType:       item.OrderType,
-		OrderTypeName:   orderTypeName(item.OrderType),
-		OrderAmount:     item.OrderAmount,
-		OrderQuantity:   item.OrderQuantity,
-		UnitPrice:       item.UnitPrice,
-		AccountTerm:     item.AccountTerm,
-		PoolStatus:      item.PoolStatus,
-		SelectedGroupID: item.SelectedGroupID,
-		SourceSheetName: item.SourceSheetName,
-		SourceCell:      item.SourceCell,
-		OrderPayload:    payload,
+		OrderID:           item.ID,
+		BusinessOrderNo:   formatBusinessOrderNo(item),
+		CardSequenceNo:    item.CardSequenceNo,
+		YearNo:            item.YearNo,
+		MarketCode:        item.MarketCode,
+		MarketName:        marketName(item.MarketCode),
+		OrderType:         item.OrderType,
+		OrderTypeName:     orderTypeName(item.OrderType),
+		OrderAmount:       item.OrderAmount,
+		OrderQuantity:     item.OrderQuantity,
+		UnitPrice:         item.UnitPrice,
+		AccountTerm:       item.AccountTerm,
+		PoolStatus:        item.PoolStatus,
+		SelectedGroupID:   item.SelectedGroupID,
+		SelectedGroupName: selectedGroupName,
+		SourceSheetName:   item.SourceSheetName,
+		SourceCell:        item.SourceCell,
+		OrderPayload:      payload,
 	}
 }
 

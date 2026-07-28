@@ -205,6 +205,7 @@ type PlayerOrderSegmentView struct {
 	SegmentStatus         string                    `json:"segmentStatus"`
 	CurrentRoundNo        int                       `json:"currentRoundNo"`
 	NextRoundNo           *int                      `json:"nextRoundNo,omitempty"`
+	CompletionReason      *string                   `json:"completionReason,omitempty"`
 	SelfRoundStatus       string                    `json:"selfRoundStatus"`
 	OrdersVisible         bool                      `json:"ordersVisible"`
 	SelectionOrder        []PlayerOrderSequenceView `json:"selectionOrder"`
@@ -2077,6 +2078,7 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 		SegmentStatus:         state.SegmentStatus,
 		CurrentRoundNo:        state.CurrentRoundNo,
 		NextRoundNo:           nextRoundNo,
+		CompletionReason:      state.CompletionReason,
 		SelfRoundStatus:       selfRoundStatus,
 		OrdersVisible:         ordersVisible,
 		SelectionOrder:        sequenceViews,
@@ -2464,6 +2466,8 @@ func resolveMarketBidStatus(states []entity.MarketBiddingState) string {
 		return enum.OrderSegmentStatusBidOpen
 	case hasSegmentStatus(states, enum.OrderSegmentStatusBidClosed):
 		return enum.OrderSegmentStatusBidClosed
+	case hasSegmentStatus(states, enum.OrderSegmentStatusRoundReady):
+		return enum.OrderSegmentStatusRoundReady
 	case hasSegmentStatus(states, enum.OrderSegmentStatusSequenceReady),
 		hasSegmentStatus(states, enum.OrderSegmentStatusWaitingRelease),
 		hasSegmentStatus(states, enum.OrderSegmentStatusSelecting):

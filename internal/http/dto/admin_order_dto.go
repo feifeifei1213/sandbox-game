@@ -61,7 +61,9 @@ type AdminOrderGenerateSelectionSequenceRequest struct {
 }
 
 type AdminOrderGetOrderPoolRequest struct {
-	YearNo     *int   `form:"yearNo" binding:"required"`
-	MarketCode string `form:"marketCode"`
-	OrderType  string `form:"orderType"`
+	YearNo          *int   `form:"yearNo" binding:"required"`
+	MarketCode      string `form:"marketCode"`
+	OrderType       string `form:"orderType"`
+	SelectedOnly    bool   `form:"selectedOnly"`
+	SelectedGroupID *int64 `form:"selectedGroupId"`
 }
