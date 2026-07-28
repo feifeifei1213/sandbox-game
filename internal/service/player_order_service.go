@@ -942,6 +942,11 @@ func (s *AdminOrderControlQueryService) GetMarketSelectionStatus(ctx context.Con
 		if state.SegmentStatus == enum.OrderSegmentStatusSelecting {
 			copySegment := segment
 			currentSegment = &copySegment
+			continue
+		}
+		if currentSegment == nil && state.SegmentStatus == enum.OrderSegmentStatusRoundReady {
+			copySegment := segment
+			currentSegment = &copySegment
 		}
 	}
 	return &AdminMarketSelectionStatus{

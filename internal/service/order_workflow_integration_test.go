@@ -306,6 +306,27 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	if localAgencyOrders[0].PoolStatus != enum.OrderPoolStatusSelected || localAgencyOrders[1].PoolStatus != enum.OrderPoolStatusAvailable {
 		t.Fatalf("expected selected order locked and unchosen order shared with the next round, got %#v", localAgencyOrders)
 	}
+	adminControlQueryService := NewAdminOrderControlQueryService(
+		repository.NewGameConfigRepository(tx),
+		repository.NewGroupRepository(tx),
+		repository.NewGroupMarketBidRepository(tx),
+		repository.NewMarketBiddingStateRepository(tx),
+		repository.NewMarketSelectionOrderRepository(tx),
+		repository.NewOrderPoolRepository(tx),
+	)
+	selectionStatus, err := adminControlQueryService.GetMarketSelectionStatus(ctx, yearNo, enum.MarketCodeLocal)
+	if err != nil {
+		t.Fatalf("query local market selection status after round one: %v", err)
+	}
+	if selectionStatus.CurrentSegment == nil {
+		t.Fatalf("expected round-ready segment to remain the current operable segment")
+	}
+	if selectionStatus.CurrentSegment.SegmentStatus != enum.OrderSegmentStatusRoundReady {
+		t.Fatalf("expected current segment status round-ready, got %#v", selectionStatus.CurrentSegment)
+	}
+	if selectionStatus.CurrentSegment.NextRoundNo == nil || *selectionStatus.CurrentSegment.NextRoundNo != 2 {
+		t.Fatalf("expected round-ready segment to expose next round number, got %#v", selectionStatus.CurrentSegment)
+	}
 	openedRound, err := adminControlService.OpenNextRound(ctx, OpenNextOrderRoundCommand{
 		YearNo:       yearNo,
 		MarketCode:   enum.MarketCodeLocal,

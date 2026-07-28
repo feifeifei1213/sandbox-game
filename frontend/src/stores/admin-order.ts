@@ -103,7 +103,15 @@ export const useAdminOrderStore = defineStore('sandbox-admin-order', () => {
   const forecastStages = computed(() => forecastControl.value?.forecast.stages ?? config.value?.forecast.stages ?? [])
   const forecastYearLocks = computed(() => forecastControl.value?.yearLocks ?? [])
   const enabledMarketCount = computed(() => editableMarketConfigs.value.filter((item) => item.enabled).length)
-  const currentSegment = computed(() => marketSelectionStatus.value?.currentSegment ?? null)
+  const currentSegment = computed(() => {
+    const status = marketSelectionStatus.value
+    if (status?.currentSegment) {
+      return status.currentSegment
+    }
+    return status?.segments.find((item) => item.segmentStatus === 'SELECTING')
+      ?? status?.segments.find((item) => item.segmentStatus === 'ROUND_READY')
+      ?? null
+  })
   const orderTemplate = computed<OrderTemplateMeta>(() =>
     config.value?.orderTemplate
       ?? forecastControl.value?.orderTemplate
