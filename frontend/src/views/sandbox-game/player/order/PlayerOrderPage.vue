@@ -246,7 +246,7 @@
                   >
                     <span>
                       第 {{ order.roundNo }} 轮 · {{ formatOrderNo(order) }} · 金额 {{ formatIntegerAmount(order.orderAmount) }} · 账期 {{ order.accountTerm }} 季度
-                      <small v-if="isInvalidatedDeliveryOrder(order)">原 {{ formatDeliveryStage(order.deliveredStageCode || '') }} 交付已失效，可重新提交</small>
+                      <small v-if="isInvalidatedDeliveryOrder(order)">上次提交已失效，可重新交付</small>
                     </span>
                     <em>{{ formatOrderDeliveryText(order) }}</em>
                   </div>
@@ -344,9 +344,7 @@
                     <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
                     <strong>{{ item.businessOrderNo || `#${item.orderId}` }}</strong>
                     <em>{{ formatIntegerAmount(item.orderAmount) }}</em>
-                    <small v-if="item.deliveryEffective === false && item.deliveredStageCode">
-                      原 {{ formatDeliveryStage(item.deliveredStageCode) }} 交付已失效，可重新交付
-                    </small>
+                    <small v-if="item.deliveryEffective === false && item.deliveredStageCode">上次提交已失效，可重新交付</small>
                   </label>
                 </div>
               </template>
@@ -868,7 +866,7 @@ function isPendingDeliveryOrder(order: PlayerOrderPoolItem) {
 
 function formatOrderDeliveryText(order: PlayerOrderPoolItem) {
   if (isInvalidatedDeliveryOrder(order)) {
-    return `待交付（原 ${formatDeliveryStage(order.deliveredStageCode || '')} 已失效）`
+    return '待交付（上次提交已失效）'
   }
   if (isDeliveredOrder(order)) {
     return `已交付 ${formatDeliveryStage(order.deliveredStageCode || '')}`

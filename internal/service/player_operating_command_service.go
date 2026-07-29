@@ -354,6 +354,12 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 			return err
 		}
 
+		if cmd.YearNo > 0 && isOrderQuarterStageCode(cmd.StageCode) {
+			if _, err := txOrderSelectionRepo.ClearInvalidatedDeliveryDraftByStage(ctx, cmd.GroupID, cmd.YearNo, cmd.StageCode, cmd.OperatorName, submitTime); err != nil {
+				return err
+			}
+		}
+
 		if bankruptTriggered {
 			if err := txGroupRepo.MarkBankrupt(ctx, cmd.GroupID, cmd.YearNo, bankruptReason, cmd.OperatorName); err != nil {
 				return err

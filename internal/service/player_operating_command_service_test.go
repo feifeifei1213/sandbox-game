@@ -203,6 +203,205 @@ func TestSubmitOperatingStageAfterRollbackUsesNextHistoricalVersionAndRetrySnaps
 	}
 }
 
+func TestSubmitOperatingStageClearsStaleInvalidatedOrderDeliveries(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	yearNo := 2
+	now := time.Now()
+
+	ensureIntegrationGameConfig(t, ctx, tx, yearNo, yearNo, true)
+	cleanupOrderIntegrationYears(t, ctx, tx, yearNo)
+	groupID := createOrderIntegrationGroup(t, ctx, tx, "I16 stale invalidated delivery owner", enum.BusinessStatusNormal, nil)
+	createPreviousFormalReportRecord(t, ctx, tx, groupID, yearNo-1, now)
+	createGroupYearStateRecord(t, ctx, tx, groupID, yearNo, enum.YearTypeFormal, enum.YearStatusOperating, enum.StageStatusQ1Open, enum.ReportStatusLocked)
+
+	if err := repository.NewGroupYearStateRepository(tx).MarkRollbackPending(ctx, groupID, yearNo, yearNo, state.StageCodeQ1, 10001, "integration-admin"); err != nil {
+		t.Fatalf("mark rollback pending: %v", err)
+	}
+
+	completionReason := enum.OrderCompletionReasonAllRoundsCompleted
+	if err := tx.WithContext(ctx).Create(&entity.MarketBiddingState{
+		OrderTemplateVersion: OrderTemplateVersionVIPServiceV1,
+		YearNo:               yearNo,
+		MarketCode:           enum.MarketCodeLocal,
+		OrderType:            enum.OrderTypeAgencyInspection,
+		SegmentCode:          "LOCAL_AGENCY_INSPECTION",
+		ReleaseSequenceNo:    1,
+		SegmentStatus:        enum.OrderSegmentStatusCompleted,
+		CurrentRoundNo:       1,
+		CompletionReason:     &completionReason,
+		BaseEntity: entity.BaseEntity{
+			Creator:    "integration-test",
+			CreateTime: now,
+			Updater:    "integration-test",
+			UpdateTime: now,
+		},
+	}).Error; err != nil {
+		t.Fatalf("create terminal order segment state: %v", err)
+	}
+
+	q1StageCode := state.StageCodeQ1
+	deliveredOrderIDs := createOperatingLinkedOrderSelections(t, ctx, tx, groupID, yearNo, 1, 2, enum.OrderDeliveryStatusDelivered, true, &q1StageCode, now)
+	staleInvalidatedOrderIDs := createOperatingLinkedOrderSelections(t, ctx, tx, groupID, yearNo, 3, 3, enum.OrderDeliveryStatusSelected, false, &q1StageCode, now)
+
+	commandService := buildOrderLinkedOperatingCommandService(tx)
+	if _, err := commandService.SubmitStage(ctx, SubmitOperatingStageCommand{
+		GroupID:          groupID,
+		YearNo:           yearNo,
+		StageCode:        state.StageCodeQ1,
+		OperatingPayload: buildQ1PayloadWithRevenue(0),
+		SubmitterID:      90001,
+		OperatorName:     "integration-test",
+	}); err != nil {
+		t.Fatalf("submit rollback retry Q1: %v", err)
+	}
+
+	var staleRows []entity.GroupOrderSelection
+	if err := tx.WithContext(ctx).
+		Where("group_id = ? AND year_no = ? AND order_id IN ?", groupID, yearNo, staleInvalidatedOrderIDs).
+		Order("order_id ASC").
+		Find(&staleRows).Error; err != nil {
+		t.Fatalf("load stale invalidated selections after retry submit: %v", err)
+	}
+	if len(staleRows) != len(staleInvalidatedOrderIDs) {
+		t.Fatalf("expected %d stale rows, got %d", len(staleInvalidatedOrderIDs), len(staleRows))
+	}
+	for _, item := range staleRows {
+		if item.DeliveryStatus != enum.OrderDeliveryStatusSelected || !item.DeliveryEffective || item.DeliveredStageCode != nil || item.DeliveredAt != nil || item.InvalidatedByRollbackID != nil || item.InvalidatedAt != nil {
+			t.Fatalf("expected stale invalidated order %d to become plain pending delivery, got %#v", item.OrderID, item)
+		}
+	}
+
+	var deliveredRows []entity.GroupOrderSelection
+	if err := tx.WithContext(ctx).
+		Where("group_id = ? AND year_no = ? AND order_id IN ?", groupID, yearNo, deliveredOrderIDs).
+		Order("order_id ASC").
+		Find(&deliveredRows).Error; err != nil {
+		t.Fatalf("load delivered selections after retry submit: %v", err)
+	}
+	if len(deliveredRows) != len(deliveredOrderIDs) {
+		t.Fatalf("expected %d delivered rows, got %d", len(deliveredOrderIDs), len(deliveredRows))
+	}
+	for _, item := range deliveredRows {
+		if item.DeliveryStatus != enum.OrderDeliveryStatusDelivered || !item.DeliveryEffective || item.DeliveredStageCode == nil || *item.DeliveredStageCode != state.StageCodeQ1 {
+			t.Fatalf("expected current delivered order %d to remain effective Q1 delivery, got %#v", item.OrderID, item)
+		}
+	}
+
+	selectionRepo := repository.NewGroupOrderSelectionRepository(tx)
+	details, err := selectionRepo.ListEffectiveDeliveryDetailsAfterTarget(ctx, groupID, yearNo, state.StageCodeQ1)
+	if err != nil {
+		t.Fatalf("list effective deliveries before second rollback: %v", err)
+	}
+	if len(details) != len(deliveredOrderIDs) {
+		t.Fatalf("expected second rollback to see only %d current delivered orders, got %#v", len(deliveredOrderIDs), details)
+	}
+	if affected, err := selectionRepo.InvalidateDeliveryAfterTarget(ctx, groupID, yearNo, state.StageCodeQ1, 10002, "integration-admin", now.Add(time.Minute)); err != nil {
+		t.Fatalf("invalidate deliveries for second rollback: %v", err)
+	} else if affected != int64(len(deliveredOrderIDs)) {
+		t.Fatalf("expected second rollback to invalidate %d current delivered orders, got %d", len(deliveredOrderIDs), affected)
+	}
+
+	var stillPlainPendingCount int64
+	if err := tx.WithContext(ctx).
+		Model(&entity.GroupOrderSelection{}).
+		Where("group_id = ? AND year_no = ? AND order_id IN ? AND delivery_status = ? AND delivery_effective = ? AND delivered_stage_code IS NULL AND invalidated_by_rollback_id IS NULL", groupID, yearNo, staleInvalidatedOrderIDs, enum.OrderDeliveryStatusSelected, true).
+		Count(&stillPlainPendingCount).Error; err != nil {
+		t.Fatalf("count stale rows after second rollback: %v", err)
+	}
+	if stillPlainPendingCount != int64(len(staleInvalidatedOrderIDs)) {
+		t.Fatalf("expected old stale orders to stay plain pending after second rollback, got %d", stillPlainPendingCount)
+	}
+}
+
+func createOperatingLinkedOrderSelections(t *testing.T, ctx context.Context, tx *gorm.DB, groupID int64, yearNo int, startCardNo int, count int, deliveryStatus string, deliveryEffective bool, deliveredStageCode *string, now time.Time) []int64 {
+	t.Helper()
+
+	orderIDs := make([]int64, 0, count)
+	seed := nextIntegrationUniqueSeed()
+	for i := 0; i < count; i++ {
+		cardNo := startCardNo + i
+		amount := float64(10 + cardNo)
+		orderPayloadJSON := []byte("{}")
+		selectedGroupID := groupID
+		order := entity.OrderPool{
+			OrderTemplateVersion: OrderTemplateVersionVIPServiceV1,
+			YearNo:               yearNo,
+			MarketCode:           enum.MarketCodeLocal,
+			OrderType:            enum.OrderTypeAgencyInspection,
+			SegmentCode:          "LOCAL_AGENCY_INSPECTION",
+			CardSequenceNo:       cardNo,
+			BusinessOrderNo:      fmt.Sprintf("IT-DELIVERY-%d-%d", seed, cardNo),
+			OrderAmount:          amount,
+			OrderQuantity:        1,
+			UnitPrice:            amount,
+			AccountTerm:          1,
+			PoolStatus:           enum.OrderPoolStatusSelected,
+			SelectedGroupID:      &selectedGroupID,
+			SelectedAt:           &now,
+			OrderPayloadJSON:     orderPayloadJSON,
+			BaseEntity: entity.BaseEntity{
+				Creator:    "integration-test",
+				CreateTime: now,
+				Updater:    "integration-test",
+				UpdateTime: now,
+			},
+		}
+		if err := tx.WithContext(ctx).Create(&order).Error; err != nil {
+			t.Fatalf("create order pool fixture: %v", err)
+		}
+
+		var deliveredAt *time.Time
+		if deliveredStageCode != nil {
+			deliveredAt = &now
+		}
+		var invalidatedByRollbackID *int64
+		var invalidatedAt *time.Time
+		if !deliveryEffective {
+			rollbackID := int64(10000)
+			invalidatedByRollbackID = &rollbackID
+			invalidatedAt = &now
+		}
+		selection := entity.GroupOrderSelection{
+			OrderTemplateVersion:    OrderTemplateVersionVIPServiceV1,
+			GroupID:                 groupID,
+			YearNo:                  yearNo,
+			MarketCode:              enum.MarketCodeLocal,
+			OrderType:               enum.OrderTypeAgencyInspection,
+			RoundNo:                 cardNo,
+			OrderID:                 order.ID,
+			SelectionStatus:         enum.OrderSelectionStatusSelected,
+			DeliveryStatus:          deliveryStatus,
+			DeliveredStageCode:      deliveredStageCode,
+			DeliveredAt:             deliveredAt,
+			DeliveryEffective:       deliveryEffective,
+			InvalidatedByRollbackID: invalidatedByRollbackID,
+			InvalidatedAt:           invalidatedAt,
+			SelectedAt:              now,
+			BaseEntity: entity.BaseEntity{
+				Creator:    "integration-test",
+				CreateTime: now,
+				Updater:    "integration-test",
+				UpdateTime: now,
+			},
+		}
+		if err := tx.WithContext(ctx).Create(&selection).Error; err != nil {
+			t.Fatalf("create group order selection fixture: %v", err)
+		}
+		orderIDs = append(orderIDs, order.ID)
+	}
+	return orderIDs
+}
+
 func openIntegrationMySQL(t *testing.T) *gorm.DB {
 	t.Helper()
 

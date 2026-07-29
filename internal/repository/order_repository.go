@@ -1432,6 +1432,25 @@ func (r *GroupOrderSelectionRepository) MarkUnfinishedByGroupYear(ctx context.Co
 		}).Error
 }
 
+func (r *GroupOrderSelectionRepository) ClearInvalidatedDeliveryDraftByStage(ctx context.Context, groupID int64, yearNo int, stageCode string, operatorName string, operateTime time.Time) (int64, error) {
+	if stageCode == "" {
+		return 0, nil
+	}
+	tx := r.db.WithContext(ctx).
+		Model(&entity.GroupOrderSelection{}).
+		Where("group_id = ? AND year_no = ? AND delivery_status = ? AND delivery_effective = ? AND delivered_stage_code = ?", groupID, yearNo, enum.OrderDeliveryStatusSelected, false, stageCode).
+		Updates(map[string]any{
+			"delivery_effective":         true,
+			"delivered_stage_code":       gorm.Expr("NULL"),
+			"delivered_at":               gorm.Expr("NULL"),
+			"invalidated_by_rollback_id": gorm.Expr("NULL"),
+			"invalidated_at":             gorm.Expr("NULL"),
+			"updater":                    operatorName,
+			"update_time":                operateTime,
+		})
+	return tx.RowsAffected, tx.Error
+}
+
 func (r *GroupOrderSelectionRepository) InvalidateDeliveryAfterTarget(ctx context.Context, groupID int64, targetYearNo int, targetStageCode string, rollbackID int64, operatorName string, operateTime time.Time) (int64, error) {
 	query := r.db.WithContext(ctx).
 		Model(&entity.GroupOrderSelection{}).
