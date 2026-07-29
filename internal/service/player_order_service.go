@@ -16,7 +16,6 @@ import (
 
 	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
-	"sandbox-game/internal/model/payload"
 	"sandbox-game/internal/repository"
 	"sandbox-game/internal/state"
 )
@@ -59,7 +58,6 @@ var (
 	ErrOrderAdminSkipReasonRequired     = errors.New("order admin skip reason required")
 	ErrOrderDeliveryStageInvalid        = errors.New("order delivery stage invalid")
 	ErrOrderDeliveryOrderInvalid        = errors.New("order delivery order invalid")
-	ErrOrderDeliveryRevenueMismatch     = errors.New("order delivery revenue mismatch")
 	ErrOrderDeliveryDisabled            = errors.New("order delivery disabled")
 	ErrOrderPrerequisiteIncomplete      = errors.New("order prerequisite incomplete")
 )
@@ -229,18 +227,20 @@ type PlayerOrderSequenceView struct {
 }
 
 type PlayerOrderPoolItem struct {
-	OrderID            int64          `json:"orderId"`
-	BusinessOrderNo    string         `json:"businessOrderNo"`
-	CardSequenceNo     int            `json:"cardSequenceNo"`
-	OrderAmount        float64        `json:"orderAmount"`
-	OrderQuantity      float64        `json:"orderQuantity"`
-	UnitPrice          float64        `json:"unitPrice"`
-	AccountTerm        int            `json:"accountTerm"`
-	PoolStatus         string         `json:"poolStatus"`
-	RoundNo            int            `json:"roundNo,omitempty"`
-	DeliveryStatus     string         `json:"deliveryStatus,omitempty"`
-	DeliveredStageCode *string        `json:"deliveredStageCode,omitempty"`
-	OrderPayload       map[string]any `json:"orderPayload,omitempty"`
+	OrderID                 int64          `json:"orderId"`
+	BusinessOrderNo         string         `json:"businessOrderNo"`
+	CardSequenceNo          int            `json:"cardSequenceNo"`
+	OrderAmount             float64        `json:"orderAmount"`
+	OrderQuantity           float64        `json:"orderQuantity"`
+	UnitPrice               float64        `json:"unitPrice"`
+	AccountTerm             int            `json:"accountTerm"`
+	PoolStatus              string         `json:"poolStatus"`
+	RoundNo                 int            `json:"roundNo,omitempty"`
+	DeliveryStatus          string         `json:"deliveryStatus,omitempty"`
+	DeliveredStageCode      *string        `json:"deliveredStageCode,omitempty"`
+	DeliveryEffective       *bool          `json:"deliveryEffective,omitempty"`
+	InvalidatedByRollbackID *int64         `json:"invalidatedByRollbackId,omitempty"`
+	OrderPayload            map[string]any `json:"orderPayload,omitempty"`
 }
 
 type SubmitMarketInvestmentCommand struct {
@@ -305,16 +305,18 @@ type DeliverOrdersCommand struct {
 	YearNo       int
 	StageCode    string
 	OrderIDs     []int64
+	OperatorID   int64
 	OperatorName string
 }
 
 type DeliverOrdersResult struct {
-	GroupID         int64     `json:"groupId"`
-	YearNo          int       `json:"yearNo"`
-	StageCode       string    `json:"stageCode"`
-	OrderIDs        []int64   `json:"orderIds"`
-	DeliveredAmount float64   `json:"deliveredAmount"`
-	DeliveredAt     time.Time `json:"deliveredAt"`
+	GroupID           int64     `json:"groupId"`
+	YearNo            int       `json:"yearNo"`
+	StageCode         string    `json:"stageCode"`
+	OrderIDs          []int64   `json:"orderIds"`
+	DeliveredAmount   float64   `json:"deliveredAmount"`
+	StageSalesRevenue float64   `json:"stageSalesRevenue"`
+	DeliveredAt       time.Time `json:"deliveredAt"`
 }
 
 type OpenMarketBiddingCommand struct {
@@ -796,8 +798,8 @@ func (s *PlayerOrderCommandService) DeliverOrders(ctx context.Context, cmd Deliv
 		gameConfigRepo := repository.NewGameConfigRepository(tx)
 		groupRepo := repository.NewGroupRepository(tx)
 		groupYearRepo := repository.NewGroupYearStateRepository(tx)
-		operatingRepo := repository.NewOperatingRepository(tx)
 		selectionRepo := repository.NewGroupOrderSelectionRepository(tx)
+		revisionRepo := repository.NewGroupOrderDeliveryRevisionRepository(tx)
 
 		if err := validateFormalOrderYear(ctx, gameConfigRepo, cmd.YearNo); err != nil {
 			return err
@@ -833,46 +835,30 @@ func (s *PlayerOrderCommandService) DeliverOrders(ctx context.Context, cmd Deliv
 			if item.DeliveryStatus != enum.OrderDeliveryStatusSelected {
 				return ErrOrderDeliveryOrderInvalid
 			}
-			if item.DeliveredStageCode != nil {
-				return ErrOrderDeliveryOrderInvalid
-			}
 			selectionIDs = append(selectionIDs, item.SelectionID)
 			deliveredAmount += item.OrderAmount
-		}
-
-		draft, err := operatingRepo.FindDraft(ctx, cmd.GroupID, cmd.YearNo)
-		if err != nil {
-			if repository.IsRecordNotFound(err) {
-				return ErrOrderDeliveryRevenueMismatch
-			}
-			return fmt.Errorf("load operating draft: %w", err)
-		}
-		var operatingPayload payload.OperatingPayload
-		if len(draft.OperatingPayload) > 0 {
-			if err := json.Unmarshal(draft.OperatingPayload, &operatingPayload); err != nil {
-				return fmt.Errorf("unmarshal operating draft: %w", err)
-			}
-		} else {
-			operatingPayload = payload.NewOperatingPayload()
-		}
-		currentRevenue := extractOperatingQuarterSalesRevenue(operatingPayload.Normalize(), stageCode)
-		deliveredInStage, err := selectionRepo.SumDeliveredAmountByStage(ctx, cmd.GroupID, cmd.YearNo, stageCode)
-		if err != nil {
-			return fmt.Errorf("sum delivered stage amount: %w", err)
-		}
-		if !sameMoneyAmount(currentRevenue, deliveredInStage+deliveredAmount) {
-			return ErrOrderDeliveryRevenueMismatch
 		}
 		if err := selectionRepo.MarkDeliveredBySelectionIDs(ctx, selectionIDs, stageCode, operatorName, now); err != nil {
 			return fmt.Errorf("mark orders delivered: %w", err)
 		}
+		for _, item := range details {
+			revision := buildOrderDeliveryRevision(item, enum.OrderDeliveryRevisionTypeDelivered, stageCode, nil, cmd.OperatorID, operatorName, now, "订单交付后自动计入季度销售收入")
+			if err := revisionRepo.Create(ctx, revision); err != nil {
+				return fmt.Errorf("create delivery revision: %w", err)
+			}
+		}
+		stageSalesRevenue, err := selectionRepo.SumDeliveredAmountByStage(ctx, cmd.GroupID, cmd.YearNo, stageCode)
+		if err != nil {
+			return fmt.Errorf("sum delivered stage amount: %w", err)
+		}
 		result = &DeliverOrdersResult{
-			GroupID:         cmd.GroupID,
-			YearNo:          cmd.YearNo,
-			StageCode:       stageCode,
-			OrderIDs:        orderIDs,
-			DeliveredAmount: deliveredAmount,
-			DeliveredAt:     now,
+			GroupID:           cmd.GroupID,
+			YearNo:            cmd.YearNo,
+			StageCode:         stageCode,
+			OrderIDs:          orderIDs,
+			DeliveredAmount:   deliveredAmount,
+			StageSalesRevenue: stageSalesRevenue,
+			DeliveredAt:       now,
 		}
 		return nil
 	}); err != nil {
@@ -2033,6 +2019,9 @@ func buildPlayerSegmentView(groupID int64, state entity.MarketBiddingState, bid 
 				copyItem.RoundNo = selection.RoundNo
 				copyItem.DeliveryStatus = selection.DeliveryStatus
 				copyItem.DeliveredStageCode = selection.DeliveredStageCode
+				deliveryEffective := selection.DeliveryEffective
+				copyItem.DeliveryEffective = &deliveryEffective
+				copyItem.InvalidatedByRollbackID = selection.InvalidatedByRollbackID
 				selectedOrders = append(selectedOrders, copyItem)
 				if selectedOrder == nil {
 					first := copyItem
@@ -2258,86 +2247,71 @@ func uniquePositiveOrderIDs(source []int64) []int64 {
 	return result
 }
 
-func extractOperatingQuarterSalesRevenue(value payload.OperatingPayload, stageCode string) float64 {
-	quarterKey := strings.ToLower(stageCode)
-	for key, record := range value.Quarter.DeliverySettlement {
-		if strings.EqualFold(key, quarterKey) {
-			return sumMatchedDeliveryNumbers(record, "salesRevenue", "deliverySalesRevenue", "orderSalesRevenue", "o38")
-		}
+func buildOrderDeliveryRevision(item repository.GroupSelectedOrderDetail, revisionType string, stageCode string, rollbackLogID *int64, operatorID int64, operatorName string, operateTime time.Time, remarkText string) *entity.GroupOrderDeliveryRevision {
+	var stageCodePtr *string
+	normalizedStageCode := strings.ToUpper(strings.TrimSpace(stageCode))
+	if normalizedStageCode != "" {
+		stageCodePtr = &normalizedStageCode
 	}
-	return 0
-}
-
-func sumMatchedDeliveryNumbers(source map[string]any, keys ...string) float64 {
-	if len(source) == 0 {
-		return 0
+	var operatorIDPtr *int64
+	if operatorID > 0 {
+		operatorIDPtr = &operatorID
 	}
-	normalizedKeys := make([]string, 0, len(keys))
-	for _, key := range keys {
-		normalizedKeys = append(normalizedKeys, normalizeSearchableOrderKey(key))
+	var remark *string
+	if strings.TrimSpace(remarkText) != "" {
+		trimmed := strings.TrimSpace(remarkText)
+		remark = &trimmed
 	}
-	total := 0.0
-	for key, value := range source {
-		if !searchableOrderKeyMatches(key, normalizedKeys) {
-			continue
-		}
-		total += numericOrderValue(value)
-	}
-	return total
-}
-
-func searchableOrderKeyMatches(key string, normalizedKeys []string) bool {
-	normalized := normalizeSearchableOrderKey(key)
-	if normalized == "" {
-		return false
-	}
-	for _, item := range normalizedKeys {
-		if normalized == item || strings.Contains(normalized, item) || strings.Contains(item, normalized) {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeSearchableOrderKey(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	var builder strings.Builder
-	for _, ch := range value {
-		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') {
-			builder.WriteRune(ch)
-		}
-	}
-	return builder.String()
-}
-
-func numericOrderValue(value any) float64 {
-	switch typed := value.(type) {
-	case float64:
-		return typed
-	case float32:
-		return float64(typed)
-	case int:
-		return float64(typed)
-	case int64:
-		return float64(typed)
-	case int32:
-		return float64(typed)
-	case json.Number:
-		result, _ := typed.Float64()
-		return result
-	case string:
-		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
-		if err != nil {
-			return 0
-		}
-		return parsed
-	default:
-		return 0
+	effectiveAfter := revisionType == enum.OrderDeliveryRevisionTypeDelivered
+	return &entity.GroupOrderDeliveryRevision{
+		SelectionID:     item.SelectionID,
+		GroupID:         item.GroupID,
+		YearNo:          item.YearNo,
+		OrderID:         item.OrderID,
+		RevisionType:    revisionType,
+		StageCode:       stageCodePtr,
+		OrderAmount:     item.OrderAmount,
+		EffectiveBefore: item.DeliveryEffective,
+		EffectiveAfter:  effectiveAfter,
+		RollbackLogID:   rollbackLogID,
+		OperatedByID:    operatorIDPtr,
+		OperatedByName:  operatorName,
+		OperatedAt:      operateTime,
+		Remark:          remark,
+		BaseEntity: entity.BaseEntity{
+			Creator:    operatorName,
+			CreateTime: operateTime,
+			Updater:    operatorName,
+			UpdateTime: operateTime,
+		},
 	}
 }
 
-func sameMoneyAmount(left float64, right float64) bool {
-	return math.Abs(left-right) < 0.000001
+func createOrderDeliveryInvalidationRevisions(
+	ctx context.Context,
+	repo *repository.GroupOrderDeliveryRevisionRepository,
+	items []repository.GroupSelectedOrderDetail,
+	rollbackLogID int64,
+	operatorID int64,
+	operatorName string,
+	operateTime time.Time,
+	remarkText string,
+) error {
+	if repo == nil || len(items) == 0 {
+		return nil
+	}
+	rollbackID := rollbackLogID
+	for _, item := range items {
+		stageCode := ""
+		if item.DeliveredStageCode != nil {
+			stageCode = *item.DeliveredStageCode
+		}
+		revision := buildOrderDeliveryRevision(item, enum.OrderDeliveryRevisionTypeInvalidated, stageCode, &rollbackID, operatorID, operatorName, operateTime, remarkText)
+		if err := repo.Create(ctx, revision); err != nil {
+			return fmt.Errorf("create order delivery invalidation revision for selection %d: %w", item.SelectionID, err)
+		}
+	}
+	return nil
 }
 
 func defaultOrderMarkets() []struct {

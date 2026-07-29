@@ -342,8 +342,16 @@
           <tr>
             <th class="row-head">43</th>
             <td class="note-cell item-label">{{ labels.deliveryRevenueLabel }}</td>
-            <td v-for="quarter in quarterList" :key="`sales-${quarter.key}`" :class="editableCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))">
+            <td
+              v-for="quarter in quarterList"
+              :key="`sales-${quarter.key}`"
+              :class="deliverySalesRevenueCellClass(quarter.scope, getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))"
+            >
+              <span v-if="isOrderSalesRevenueLinked()" class="system-linked-value">
+                {{ displayLinkedSalesRevenue(quarter.key) }}
+              </span>
               <input
+                v-else
                 :value="displayCell(getQuarterFieldValue('deliverySettlement', quarter.key, 'salesRevenue'))"
                 :disabled="!isScopeEditable(quarter.scope)"
                 inputmode="numeric"
@@ -856,6 +864,21 @@ function editableCellClass(scope: string, value?: unknown) {
     return 'invalid-draft-cell'
   }
   return 'locked-cell'
+}
+
+function isOrderSalesRevenueLinked() {
+  return Number(props.modelValue.derived?.values?.orderSalesRevenueLinked ?? 0) === 1
+}
+
+function deliverySalesRevenueCellClass(scope: string, value?: unknown) {
+  if (isOrderSalesRevenueLinked()) {
+    return isScopeInvalidDraft(scope) ? 'linked-order-cell invalid-draft-cell' : 'linked-order-cell'
+  }
+  return editableCellClass(scope, value)
+}
+
+function displayLinkedSalesRevenue(quarterKey: string) {
+  return formatNumber(getQuarterFieldValue('deliverySettlement', quarterKey, 'salesRevenue'))
 }
 
 function isAdminIssuedExtraField(fieldKey: string) {
@@ -1504,6 +1527,19 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
 
 .linked-order-cell input {
   color: inherit;
+}
+
+.system-linked-value {
+  display: block;
+  min-height: var(--operating-input-min-height);
+  line-height: var(--operating-input-min-height);
+  padding: 8px 10px;
+  box-sizing: border-box;
+  color: #1f4f82;
+  font-size: var(--operating-body-font-size);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .manual-integer-invalid-cell {

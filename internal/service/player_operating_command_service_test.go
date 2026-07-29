@@ -707,6 +707,7 @@ func ensureIntegrationRollbackTables(t *testing.T, db *gorm.DB) {
 		&entity.StateSnapshot{},
 		&entity.StateSnapshotPayload{},
 		&entity.RollbackLog{},
+		&entity.GroupOrderDeliveryRevision{},
 	); err != nil {
 		t.Fatalf("ensure rollback tables: %v", err)
 	}

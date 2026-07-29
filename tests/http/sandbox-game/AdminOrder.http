@@ -283,7 +283,7 @@ X-Group-Id: {{groupOneId}}
 }
 
 ### 玩家 1：交付订单
-### 前提：当前经营季度为 Q1，且经营草稿中 Q1 销售收入等于本次交付订单金额合计
+### 前提：当前经营季度为 Q1；交付成功后系统按当前有效交付订单金额自动生成 Q1 销售收入
 POST {{baseUrl}}/player-order/deliver-orders
 Content-Type: application/json
 X-Role-Type: {{groupRole}}

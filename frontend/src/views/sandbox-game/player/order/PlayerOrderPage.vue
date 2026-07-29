@@ -238,9 +238,17 @@
 
                 <div v-if="visibleSegment.ordersVisible && visibleSegment.selectedOrders.length" class="selected-order">
                   <strong>本组已选订单</strong>
-                  <div v-for="order in visibleSegment.selectedOrders" :key="order.orderId" class="selected-order-row">
-                    <span>第 {{ order.roundNo }} 轮 · {{ formatOrderNo(order) }} · 金额 {{ formatIntegerAmount(order.orderAmount) }} · 账期 {{ order.accountTerm }} 季度</span>
-                    <em>{{ formatDeliveryStatus(order.deliveryStatus ?? '') }}</em>
+                  <div
+                    v-for="order in visibleSegment.selectedOrders"
+                    :key="order.orderId"
+                    class="selected-order-row"
+                    :class="{ delivered: isDeliveredOrder(order), invalidated: isInvalidatedDeliveryOrder(order) }"
+                  >
+                    <span>
+                      第 {{ order.roundNo }} 轮 · {{ formatOrderNo(order) }} · 金额 {{ formatIntegerAmount(order.orderAmount) }} · 账期 {{ order.accountTerm }} 季度
+                      <small v-if="isInvalidatedDeliveryOrder(order)">原 {{ formatDeliveryStage(order.deliveredStageCode || '') }} 交付已失效，可重新提交</small>
+                    </span>
+                    <em>{{ formatOrderDeliveryText(order) }}</em>
                   </div>
                 </div>
 
@@ -300,12 +308,13 @@
             <section v-if="hasVisibleOrderDetails" class="delivery-panel">
               <div class="panel-head">
                 <div>
-                  <strong>本组待交付订单</strong>
+                  <strong>本组订单交付</strong>
+                  <span>待交付订单可选择季度后批量交付；已交付订单保留展示。</span>
                 </div>
               </div>
               <section v-if="pendingDeliveryOrders.length === 0" class="empty-state nested">
                 <strong>暂无待交付订单</strong>
-                <span>已选订单会在这里集中展示。</span>
+                <span>已选但未交付的订单会在这里集中展示。</span>
               </section>
               <template v-else>
                 <div class="delivery-toolbar">
@@ -329,14 +338,33 @@
                     v-for="item in pendingDeliveryOrders"
                     :key="item.orderId"
                     class="delivery-row"
+                    :class="{ invalidated: item.deliveryEffective === false && !!item.deliveredStageCode }"
                   >
                     <input v-model="selectedDeliveryOrderIds" type="checkbox" :value="item.orderId">
                     <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
                     <strong>{{ item.businessOrderNo || `#${item.orderId}` }}</strong>
                     <em>{{ formatIntegerAmount(item.orderAmount) }}</em>
+                    <small v-if="item.deliveryEffective === false && item.deliveredStageCode">
+                      原 {{ formatDeliveryStage(item.deliveredStageCode) }} 交付已失效，可重新交付
+                    </small>
                   </label>
                 </div>
               </template>
+              <section v-if="deliveredOrders.length" class="delivered-section">
+                <strong>已交付订单</strong>
+                <div class="delivery-list delivered-list">
+                  <div
+                    v-for="item in deliveredOrders"
+                    :key="item.orderId"
+                    class="delivery-row delivered-row"
+                  >
+                    <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
+                    <strong>{{ item.businessOrderNo || `#${item.orderId}` }}</strong>
+                    <em>{{ formatIntegerAmount(item.orderAmount) }}</em>
+                    <small>已交付 {{ formatDeliveryStage(item.deliveredStageCode || '') }}，已计入对应季度销售收入</small>
+                  </div>
+                </div>
+              </section>
             </section>
           </section>
         </template>
@@ -480,13 +508,31 @@ const pendingDeliveryOrders = computed(() =>
   markets.value.flatMap((market) =>
     market.segments
       .flatMap((segment) => segment.selectedOrders
-        .filter((order) => order.deliveryStatus === 'SELECTED')
+        .filter((order) => isPendingDeliveryOrder(order))
         .map((order) => ({
           marketName: segment.marketName,
           orderTypeName: segment.orderTypeName,
           orderId: order.orderId,
           businessOrderNo: order.businessOrderNo,
           orderAmount: order.orderAmount,
+          deliveredStageCode: order.deliveredStageCode,
+          deliveryEffective: order.deliveryEffective,
+          invalidatedByRollbackId: order.invalidatedByRollbackId,
+        }))),
+  ),
+)
+const deliveredOrders = computed(() =>
+  markets.value.flatMap((market) =>
+    market.segments
+      .flatMap((segment) => segment.selectedOrders
+        .filter((order) => isDeliveredOrder(order))
+        .map((order) => ({
+          marketName: segment.marketName,
+          orderTypeName: segment.orderTypeName,
+          orderId: order.orderId,
+          businessOrderNo: order.businessOrderNo,
+          orderAmount: order.orderAmount,
+          deliveredStageCode: order.deliveredStageCode,
         }))),
   ),
 )
@@ -519,6 +565,11 @@ watch(
     }
   },
 )
+
+watch(pendingDeliveryOrders, (orders) => {
+  const pendingIds = new Set(orders.map((item) => item.orderId))
+  selectedDeliveryOrderIds.value = selectedDeliveryOrderIds.value.filter((orderId) => pendingIds.has(orderId))
+})
 
 onBeforeUnmount(() => {
   stopPolling()
@@ -801,6 +852,28 @@ function formatCompletionReasonShort(value?: string | null) {
     NO_ELIGIBLE_PARTICIPANTS: '无可参与小组',
   }
   return value ? map[value] ?? '选单已结束' : '选单已结束'
+}
+
+function isInvalidatedDeliveryOrder(order: PlayerOrderPoolItem) {
+  return order.deliveryStatus === 'SELECTED' && order.deliveryEffective === false && !!order.deliveredStageCode
+}
+
+function isDeliveredOrder(order: PlayerOrderPoolItem) {
+  return order.deliveryStatus === 'DELIVERED' && order.deliveryEffective !== false
+}
+
+function isPendingDeliveryOrder(order: PlayerOrderPoolItem) {
+  return order.deliveryStatus === 'SELECTED'
+}
+
+function formatOrderDeliveryText(order: PlayerOrderPoolItem) {
+  if (isInvalidatedDeliveryOrder(order)) {
+    return `待交付（原 ${formatDeliveryStage(order.deliveredStageCode || '')} 已失效）`
+  }
+  if (isDeliveredOrder(order)) {
+    return `已交付 ${formatDeliveryStage(order.deliveredStageCode || '')}`
+  }
+  return formatDeliveryStatus(order.deliveryStatus ?? '')
 }
 
 function formatDeliveryStatus(value: string) {
@@ -1434,6 +1507,27 @@ function formatDeliveryStage(value: string) {
   white-space: nowrap;
 }
 
+.selected-order-row small {
+  display: block;
+  margin-top: 4px;
+  color: #a16207;
+  font-size: 12px;
+}
+
+.selected-order-row.delivered {
+  color: #64748b;
+}
+
+.selected-order-row.invalidated {
+  background: #fff8e6;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.selected-order-row.invalidated em {
+  color: #b45309;
+}
+
 .delivery-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1498,6 +1592,45 @@ function formatDeliveryStage(value: string) {
   color: var(--success);
   font-style: normal;
   font-weight: 700;
+}
+
+.delivery-row small {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.delivery-row.invalidated {
+  border-color: #f0c36d;
+  background: #fff8e6;
+}
+
+.delivery-row.invalidated small {
+  color: #a16207;
+}
+
+.delivered-section {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.delivered-section > strong {
+  display: block;
+  padding: 0 16px 10px;
+}
+
+.delivered-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  background: #f5f7fa;
+  color: #64748b;
+}
+
+.delivered-row em {
+  color: #64748b;
+}
+
+.delivered-row small {
+  grid-column: 1 / -1;
 }
 
 .order-grid {

@@ -14,6 +14,7 @@ import (
 
 	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
+	"sandbox-game/internal/model/payload"
 	"sandbox-game/internal/repository"
 	"sandbox-game/internal/state"
 )
@@ -295,6 +296,15 @@ func buildGroupSnapshotPayload(ctx context.Context, db *gorm.DB, cmd CreateGroup
 	if err != nil {
 		return nil, fmt.Errorf("load snapshot order selections: %w", err)
 	}
+	orderLinkService := NewOrderOperatingLinkService(
+		marketBidRepo,
+		repository.NewMarketBiddingStateRepository(db),
+		orderSelectionRepo,
+	)
+	linkedOperatingDrafts, linkedStageSubmissions, err := applyOrderSalesRevenueToSnapshotPayloads(ctx, orderLinkService, cmd.GroupID, operatingDrafts, stageSubmissions)
+	if err != nil {
+		return nil, err
+	}
 
 	targetStageCode := cmd.StageCode
 	if targetStageCode == "" {
@@ -304,8 +314,8 @@ func buildGroupSnapshotPayload(ctx context.Context, db *gorm.DB, cmd CreateGroup
 		Group:                *group,
 		TargetYearState:      *targetYearState,
 		YearStatesFromTarget: yearStates,
-		OperatingDrafts:      operatingDrafts,
-		StageSubmissions:     stageSubmissions,
+		OperatingDrafts:      linkedOperatingDrafts,
+		StageSubmissions:     linkedStageSubmissions,
 		Reports:              reports,
 		ReportSubmissions:    reportSubmissions,
 		SummarySnapshots:     summarySnapshots,
@@ -327,6 +337,58 @@ func buildGroupSnapshotPayload(ctx context.Context, db *gorm.DB, cmd CreateGroup
 		PayloadPreview:  buildGroupSnapshotPayloadPreview(groupState),
 		Metadata:        mergeSnapshotMetadata(cmd.Metadata, map[string]any{"useForRestore": cmd.UseForRestore}),
 	}, nil
+}
+
+func applyOrderSalesRevenueToSnapshotPayloads(
+	ctx context.Context,
+	orderLinkService *OrderOperatingLinkService,
+	groupID int64,
+	operatingDrafts []entity.GroupOperatingDraft,
+	stageSubmissions []entity.GroupStageSubmission,
+) ([]entity.GroupOperatingDraft, []entity.GroupStageSubmission, error) {
+	linkedDrafts := make([]entity.GroupOperatingDraft, len(operatingDrafts))
+	copy(linkedDrafts, operatingDrafts)
+	for i := range linkedDrafts {
+		if linkedDrafts[i].YearNo <= 0 || len(linkedDrafts[i].OperatingPayload) == 0 {
+			continue
+		}
+		linkedPayload, err := applyOrderSalesRevenueToSnapshotPayload(ctx, orderLinkService, groupID, linkedDrafts[i].YearNo, linkedDrafts[i].OperatingPayload)
+		if err != nil {
+			return nil, nil, fmt.Errorf("link snapshot operating draft revenue: %w", err)
+		}
+		linkedDrafts[i].OperatingPayload = linkedPayload
+	}
+
+	linkedSubmissions := make([]entity.GroupStageSubmission, len(stageSubmissions))
+	copy(linkedSubmissions, stageSubmissions)
+	for i := range linkedSubmissions {
+		if linkedSubmissions[i].YearNo <= 0 || len(linkedSubmissions[i].OperatingPayloadSnapshot) == 0 {
+			continue
+		}
+		linkedPayload, err := applyOrderSalesRevenueToSnapshotPayload(ctx, orderLinkService, groupID, linkedSubmissions[i].YearNo, linkedSubmissions[i].OperatingPayloadSnapshot)
+		if err != nil {
+			return nil, nil, fmt.Errorf("link snapshot stage submission revenue: %w", err)
+		}
+		linkedSubmissions[i].OperatingPayloadSnapshot = linkedPayload
+	}
+
+	return linkedDrafts, linkedSubmissions, nil
+}
+
+func applyOrderSalesRevenueToSnapshotPayload(ctx context.Context, orderLinkService *OrderOperatingLinkService, groupID int64, yearNo int, rawPayload []byte) ([]byte, error) {
+	var operatingPayload payload.OperatingPayload
+	if err := json.Unmarshal(rawPayload, &operatingPayload); err != nil {
+		return nil, fmt.Errorf("unmarshal operating payload: %w", err)
+	}
+	linkedPayload, _, err := orderLinkService.ApplyFormalYearValues(ctx, groupID, yearNo, operatingPayload)
+	if err != nil {
+		return nil, err
+	}
+	next, err := json.Marshal(linkedPayload.Normalize())
+	if err != nil {
+		return nil, fmt.Errorf("marshal linked operating payload: %w", err)
+	}
+	return next, nil
 }
 
 func mergeSnapshotMetadata(source map[string]any, required map[string]any) map[string]any {

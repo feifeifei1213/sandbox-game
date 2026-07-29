@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -430,35 +431,33 @@ func TestOrderWorkflowCoversGenerationSequenceSelectionDeliveryAndUnfinished(t *
 	firstDeliveredOrderID := firstSelection.OrderID
 	firstDeliveredAmount := orderAmountByID(t, localAgencyOrders, firstDeliveredOrderID)
 	saveOperatingDraft(t, ctx, tx, groupOneID, yearNo, enum.StageStatusQ1Open, buildQ1PayloadWithRevenue(0))
-	if _, err := playerOrderService.DeliverOrders(ctx, DeliverOrdersCommand{
+	deliverResult, err := playerOrderService.DeliverOrders(ctx, DeliverOrdersCommand{
 		GroupID:      groupOneID,
 		YearNo:       yearNo,
 		StageCode:    state.StageCodeQ1,
 		OrderIDs:     []int64{firstDeliveredOrderID},
 		OperatorName: "group-one",
-	}); !errors.Is(err, ErrOrderDeliveryRevenueMismatch) {
-		t.Fatalf("expected delivery revenue mismatch to be rejected, got %v", err)
+	})
+	if err != nil {
+		t.Fatalf("deliver order with system generated revenue: %v", err)
 	}
-	saveOperatingDraft(t, ctx, tx, groupOneID, yearNo, enum.StageStatusQ1Open, buildQ1PayloadWithRevenue(firstDeliveredAmount))
-	if _, err := playerOrderService.DeliverOrders(ctx, DeliverOrdersCommand{
-		GroupID:      groupOneID,
-		YearNo:       yearNo,
-		StageCode:    state.StageCodeQ1,
-		OrderIDs:     []int64{firstDeliveredOrderID},
-		OperatorName: "group-one",
-	}); err != nil {
-		t.Fatalf("deliver order after matching revenue: %v", err)
+	if deliverResult.DeliveredAmount != firstDeliveredAmount || deliverResult.StageSalesRevenue != firstDeliveredAmount {
+		t.Fatalf("expected delivery amount and linked stage revenue to be %.2f, got %#v", firstDeliveredAmount, deliverResult)
 	}
 
 	if _, err := operatingCommandService.SubmitStage(ctx, SubmitOperatingStageCommand{
 		GroupID:          groupOneID,
 		YearNo:           yearNo,
 		StageCode:        state.StageCodeQ1,
-		OperatingPayload: buildQ1PayloadWithRevenue(firstDeliveredAmount),
+		OperatingPayload: buildQ1PayloadWithRevenue(0),
 		SubmitterID:      groupOneID,
 		OperatorName:     "group-one",
 	}); err != nil {
 		t.Fatalf("submit Q1 after order prerequisite completed: %v", err)
+	}
+	submittedQ1Revenue := loadSubmittedStageSalesRevenue(t, ctx, tx, groupOneID, yearNo, state.StageCodeQ1)
+	if submittedQ1Revenue != firstDeliveredAmount {
+		t.Fatalf("expected submitted Q1 sales revenue to be linked to %.2f, got %.2f", firstDeliveredAmount, submittedQ1Revenue)
 	}
 
 	setGroupYearStage(t, ctx, tx, groupOneID, yearNo, enum.YearStatusOperating, enum.StageStatusYearEndOpen, enum.ReportStatusLocked, 4)
@@ -1167,6 +1166,45 @@ func saveOperatingDraft(t *testing.T, ctx context.Context, tx *gorm.DB, groupID 
 		OperatorName:     "integration-test",
 	}); err != nil {
 		t.Fatalf("save operating draft fixture: %v", err)
+	}
+}
+
+func loadSubmittedStageSalesRevenue(t *testing.T, ctx context.Context, tx *gorm.DB, groupID int64, yearNo int, stageCode string) float64 {
+	t.Helper()
+
+	submissions, err := repository.NewOperatingRepository(tx).ListStageSubmissions(ctx, groupID, yearNo)
+	if err != nil {
+		t.Fatalf("list stage submissions: %v", err)
+	}
+	for _, item := range submissions {
+		if item.StageCode != stageCode {
+			continue
+		}
+		var operatingPayload payload.OperatingPayload
+		if err := json.Unmarshal(item.OperatingPayloadSnapshot, &operatingPayload); err != nil {
+			t.Fatalf("unmarshal operating payload snapshot: %v", err)
+		}
+		return numericTestValue(operatingPayload.Quarter.DeliverySettlement["q1"]["salesRevenue"])
+	}
+	t.Fatalf("stage submission %s not found", stageCode)
+	return 0
+}
+
+func numericTestValue(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		n, _ := v.Float64()
+		return n
+	default:
+		return 0
 	}
 }
 

@@ -78,6 +78,11 @@ const (
 	OrderDeliveryStatusUnfinished = "UNFINISHED"
 )
 
+const (
+	OrderDeliveryRevisionTypeDelivered   = "DELIVERED"
+	OrderDeliveryRevisionTypeInvalidated = "INVALIDATED"
+)
+
 func IsValidMarketCode(value string) bool {
 	switch value {
 	case MarketCodeLocal, MarketCodeRegional, MarketCodeNational, MarketCodeGlobal:

@@ -701,6 +701,7 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		txAdminActionLogRepo := repository.NewAdminActionLogRepository(tx)
 		txRollbackLogRepo := repository.NewRollbackLogRepository(tx)
 		txOrderSelectionRepo := repository.NewGroupOrderSelectionRepository(tx)
+		txDeliveryRevisionRepo := repository.NewGroupOrderDeliveryRevisionRepository(tx)
 
 		gameConfig, err := txGameConfigRepo.GetCurrent(ctx)
 		if err != nil {
@@ -781,8 +782,15 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		if err := txRollbackLogRepo.Create(ctx, rollbackLogItem); err != nil {
 			return fmt.Errorf("create unlock rollback log: %w", err)
 		}
+		deliveryDetails, err := txOrderSelectionRepo.ListEffectiveDeliveryDetailsAfterTarget(ctx, cmd.GroupID, cmd.YearNo, rollbackTargetStageCode)
+		if err != nil {
+			return fmt.Errorf("load order deliveries before unlock invalidation: %w", err)
+		}
 		if _, err := txOrderSelectionRepo.InvalidateDeliveryAfterTarget(ctx, cmd.GroupID, cmd.YearNo, rollbackTargetStageCode, rollbackLogItem.ID, operatorName, now); err != nil {
 			return fmt.Errorf("invalidate order delivery after unlock: %w", err)
+		}
+		if err := createOrderDeliveryInvalidationRevisions(ctx, txDeliveryRevisionRepo, deliveryDetails, rollbackLogItem.ID, cmd.OperatorID, operatorName, now, "退回重提导致原交付失效"); err != nil {
+			return fmt.Errorf("create order delivery invalidation revisions: %w", err)
 		}
 		if err := txGroupYearRepo.MarkRollbackPending(ctx, cmd.GroupID, cmd.YearNo, cmd.YearNo, rollbackTargetStageCode, rollbackLogItem.ID, operatorName); err != nil {
 			return fmt.Errorf("mark unlock rollback pending: %w", err)

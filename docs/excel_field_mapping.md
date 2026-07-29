@@ -257,8 +257,8 @@
 | `selectedOrderAmount` | `selected_order_amount` | 年度订单页/经营页 | 已选订单金额 | `SYSTEM_DERIVED` | 汇总进入经营页订单总额 |
 | `selectedOrderTotal` | - | 经营页 | 订单总额 | `SYSTEM_DERIVED` | 正式年份由本组全部标段已选订单金额汇总 |
 | `marketInvestmentTotal` | - | 经营页 | 市场投入 | `SYSTEM_DERIVED` | 正式年份由本组当前订单模板全部标段投入汇总 |
-| `orderDeliveryStatus` | `delivery_status` | 年度订单页/经营页 | 交付状态 | `SYSTEM_DERIVED` | `SELECTED / DELIVERED / UNFINISHED` |
-| `deliveredStageCode` | `delivered_stage_code` | 年度订单页/经营页 | 交付季度 | `SYSTEM_DERIVED` | 玩家执行交付操作时绑定当前经营季度 |
+| `orderDeliveryStatus` | `delivery_status` | 年度订单页/经营页 | 当前交付状态 | `SYSTEM_DERIVED` | `SELECTED / DELIVERED / UNFINISHED`；回退或恢复快照后的旧交付只作为历史提示，不直接算当前有效交付 |
+| `deliveredStageCode` | `delivered_stage_code` | 年度订单页/经营页 | 当前有效交付季度 | `SYSTEM_DERIVED` | 玩家执行交付操作时绑定当前经营季度；旧交付失效后，该值只作为历史留痕或修订记录展示 |
 | `pollingIntervalSeconds` | - | 年度订单页 | 自动轮询间隔 | `SYSTEM_DERIVED` | 首版固定 `3` 秒，不做 WebSocket |
 
 ### 4.6.2 订单模块与经营页映射
@@ -267,8 +267,8 @@
 |---|---|---|
 | `marketInvestment` 按 16 个标段汇总 | `beginning.marketBid.marketInvestmentTotal` / 市场投入 | `1年 ~ 最终年` 使用订单模块汇总并只读带入；`0年` 不适用 |
 | `selectedOrderAmount` 按全部标段汇总 | `beginning.marketBid.selectedOrderTotal` / 订单总额 | `1年 ~ 最终年` 使用订单模块汇总；剩余未选订单不计入 |
-| `selectedOrderAmount` 按交付季度汇总 | `quarter.deliverySettlement.salesRevenue` / 交货销售额 | 玩家交付一个或多个完整订单后，该季度销售收入必须匹配交付订单金额合计 |
-| `orderDeliveryStatus` | 年度订单页订单状态 | 经营页交付后回写，年末未交付为 `UNFINISHED` |
+| `effectiveDeliveredOrderAmount` 按交付季度汇总 | `quarter.deliverySettlement.salesRevenue` / 交货销售额 | 正式年份由当前有效已交付订单金额按季度汇总生成，经营页只读展示；不再要求玩家手工销售收入匹配订单金额 |
+| `orderDeliveryStatus` | 年度订单页订单状态 | 待交付订单可操作；已交付订单灰色只读并显示交付季度；回退或恢复快照导致旧交付失效的订单恢复为待交付，并保留历史交付提示 |
 | `accountTerm` | 订单卡片展示 | 首版仅展示，不自动生成或移动经营页应收账款 |
 
 ### 4.7 `OperatingPayload` 建议结构

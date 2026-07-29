@@ -165,19 +165,19 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 	}
 
 	normalizedPayload := cmd.OperatingPayload.Normalize().WithoutDerivedValues()
-	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
-		return nil, err
-	}
-	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
-	if err != nil {
-		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
-	}
 	if cmd.YearNo > 0 && s.orderLinkService != nil {
 		linkedPayload, _, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
 		if linkErr != nil {
 			return nil, fmt.Errorf("apply order operating values: %w", linkErr)
 		}
 		normalizedPayload = linkedPayload
+	}
+	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
+		return nil, err
+	}
+	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
+	if err != nil {
+		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
 	if cmd.YearNo == 0 && calcContext.InitialBaseline != nil {
 		normalizedPayload = applyInitialBaselineDefaultsToOperatingPayload(normalizedPayload, calcContext.InitialBaseline)
@@ -220,13 +220,6 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	}
 
 	normalizedPayload := cmd.OperatingPayload.Normalize().WithoutDerivedValues()
-	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
-		return nil, err
-	}
-	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
-	if err != nil {
-		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
-	}
 	orderPrerequisiteCompleted := cmd.YearNo == 0 || s.orderLinkService == nil
 	if cmd.YearNo > 0 && s.orderLinkService != nil {
 		linkedPayload, values, linkErr := s.orderLinkService.ApplyFormalYearValues(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
@@ -235,6 +228,13 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 		}
 		normalizedPayload = linkedPayload
 		orderPrerequisiteCompleted = values.PrerequisiteCompleted
+	}
+	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
+		return nil, err
+	}
+	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
+	if err != nil {
+		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
 	}
 	calcContext := calcctx.NewCalculationContext(*group, *yearState, *gameConfig).
 		WithOperatingPayload(&normalizedPayload)

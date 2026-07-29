@@ -1333,6 +1333,8 @@ func (r *GroupOrderSelectionRepository) SumSelectedAmountByGroupYearSegment(ctx 
 
 type GroupSelectedOrderDetail struct {
 	SelectionID        int64   `gorm:"column:selection_id"`
+	GroupID            int64   `gorm:"column:group_id"`
+	YearNo             int     `gorm:"column:year_no"`
 	OrderID            int64   `gorm:"column:order_id"`
 	MarketCode         string  `gorm:"column:market_code"`
 	OrderType          string  `gorm:"column:order_type"`
@@ -1350,9 +1352,9 @@ func (r *GroupOrderSelectionRepository) ListSelectedOrderDetailsForUpdate(ctx co
 	if err := r.db.WithContext(ctx).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		Table("sg_group_order_selection AS s").
-		Select("s.id AS selection_id, s.order_id, s.market_code, s.order_type, s.delivery_status, s.delivery_effective, s.delivered_stage_code, p.order_amount").
+		Select("s.id AS selection_id, s.group_id, s.year_no, s.order_id, s.market_code, s.order_type, s.delivery_status, s.delivery_effective, s.delivered_stage_code, p.order_amount").
 		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
-		Where("s.group_id = ? AND s.year_no = ? AND s.order_id IN ? AND s.delivery_effective = ?", groupID, yearNo, orderIDs, true).
+		Where("s.group_id = ? AND s.year_no = ? AND s.order_id IN ?", groupID, yearNo, orderIDs).
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -1373,6 +1375,31 @@ func (r *GroupOrderSelectionRepository) SumDeliveredAmountByStage(ctx context.Co
 		return 0, err
 	}
 	return result.Amount, nil
+}
+
+func (r *GroupOrderSelectionRepository) ListEffectiveDeliveryDetailsAfterTarget(ctx context.Context, groupID int64, targetYearNo int, targetStageCode string) ([]GroupSelectedOrderDetail, error) {
+	query := r.db.WithContext(ctx).
+		Table("sg_group_order_selection AS s").
+		Where("s.group_id = ? AND s.delivery_effective = ? AND s.delivery_status = ?", groupID, true, enum.OrderDeliveryStatusDelivered)
+	if targetStageCode == "" {
+		query = query.Where("s.year_no > ?", targetYearNo)
+	} else if afterStages := rollbackStagesAtOrAfter(targetStageCode); len(afterStages) > 0 {
+		query = query.Where("(s.year_no > ? OR (s.year_no = ? AND s.delivered_stage_code IN ?))", targetYearNo, targetYearNo, afterStages)
+	} else {
+		query = query.Where("s.year_no > ?", targetYearNo)
+	}
+
+	var rows []GroupSelectedOrderDetail
+	if err := query.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("s.id AS selection_id, s.group_id, s.year_no, s.order_id, s.market_code, s.order_type, s.delivery_status, s.delivery_effective, s.delivered_stage_code, p.order_amount").
+		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
+		Order("s.year_no ASC").
+		Order("s.id ASC").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (r *GroupOrderSelectionRepository) MarkDeliveredBySelectionIDs(ctx context.Context, selectionIDs []int64, stageCode string, operatorName string, operateTime time.Time) error {
@@ -1417,6 +1444,7 @@ func (r *GroupOrderSelectionRepository) InvalidateDeliveryAfterTarget(ctx contex
 		query = query.Where("year_no > ?", targetYearNo)
 	}
 	tx := query.Updates(map[string]any{
+		"delivery_status":            enum.OrderDeliveryStatusSelected,
 		"delivery_effective":         false,
 		"invalidated_by_rollback_id": rollbackID,
 		"invalidated_at":             operateTime,
@@ -1424,6 +1452,55 @@ func (r *GroupOrderSelectionRepository) InvalidateDeliveryAfterTarget(ctx contex
 		"update_time":                operateTime,
 	})
 	return tx.RowsAffected, tx.Error
+}
+
+func (r *GroupOrderSelectionRepository) ListInvalidatedDeliveriesByRollback(ctx context.Context, rollbackID int64) ([]GroupSelectedOrderDetail, error) {
+	var rows []GroupSelectedOrderDetail
+	if err := r.db.WithContext(ctx).
+		Table("sg_group_order_selection AS s").
+		Select("s.id AS selection_id, s.group_id, s.year_no, s.order_id, s.market_code, s.order_type, s.delivery_status, s.delivery_effective, s.delivered_stage_code, p.order_amount").
+		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
+		Where("s.invalidated_by_rollback_id = ?", rollbackID).
+		Order("s.year_no ASC").
+		Order("s.id ASC").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *GroupOrderSelectionRepository) SumEffectiveDeliveredAmountByQuarter(ctx context.Context, groupID int64, yearNo int) (map[string]float64, error) {
+	type row struct {
+		StageCode string  `gorm:"column:stage_code"`
+		Amount    float64 `gorm:"column:amount"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Table("sg_group_order_selection AS s").
+		Select("s.delivered_stage_code AS stage_code, COALESCE(SUM(p.order_amount), 0) AS amount").
+		Joins("JOIN sg_order_pool AS p ON p.id = s.order_id").
+		Where("s.group_id = ? AND s.year_no = ? AND s.delivery_status = ? AND s.delivery_effective = ?", groupID, yearNo, enum.OrderDeliveryStatusDelivered, true).
+		Group("s.delivered_stage_code").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	result := map[string]float64{}
+	for _, item := range rows {
+		result[item.StageCode] = item.Amount
+	}
+	return result, nil
+}
+
+type GroupOrderDeliveryRevisionRepository struct {
+	db *gorm.DB
+}
+
+func NewGroupOrderDeliveryRevisionRepository(db *gorm.DB) *GroupOrderDeliveryRevisionRepository {
+	return &GroupOrderDeliveryRevisionRepository{db: db}
+}
+
+func (r *GroupOrderDeliveryRevisionRepository) Create(ctx context.Context, item *entity.GroupOrderDeliveryRevision) error {
+	return r.db.WithContext(ctx).Create(item).Error
 }
 
 func IsRecordNotFound(err error) bool {

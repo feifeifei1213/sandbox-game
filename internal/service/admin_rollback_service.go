@@ -285,6 +285,7 @@ func (s *AdminRollbackCommandService) RestoreGroupSnapshot(ctx context.Context, 
 		summaryRepo := repository.NewSummarySnapshotRepository(tx)
 		adjustmentRepo := repository.NewGroupAdjustmentRepository(tx)
 		orderSelectionRepo := repository.NewGroupOrderSelectionRepository(tx)
+		deliveryRevisionRepo := repository.NewGroupOrderDeliveryRevisionRepository(tx)
 
 		snapshot, err := snapshotRepo.GetByID(ctx, cmd.SnapshotID)
 		if err != nil {
@@ -401,8 +402,15 @@ func (s *AdminRollbackCommandService) RestoreGroupSnapshot(ctx context.Context, 
 		if err := restoreAdjustmentStatesFromSnapshot(ctx, adjustmentRepo, repository.NewGroupAdjustmentRevisionRepository(tx), targetGroupID, targetYearNo, envelope.GroupState.Adjustments, rollbackLog.ID, reason, operatorName, now); err != nil {
 			return fmt.Errorf("restore adjustments from snapshot: %w", err)
 		}
+		deliveryDetails, err := orderSelectionRepo.ListEffectiveDeliveryDetailsAfterTarget(ctx, targetGroupID, targetYearNo, targetStageCode)
+		if err != nil {
+			return fmt.Errorf("load order deliveries before snapshot restore invalidation: %w", err)
+		}
 		if _, err := orderSelectionRepo.InvalidateDeliveryAfterTarget(ctx, targetGroupID, targetYearNo, targetStageCode, rollbackLog.ID, operatorName, now); err != nil {
 			return fmt.Errorf("invalidate order deliveries after target: %w", err)
+		}
+		if err := createOrderDeliveryInvalidationRevisions(ctx, deliveryRevisionRepo, deliveryDetails, rollbackLog.ID, cmd.OperatorID, operatorName, now, "恢复快照导致原交付失效"); err != nil {
+			return fmt.Errorf("create order delivery invalidation revisions: %w", err)
 		}
 		if err := yearRepo.MarkRollbackPendingRange(ctx, targetGroupID, targetYearNo, gameConfig.CurrentOpenYear, targetYearNo, targetStageCode, rollbackLog.ID, operatorName); err != nil {
 			return fmt.Errorf("mark rollback pending: %w", err)

@@ -107,7 +107,9 @@ export interface PlayerOrderPoolItem {
   poolStatus: OrderPoolStatus
   roundNo?: number
   deliveryStatus?: OrderDeliveryStatus
+  deliveryEffective?: boolean
   deliveredStageCode?: string | null
+  invalidatedByRollbackId?: number | null
   orderPayload?: Record<string, unknown>
 }
 
@@ -233,6 +235,7 @@ export interface DeliverOrdersResult {
   stageCode: string
   orderIds: number[]
   deliveredAmount: number
+  stageSalesRevenue: number
   deliveredAt: string
 }
 

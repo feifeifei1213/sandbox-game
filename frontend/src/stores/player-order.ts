@@ -254,14 +254,14 @@ export const usePlayerOrderStore = defineStore('sandbox-player-order', () => {
     deliveringOrders.value = true
     pageMessage.value = null
     try {
-      await deliverPlayerOrders({
+      const result = await deliverPlayerOrders({
         yearNo: selectedYear.value,
         stageCode,
         orderIds: uniqueOrderIds,
       })
       pageMessage.value = {
         type: 'success',
-        text: `已交付 ${uniqueOrderIds.length} 个订单。`,
+        text: `已交付 ${uniqueOrderIds.length} 个订单，${formatDeliveryStage(stageCode)}销售收入已更新为 ${formatAmount(result.stageSalesRevenue)}。`,
       }
       await loadYearView(selectedYear.value, { silent: true })
     } catch (error) {
@@ -465,6 +465,25 @@ function validateInvestmentDraft(
 
 function formatOrderNo(businessOrderNo: string | undefined, orderId: number) {
   return businessOrderNo || `#${orderId}`
+}
+
+function formatDeliveryStage(stageCode: string) {
+  switch (stageCode) {
+    case 'Q1':
+      return '第一季度'
+    case 'Q2':
+      return '第二季度'
+    case 'Q3':
+      return '第三季度'
+    case 'Q4':
+      return '第四季度'
+    default:
+      return stageCode
+  }
+}
+
+function formatAmount(value: number | null | undefined) {
+  return Number(value ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
 function toErrorMessage(error: unknown, fallback: string): PageMessage {

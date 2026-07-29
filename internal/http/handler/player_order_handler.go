@@ -182,6 +182,7 @@ func (h *PlayerOrderHandler) DeliverOrders(c *gin.Context) {
 		YearNo:       *req.YearNo,
 		StageCode:    req.StageCode,
 		OrderIDs:     req.OrderIDs,
+		OperatorID:   identity.UserID,
 		OperatorName: identity.Username,
 	})
 	if err != nil {
@@ -255,7 +256,6 @@ func abortOrderError(c *gin.Context, err error, fallbackMessage string) {
 		errors.Is(err, service.ErrOrderDeliveryStageInvalid),
 		errors.Is(err, service.ErrOrderDeliveryOrderInvalid),
 		errors.Is(err, service.ErrOrderDeliveryDisabled),
-		errors.Is(err, service.ErrOrderDeliveryRevenueMismatch),
 		errors.Is(err, service.ErrOrderPrerequisiteIncomplete),
 		errors.Is(err, service.ErrOrderTemplateUnsupported):
 		middleware.AbortWithAppError(c, middleware.NewAppError(http.StatusUnprocessableEntity, enum.UnprocessableEntityCode, resolveOrderErrorMessage(err), err))
@@ -267,7 +267,7 @@ func abortOrderError(c *gin.Context, err error, fallbackMessage string) {
 func resolveOrderErrorMessage(err error) string {
 	switch {
 	case errors.Is(err, service.ErrOrderNotRequiredForDemoYear):
-		return "0年不需要订单"
+		return "0 年不需要订单"
 	case errors.Is(err, service.ErrOrderYearInvalid):
 		return "年份不在订单流程范围内"
 	case errors.Is(err, service.ErrOrderGroupUnavailable):
@@ -291,7 +291,7 @@ func resolveOrderErrorMessage(err error) string {
 	case errors.Is(err, service.ErrOrderInvestmentNotInteger), errors.Is(err, service.ErrOrderInvestmentLimitExceeded):
 		return err.Error()
 	case errors.Is(err, service.ErrOrderMarketDisabledInvestment):
-		return "该市场未开启，系统自动按0提交，不允许填写非0投入"
+		return "该市场未开启，系统自动按 0 提交，不允许填写非 0 投入"
 	case errors.Is(err, service.ErrOrderSegmentNotReady):
 		return "当前没有可释放标段"
 	case errors.Is(err, service.ErrOrderSegmentNotSelecting):
@@ -315,9 +315,7 @@ func resolveOrderErrorMessage(err error) string {
 	case errors.Is(err, service.ErrOrderDeliveryStageInvalid):
 		return "交付季度必须等于当前经营季度"
 	case errors.Is(err, service.ErrOrderDeliveryOrderInvalid):
-		return "只能交付本组本年已选且未交付订单"
-	case errors.Is(err, service.ErrOrderDeliveryRevenueMismatch):
-		return "本季度销售收入必须等于交付订单金额合计"
+		return "只能交付本组本年已选且未有效交付的订单"
 	case errors.Is(err, service.ErrOrderDeliveryDisabled):
 		return "当前订单模板暂不支持交付"
 	case errors.Is(err, service.ErrOrderPrerequisiteIncomplete):

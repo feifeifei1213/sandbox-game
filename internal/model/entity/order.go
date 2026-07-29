@@ -234,3 +234,26 @@ type GroupOrderSelection struct {
 func (GroupOrderSelection) TableName() string {
 	return "sg_group_order_selection"
 }
+
+type GroupOrderDeliveryRevision struct {
+	ID              int64     `gorm:"column:id;primaryKey"`
+	SelectionID     int64     `gorm:"column:selection_id"`
+	GroupID         int64     `gorm:"column:group_id"`
+	YearNo          int       `gorm:"column:year_no"`
+	OrderID         int64     `gorm:"column:order_id"`
+	RevisionType    string    `gorm:"column:revision_type"`
+	StageCode       *string   `gorm:"column:stage_code"`
+	OrderAmount     float64   `gorm:"column:order_amount"`
+	EffectiveBefore bool      `gorm:"column:effective_before"`
+	EffectiveAfter  bool      `gorm:"column:effective_after"`
+	RollbackLogID   *int64    `gorm:"column:rollback_log_id"`
+	OperatedByID    *int64    `gorm:"column:operated_by_id"`
+	OperatedByName  string    `gorm:"column:operated_by_name"`
+	OperatedAt      time.Time `gorm:"column:operated_at"`
+	Remark          *string   `gorm:"column:remark"`
+	BaseEntity
+}
+
+func (GroupOrderDeliveryRevision) TableName() string {
+	return "sg_group_order_delivery_revision"
+}

@@ -1060,7 +1060,7 @@
 
 #### 4.7.7 `sg_group_order_selection`
 
-用途：记录小组最终选择订单与交付状态。
+用途：记录小组最终选择订单与当前有效交付状态。
 
 关键字段建议：
 
@@ -1075,11 +1075,11 @@
 | `selection_order_id` | BIGINT | 对应 `sg_market_selection_order.id` |
 | `order_id` | BIGINT | 订单 ID |
 | `selection_status` | VARCHAR(32) | `SELECTED` |
-| `delivery_status` | VARCHAR(32) | `SELECTED / DELIVERED / UNFINISHED` |
+| `delivery_status` | VARCHAR(32) | 当前有效状态：`SELECTED / DELIVERED / UNFINISHED` |
 | `delivered_stage_code` | VARCHAR(16) NULL | `Q1 / Q2 / Q3 / Q4` |
 | `delivered_at` | DATETIME NULL | 交付确认时间 |
-| `delivery_effective` | TINYINT(1) | 交付状态是否仍有效 |
-| `invalidated_by_rollback_id` | BIGINT NULL | 交付状态被回退置为失效时对应回退日志 |
+| `delivery_effective` | TINYINT(1) | 当前交付状态是否仍有效；当前未交付或旧交付已失效时不参与销售收入 |
+| `invalidated_by_rollback_id` | BIGINT NULL | 当前交付状态被退回重提或恢复快照置为失效时对应回退日志 |
 | `invalidated_at` | DATETIME NULL | 交付状态失效时间 |
 | `selected_at` | DATETIME | 选择时间 |
 | `creator/create_time/updater/update_time` | - | 审计字段 |
@@ -1096,9 +1096,39 @@
 - 一个订单只能被一个小组选择。
 - 账期字段来自订单池，首版只展示，不驱动经营页应收账款自动计算。
 - 年末仍未交付时更新为 `UNFINISHED`，但首版不阻断财报提交。
-- 单组快照回退不释放订单归属，不删除选择记录；目标节点之后的交付状态改为失效，玩家重新推进到对应阶段后再确认交付。
+- 订单交付成功后，系统按当前有效交付记录汇总写入经营页季度销售收入；当前有效销售收入只统计 `delivery_status = DELIVERED` 且 `delivery_effective = 1` 的记录。
+- 单组退回重提或恢复快照不释放订单归属，不删除选择记录；目标阶段及后续阶段的旧交付记录保留为历史留痕 / 草稿参考，但不直接作为当前有效交付，对应订单应恢复为待交付 / 可重新交付。
 - 若未来年份订单已被该组选择，回退后仍保持归属，不重新进入订单池。
 - 单组回退和快照恢复不修改 `sg_group_market_bid`，不重新计算轮次资格，不重开轮次，也不恢复或覆盖定序依据。
+
+#### 4.7.8 `sg_group_order_delivery_revision`（建议新增）
+
+用途：保存订单交付、回退失效和重新交付的历史修订记录，避免为支持“旧交付保留为草稿、当前订单恢复待交付”而覆盖审计痕迹。
+
+关键字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | BIGINT | 主键 |
+| `selection_id` | BIGINT | 对应 `sg_group_order_selection.id` |
+| `group_id` | BIGINT | 小组 |
+| `year_no` | INT | 年份 |
+| `order_id` | BIGINT | 订单 ID |
+| `revision_type` | VARCHAR(32) | `DELIVERED / INVALIDATED_BY_ROLLBACK / INVALIDATED_BY_SNAPSHOT_RESTORE / REDELIVERED` |
+| `stage_code` | VARCHAR(16) NULL | 交付或历史交付对应季度 |
+| `order_amount` | DECIMAL(18,2) | 当时订单金额快照 |
+| `effective_before` | TINYINT(1) | 变更前是否有效 |
+| `effective_after` | TINYINT(1) | 变更后是否有效 |
+| `rollback_log_id` | BIGINT NULL | 由退回重提或恢复快照导致失效时关联回退日志 |
+| `operate_time` | DATETIME | 操作时间 |
+| `operator_id/operator_name` | - | 操作人 |
+| `remark` | VARCHAR(255) NULL | 页面展示或审计说明 |
+
+说明：
+
+- 当前有效状态仍以 `sg_group_order_selection` 为准；本表用于历史提示、审计和快照详情展示。
+- 退回重提或恢复快照后，旧交付修订记录不删除，但对应订单当前状态应可重新交付；玩家可以重新交付原订单，也可以改交其他已选订单。
+- 如果实现时选择其他等价结构，也必须满足“旧交付可追溯、当前有效交付可重建、销售收入只统计当前有效交付”的三项要求。
 
 ---
 

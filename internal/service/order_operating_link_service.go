@@ -30,12 +30,14 @@ func NewOrderOperatingLinkService(
 type FormalYearOrderLinkValues struct {
 	MarketInvestmentTotal float64
 	OrderTotal            float64
+	SalesRevenueByStage   map[string]float64
 	MarketRows            []map[string]any
 	PrerequisiteCompleted bool
 }
 
 func (s *OrderOperatingLinkService) LoadFormalYearValues(ctx context.Context, groupID int64, yearNo int) (FormalYearOrderLinkValues, error) {
 	result := FormalYearOrderLinkValues{
+		SalesRevenueByStage:   buildEmptyQuarterSalesRevenueMap(),
 		MarketRows:            buildEmptyOrderMarketRows(),
 		PrerequisiteCompleted: yearNo == 0,
 	}
@@ -61,6 +63,16 @@ func (s *OrderOperatingLinkService) LoadFormalYearValues(ctx context.Context, gr
 	for _, item := range segmentAmounts {
 		result.OrderTotal += item.Amount
 		fillOrderMarketRowAmount(result.MarketRows, item.MarketCode, item.OrderType, item.Amount)
+	}
+
+	deliveredAmounts, err := s.selectionRepo.SumEffectiveDeliveredAmountByQuarter(ctx, groupID, yearNo)
+	if err != nil {
+		return result, fmt.Errorf("sum delivered order amount: %w", err)
+	}
+	for stageCode, amount := range deliveredAmounts {
+		if _, ok := result.SalesRevenueByStage[stageCode]; ok {
+			result.SalesRevenueByStage[stageCode] = amount
+		}
 	}
 
 	completed, err := s.IsPrerequisiteCompleted(ctx, yearNo)
@@ -112,7 +124,47 @@ func ApplyOrderLinkValuesToOperatingPayload(source payload.OperatingPayload, val
 	next.Derived.Values["marketInvestmentTotal"] = values.MarketInvestmentTotal
 	next.Derived.Values["marketBidCost"] = values.MarketInvestmentTotal
 	next.Derived.Values["orderTotal"] = values.OrderTotal
+	next.Derived.Values["orderSalesRevenueLinked"] = 1
+	for stageCode, amount := range values.SalesRevenueByStage {
+		quarterKey := orderStageToQuarterKey(stageCode)
+		if quarterKey == "" {
+			continue
+		}
+		next.Quarter.DeliverySettlement[quarterKey] = ensureOperatingQuarterValue(next.Quarter.DeliverySettlement[quarterKey])
+		next.Quarter.DeliverySettlement[quarterKey]["salesRevenue"] = amount
+	}
 	return next
+}
+
+func buildEmptyQuarterSalesRevenueMap() map[string]float64 {
+	return map[string]float64{
+		"Q1": 0,
+		"Q2": 0,
+		"Q3": 0,
+		"Q4": 0,
+	}
+}
+
+func orderStageToQuarterKey(stageCode string) string {
+	switch stageCode {
+	case "Q1":
+		return "q1"
+	case "Q2":
+		return "q2"
+	case "Q3":
+		return "q3"
+	case "Q4":
+		return "q4"
+	default:
+		return ""
+	}
+}
+
+func ensureOperatingQuarterValue(source map[string]any) map[string]any {
+	if source == nil {
+		return map[string]any{}
+	}
+	return source
 }
 
 func buildEmptyOrderMarketRows() []map[string]any {
