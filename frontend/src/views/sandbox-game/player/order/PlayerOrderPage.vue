@@ -343,7 +343,7 @@
                     <input v-model="selectedDeliveryOrderIds" type="checkbox" :value="item.orderId">
                     <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
                     <strong>{{ item.businessOrderNo || `#${item.orderId}` }}</strong>
-                    <em>{{ formatIntegerAmount(item.orderAmount) }}</em>
+                    <em>金额 {{ formatIntegerAmount(item.orderAmount) }} · 账期 {{ item.accountTerm }} 季度</em>
                     <small v-if="item.deliveryEffective === false && item.deliveredStageCode">上次提交已失效，可重新交付</small>
                   </label>
                 </div>
@@ -358,7 +358,7 @@
                   >
                     <span>{{ item.marketName }} · {{ item.orderTypeName }}</span>
                     <strong>{{ item.businessOrderNo || `#${item.orderId}` }}</strong>
-                    <em>{{ formatIntegerAmount(item.orderAmount) }}</em>
+                    <em>金额 {{ formatIntegerAmount(item.orderAmount) }} · 账期 {{ item.accountTerm }} 季度</em>
                     <small>已交付 {{ formatDeliveryStage(item.deliveredStageCode || '') }}，已计入对应季度销售收入</small>
                   </div>
                 </div>
@@ -513,6 +513,7 @@ const pendingDeliveryOrders = computed(() =>
           orderId: order.orderId,
           businessOrderNo: order.businessOrderNo,
           orderAmount: order.orderAmount,
+          accountTerm: order.accountTerm,
           deliveredStageCode: order.deliveredStageCode,
           deliveryEffective: order.deliveryEffective,
           invalidatedByRollbackId: order.invalidatedByRollbackId,
@@ -530,6 +531,7 @@ const deliveredOrders = computed(() =>
           orderId: order.orderId,
           businessOrderNo: order.businessOrderNo,
           orderAmount: order.orderAmount,
+          accountTerm: order.accountTerm,
           deliveredStageCode: order.deliveredStageCode,
         }))),
   ),
