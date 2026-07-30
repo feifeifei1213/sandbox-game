@@ -428,6 +428,10 @@ func (s *PlayerReportCommandService) buildCalculationContext(
 			calcContext = calcContext.WithPreviousReport(previous)
 		}
 	}
+	operatingPayload, err = applyOperatingFeatureState(ctx, s.operatingRepo, group.ID, yearState.YearNo, operatingPayload, yearState.YearNo > 0 && calcContext.PreviousReport != nil, true, false)
+	if err != nil {
+		return calcctx.CalculationContext{}, err
+	}
 	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	if err := calcContext.Validate(); err != nil {

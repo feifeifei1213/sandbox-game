@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"sandbox-game/internal/model/payload"
@@ -61,6 +62,46 @@ func TestValidateOperatingManualIntegersRejectsTextSupplyChainOrderQuantity(t *t
 	err := validateOperatingManualIntegers(operatingPayload)
 	if !errors.Is(err, ErrSupplyChainOrderQuantityInvalid) {
 		t.Fatalf("expected ErrSupplyChainOrderQuantityInvalid, got %v", err)
+	}
+}
+
+func TestValidateOperatingManualIntegersRejectsInvalidMarketCultivationAnnualInvestment(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.YearEnd.MarketCultivation.Regional.AnnualInvestment = 2
+
+	err := validateOperatingManualIntegers(operatingPayload)
+	if err == nil || !strings.Contains(err.Error(), "新市场培育") {
+		t.Fatalf("expected market cultivation validation error, got %v", err)
+	}
+}
+
+func TestValidateOperatingManualIntegersRejectsLockedMarketCultivationInvestment(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.YearEnd.MarketCultivation.Regional.AnnualInvestment = 1
+	operatingPayload.YearEnd.MarketCultivation.Regional.LockedByPrevious = true
+
+	err := validateOperatingManualIntegers(operatingPayload)
+	if err == nil || !strings.Contains(err.Error(), "已解锁") {
+		t.Fatalf("expected locked market cultivation validation error, got %v", err)
+	}
+}
+
+func TestValidateOperatingManualIntegersRejectsNonChineseQualificationStatus(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.YearEnd.QualificationCertification.HighTechEnterprise.Status = "unlocked"
+
+	err := validateOperatingManualIntegers(operatingPayload)
+	if err == nil || !strings.Contains(err.Error(), "资质认证") {
+		t.Fatalf("expected qualification validation error, got %v", err)
+	}
+}
+
+func TestValidateOperatingManualIntegersAllowsQualificationChineseStatus(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.YearEnd.QualificationCertification.HighTechEnterprise.Status = "解锁"
+
+	if err := validateOperatingManualIntegers(operatingPayload); err != nil {
+		t.Fatalf("expected Chinese qualification status to pass, got %v", err)
 	}
 }
 

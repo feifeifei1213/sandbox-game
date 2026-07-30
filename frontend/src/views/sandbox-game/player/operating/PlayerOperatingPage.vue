@@ -573,8 +573,10 @@ function buildPreviewOperatingPayload(yearNo: number): OperatingPayload {
     sale: 4,
     rent: 3,
     workInConstruction: 5,
-    marketCultivation: 2,
   }
+  payload.yearEnd.marketCultivation.regional.annualInvestment = 1
+  payload.yearEnd.marketCultivation.national.annualInvestment = 1
+  payload.yearEnd.marketCultivation.global.annualInvestment = 0
   payload.extra.incomeAndPenalty = {
     q1: { discountExpense: 0, extraExpensePenalty: 0, extraIncomeReward: 1 },
     q2: { discountExpense: 0, extraExpensePenalty: 1, extraIncomeReward: 0 },

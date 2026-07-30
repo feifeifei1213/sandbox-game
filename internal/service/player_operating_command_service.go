@@ -172,7 +172,14 @@ func (s *PlayerOperatingCommandService) SaveDraft(ctx context.Context, cmd SaveO
 		}
 		normalizedPayload = linkedPayload
 	}
+	normalizedPayload, err = applyOperatingFeatureState(ctx, s.operatingRepo, cmd.GroupID, cmd.YearNo, normalizedPayload, cmd.YearNo > 0 && calcContext.PreviousReport != nil, false, true)
+	if err != nil {
+		return nil, err
+	}
 	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
+		return nil, err
+	}
+	if err := validateOperatingFeatureInputs(normalizedPayload); err != nil {
 		return nil, err
 	}
 	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
@@ -229,9 +236,6 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 		normalizedPayload = linkedPayload
 		orderPrerequisiteCompleted = values.PrerequisiteCompleted
 	}
-	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
-		return nil, err
-	}
 	normalizedPayload, err = s.playerNoticeService.OverlayAdjustments(ctx, cmd.GroupID, cmd.YearNo, normalizedPayload)
 	if err != nil {
 		return nil, fmt.Errorf("overlay operating adjustments: %w", err)
@@ -263,6 +267,18 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 		}
 	}
 
+	normalizedPayload, err = applyOperatingFeatureState(ctx, s.operatingRepo, cmd.GroupID, cmd.YearNo, normalizedPayload, cmd.YearNo > 0 && calcContext.PreviousReport != nil, false, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateOperatingManualIntegers(normalizedPayload); err != nil {
+		return nil, err
+	}
+	if err := validateOperatingFeatureInputs(normalizedPayload); err != nil {
+		return nil, err
+	}
+	calcContext = calcContext.WithOperatingPayload(&normalizedPayload)
+
 	if err := calcContext.Validate(); err != nil {
 		return nil, err
 	}
@@ -284,6 +300,12 @@ func (s *PlayerOperatingCommandService) SubmitStage(ctx context.Context, cmd Sub
 	calculationResult, err := s.calculator.Calculate(calcContext)
 	if err != nil {
 		return nil, fmt.Errorf("calculate stage result: %w", err)
+	}
+	if cmd.StageCode == state.StageCodeYearEnd {
+		calculationResult.OperatingPayload, err = applyOperatingFeatureState(ctx, s.operatingRepo, cmd.GroupID, cmd.YearNo, calculationResult.OperatingPayload, cmd.YearNo > 0 && calcContext.PreviousReport != nil, true, false)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	machine := state.NewStateMachine()

@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"sandbox-game/internal/assembler"
+	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/payload"
 	"sandbox-game/internal/repository"
 	carryforwardrules "sandbox-game/internal/rules/carryforward"
@@ -134,6 +135,21 @@ func (s *PlayerOperatingQueryService) GetYearView(ctx context.Context, groupID i
 		default:
 			return nil, fmt.Errorf("load previous report: %w", previousReportErr)
 		}
+	}
+	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
+
+	operatingPayload, err = applyOperatingFeatureState(
+		ctx,
+		s.operatingRepo,
+		groupID,
+		yearNo,
+		operatingPayload,
+		yearNo > 0 && calculationContext.PreviousReport != nil,
+		yearState.YearStatus != enum.YearStatusOperating,
+		false,
+	)
+	if err != nil {
+		return nil, err
 	}
 	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 

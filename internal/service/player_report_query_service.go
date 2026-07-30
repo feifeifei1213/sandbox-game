@@ -147,6 +147,10 @@ func (s *PlayerReportQueryService) GetView(ctx context.Context, groupID int64, y
 			return s.buildRetainedReportDraftView(ctx, calcContext, computedPayload, manualPayload, lastDraftSavedAt, permission)
 		}
 	}
+	operatingPayload, err = applyOperatingFeatureState(ctx, s.operatingRepo, groupID, yearNo, operatingPayload, yearNo > 0 && calcContext.PreviousReport != nil, true, false)
+	if err != nil {
+		return nil, err
+	}
 	calcContext = calcContext.WithOperatingPayload(&operatingPayload)
 
 	calcContext = calcContext.WithReportManualPayload(&manualPayload)

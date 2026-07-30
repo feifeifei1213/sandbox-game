@@ -159,7 +159,54 @@
           </tr>
           <tr>
             <th class="row-head">19</th>
-            <td class="reminder-cell" colspan="9">{{ labels.progressUpdateReminder }}</td>
+            <td class="excel-nested-cell project-progress-cell" colspan="9">
+              <table class="nested-excel-table project-progress-table">
+                <tbody>
+                  <tr>
+                    <td class="nested-title-cell project-progress-title-cell" rowspan="5">
+                      <div>3. 项目进度更新</div>
+                      <span>（每个在建交付项目向前移动一格，满格的移动到项目交付库）</span>
+                    </td>
+                    <td class="nested-head-cell project-factory-head">生产厂房</td>
+                    <td v-for="quarter in quarterList" :key="`project-quarter-${quarter.key}`" class="nested-head-cell project-quarter-head" colspan="2">
+                      {{ quarter.label }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="nested-head-cell project-factory-subhead"></td>
+                    <template v-for="quarter in quarterList" :key="`project-subhead-${quarter.key}`">
+                      <td class="nested-subhead-cell">产线</td>
+                      <td class="nested-subhead-cell">进度</td>
+                    </template>
+                  </tr>
+                  <tr v-for="factory in projectFactoryRows" :key="factory.key">
+                    <td class="nested-head-cell project-factory-cell">{{ factory.label }}</td>
+                    <template v-for="quarter in quarterList" :key="`${factory.key}-${quarter.key}`">
+                      <td :class="projectProgressCellClass(quarter.scope, getProjectProgressCell(factory.key, quarter.key, 'lineType'))">
+                        <select
+                          :value="getProjectProgressCell(factory.key, quarter.key, 'lineType')"
+                          :disabled="!isScopeEditable(quarter.scope)"
+                          @change="updateProjectProgressCell(factory.key, quarter.key, 'lineType', $event)"
+                        >
+                          <option value=""></option>
+                          <option v-for="option in projectLineTypeOptions" :key="option" :value="option">{{ option }}</option>
+                        </select>
+                      </td>
+                      <td :class="projectProgressCellClass(quarter.scope, getProjectProgressCell(factory.key, quarter.key, 'progress'))">
+                        <input
+                          :value="displayCell(getProjectProgressCell(factory.key, quarter.key, 'progress'))"
+                          :disabled="!isScopeEditable(quarter.scope)"
+                          inputmode="numeric"
+                          pattern="[0-9-]*"
+                          data-enter-nav
+                          @input="updateProjectProgressCell(factory.key, quarter.key, 'progress', $event)"
+                        />
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
           </tr>
 
           <tr>
@@ -418,7 +465,7 @@
 
           <tr>
             <th class="row-head">48</th>
-            <td class="section-band band-year-end" rowspan="12">年末工作</td>
+            <td class="section-band band-year-end" rowspan="13">年末工作</td>
             <td class="group-title" rowspan="3">1. 办理长期贷款账期更新</td>
             <td class="note-cell item-label">付利息</td>
             <td class="note-cell rule-note rule-note-short" colspan="5">年利率 5%</td>
@@ -578,23 +625,61 @@
           <tr>
             <th class="row-head">59</th>
             <td class="group-title">7. 新市场培育</td>
-            <td class="empty-cell"></td>
-            <td class="note-cell rule-note rule-note-long" colspan="5">每年可向区域、全国、全球各投 1M</td>
-            <td :class="editableCellClass('YEAR_END', getYearEndFieldValue('assetAdjustment', 'marketCultivation'))">
-              <input
-                :value="displayCell(getYearEndFieldValue('assetAdjustment', 'marketCultivation'))"
-                :disabled="!isScopeEditable('YEAR_END')"
-                inputmode="numeric"
-                pattern="[0-9-]*"
-                data-enter-nav
-                @input="updateYearEndField('assetAdjustment', 'marketCultivation', $event)"
-              />
+            <td class="excel-nested-cell market-cultivation-cell" colspan="9">
+              <table class="nested-excel-table market-cultivation-table">
+                <tbody>
+                  <tr v-for="(market, index) in marketCultivationFields" :key="market.key">
+                    <td v-if="index === 0" class="nested-title-cell market-rule-cell" :rowspan="marketCultivationFields.length">
+                      每年可向区域、全国、全球各投1M
+                    </td>
+                    <td class="nested-head-cell market-name-cell">{{ market.label }}</td>
+                    <td :class="marketCultivationInputClass(market.key)">
+                    <input
+                      :value="displayCell(getMarketCultivationItem(market.key).annualInvestment)"
+                      :disabled="!isScopeEditable('YEAR_END') || getMarketCultivationItem(market.key).locked || getMarketCultivationItem(market.key).lockedByPrevious"
+                      inputmode="numeric"
+                      pattern="[0-1]*"
+                      data-enter-nav
+                      @input="updateMarketCultivationField(market.key, $event)"
+                    />
+                    </td>
+                    <td class="nested-head-cell">总投入</td>
+                    <td class="nested-result-cell">{{ formatNumber(getMarketCultivationDisplayCumulative(market.key)) }}M</td>
+                    <td class="nested-head-cell">状态</td>
+                    <td class="nested-status-cell">{{ marketCultivationStatusText(market.key) }}</td>
+                    <td v-if="index === 0" class="nested-result-cell market-total-cell" :rowspan="marketCultivationFields.length">
+                      本年合计<br />
+                      {{ formatNumber(marketCultivationAnnualTotal) }}M
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </td>
-            <td class="empty-cell" colspan="2"></td>
           </tr>
 
           <tr>
             <th class="row-head">60</th>
+            <td class="group-title">8. 资质认证</td>
+            <template v-for="item in qualificationFields" :key="item.key">
+              <td class="qualification-label-cell">
+                {{ item.label }}
+              </td>
+              <td :class="qualificationCellClass(item.key)">
+                <select
+                  :value="getQualificationItem(item.key).status"
+                  :disabled="!isScopeEditable('YEAR_END') || getQualificationItem(item.key).locked || getQualificationItem(item.key).lockedByPrevious"
+                  @change="updateQualificationStatus(item.key, $event)"
+                >
+                  <option value="未解锁">未解锁</option>
+                  <option value="解锁">解锁</option>
+                </select>
+              </td>
+            </template>
+            <td class="empty-cell"></td>
+          </tr>
+
+          <tr>
+            <th class="row-head">61</th>
             <td class="section-band band-misc" rowspan="4">其他收支</td>
             <td class="group-title" rowspan="4">额外收入 / 罚款</td>
             <td class="note-cell item-label"></td>
@@ -603,7 +688,7 @@
             <td class="empty-cell"></td>
           </tr>
           <tr v-for="(field, index) in extraFields" :key="`extra-${field.key}`">
-            <th class="row-head">{{ 61 + index }}</th>
+            <th class="row-head">{{ 62 + index }}</th>
             <td class="note-cell item-label">{{ field.label }}</td>
             <td v-for="period in extraPeriodList" :key="`extra-${field.key}-${period.key}`" :class="extraCellClass(field.key, period.scope)">
               <template v-if="field.key === 'discountExpense' && period.key === 'year_end'">
@@ -628,7 +713,7 @@
           </tr>
 
           <tr>
-            <th class="row-head">64</th>
+            <th class="row-head">65</th>
             <td class="metric-label">期末现金</td>
             <td class="result-cell">{{ formatNumber(periodEndCash) }}</td>
             <td class="metric-label">现金收入</td>
@@ -649,7 +734,7 @@
             </td>
           </tr>
           <tr>
-            <th class="row-head">65</th>
+            <th class="row-head">66</th>
             <td class="metric-label">财务收入/支出</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('financeIncomeExpense')) }}</td>
             <td class="metric-label">不动产增减值</td>
@@ -662,7 +747,7 @@
             <td class="result-cell">{{ formatDisplayPercent(optionalDerivedMetric('totalAssetYield')) }}</td>
           </tr>
           <tr>
-            <th class="row-head">66</th>
+            <th class="row-head">67</th>
             <td class="metric-label">额外收入/支出</td>
             <td class="result-cell">{{ formatNumber(derivedMetric('extraIncomeExpense')) }}</td>
             <td class="metric-label">残值增减</td>
@@ -684,7 +769,17 @@
 import { computed } from 'vue'
 
 import { serviceOperatingLabels, type SandboxGameOperatingLabels } from '@/configs/sandbox-game-service-labels'
-import { cloneOperatingPayload, type CellValue, type NumericCellValue, type OperatingCarryForward, type OperatingPayload, type QuarterValueMap } from '@/types/sandbox-game'
+import {
+  cloneOperatingPayload,
+  type CellValue,
+  type MarketCultivationItem,
+  type NumericCellValue,
+  type OperatingCarryForward,
+  type OperatingPayload,
+  type ProjectProgressItem,
+  type QualificationItem,
+  type QuarterValueMap,
+} from '@/types/sandbox-game'
 import { handleSequentialInputNavigation } from '@/utils/input-navigation'
 import { hasFractionInput } from '@/utils/manual-integer'
 
@@ -698,6 +793,11 @@ type MarketBidKey =
   | 'businessVipTotal'
   | 'memberCustomTotal'
 type MarketBidRow = Record<MarketBidKey | 'orderAmount', NumericCellValue>
+type ProjectFactoryKey = 'factoryA' | 'factoryB' | 'factoryC'
+type ProjectProgressQuarterKey = 'q1' | 'q2' | 'q3' | 'q4'
+type ProjectProgressCellKey = 'lineType' | 'progress'
+type MarketCultivationKey = 'regional' | 'national' | 'global'
+type QualificationKey = 'qualityEnvironmentalHealth' | 'highTechEnterprise' | 'specializedInnovation' | 'listedCompany'
 
 const props = defineProps<{
   modelValue: OperatingPayload
@@ -739,6 +839,34 @@ const extraPeriodList = [
   { key: 'year_end', label: '年末', scope: 'YEAR_END' },
 ] as const
 
+const projectFactoryRows = [
+  { key: 'factoryA', label: '生产厂房 A' },
+  { key: 'factoryB', label: '生产厂房 B' },
+  { key: 'factoryC', label: '生产厂房 C' },
+] as const satisfies ReadonlyArray<{ key: ProjectFactoryKey; label: string }>
+
+const defaultProjectProgressRows: ProjectProgressItem[] = projectFactoryRows.flatMap((factory) =>
+  quarterList.map((quarter) => ({
+    projectName: `${factory.label}-${quarter.label}`,
+    lineType: '',
+    progress: '',
+  })),
+)
+const projectLineTypeOptions = ['人工', '半自动', '自动', '智能'] as const
+
+const marketCultivationFields = [
+  { key: 'regional', label: '区域', threshold: 1 },
+  { key: 'national', label: '全国', threshold: 2 },
+  { key: 'global', label: '全球', threshold: 3 },
+] as const satisfies ReadonlyArray<{ key: MarketCultivationKey; label: string; threshold: number }>
+
+const qualificationFields = [
+  { key: 'qualityEnvironmentalHealth', label: '质量、环境健康体系认证企业' },
+  { key: 'highTechEnterprise', label: '高新技术企业' },
+  { key: 'specializedInnovation', label: '专精特新小巨人' },
+  { key: 'listedCompany', label: '上市企业' },
+] as const satisfies ReadonlyArray<{ key: QualificationKey; label: string }>
+
 const shortTermLoanFields = [
   { key: 'dueRepayment', label: '到期还贷' },
   { key: 'interest', label: '付利息' },
@@ -769,6 +897,13 @@ const extraFields = [
 const materialFieldKeys = computed(() => materialFields.value.map((item) => item.key))
 
 const marketBidRows = computed(() => buildFixedMarketBidRows(props.modelValue.beginning.marketBid))
+const projectProgressRows = computed<ProjectProgressItem[]>(() => {
+  const items = props.modelValue.yearEnd.projectProgressUpdate?.items ?? []
+  return defaultProjectProgressRows.map((fallback, index) => ({
+    ...fallback,
+    ...(items[index] ?? {}),
+  }))
+})
 const marketOrderTotal = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.orderTotal, props.derivedValues.orderTotal, marketBidRows.value.reduce((total, _row, index) => total + getMarketRowTotal(index), 0)))
 const marketInvestmentTotal = computed(() => getStoredMarketInvestmentValue())
 const marketBidReadonly = computed(() => isOrderLinkedMarketBid())
@@ -777,6 +912,7 @@ const planRevenueDisplay = computed(() => resolveMetric(props.modelValue.beginni
 const comprehensiveCostDisplay = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.comprehensiveCostPlan, props.derivedValues.comprehensiveCostTotal))
 const shortTermLoanDelta = computed(() => getQuarterRowTotal('shortTermLoan', 'newLoan') - getQuarterRowTotal('shortTermLoan', 'dueRepayment'))
 const longTermLoanDelta = computed(() => toNumber(getYearEndFieldValue('longTermLoan', 'newLoan')) - toNumber(getYearEndFieldValue('longTermLoan', 'repayment')))
+const marketCultivationAnnualTotal = computed(() => getMarketCultivationAnnualAmount())
 
 const cashInflow = computed(() =>
   derivedMetric('receivableRecovered') +
@@ -806,7 +942,7 @@ const cashOutflow = computed(() =>
   toNumber(getYearEndFieldValue('longTermLoan', 'interest')) +
   toNumber(getYearEndFieldValue('longTermLoan', 'repayment')) +
   toNumber(getYearEndFieldValue('assetAdjustment', 'rent')) +
-  toNumber(getYearEndFieldValue('assetAdjustment', 'marketCultivation')) +
+  marketCultivationAnnualTotal.value +
   derivedMetric('discountExpense') +
   derivedMetric('extraExpensePenalty'),
 )
@@ -904,6 +1040,167 @@ function supplyChainOrderCellClass(scope: string, value?: unknown) {
   return baseClass
 }
 
+function projectProgressIndex(factoryKey: ProjectFactoryKey, quarterKey: ProjectProgressQuarterKey) {
+  const factoryIndex = projectFactoryRows.findIndex((item) => item.key === factoryKey)
+  const quarterIndex = quarterList.findIndex((item) => item.key === quarterKey)
+  if (factoryIndex === -1 || quarterIndex === -1) {
+    return -1
+  }
+  return factoryIndex * quarterList.length + quarterIndex
+}
+
+function getProjectProgressCell(factoryKey: ProjectFactoryKey, quarterKey: ProjectProgressQuarterKey, key: ProjectProgressCellKey) {
+  const index = projectProgressIndex(factoryKey, quarterKey)
+  if (index < 0) {
+    return ''
+  }
+  return projectProgressRows.value[index]?.[key] ?? ''
+}
+
+function projectProgressCellClass(scope: string, value?: unknown) {
+  return editableCellClass(scope, value)
+}
+
+function updateProjectProgressCell(factoryKey: ProjectFactoryKey, quarterKey: ProjectProgressQuarterKey, key: ProjectProgressCellKey, event: Event) {
+  const quarter = quarterList.find((item) => item.key === quarterKey)
+  if (!quarter || !isScopeEditable(quarter.scope)) {
+    return
+  }
+  const index = projectProgressIndex(factoryKey, quarterKey)
+  if (index < 0) {
+    return
+  }
+  const next = cloneOperatingPayload(props.modelValue)
+  const sourceItems = next.yearEnd.projectProgressUpdate.items ?? []
+  next.yearEnd.projectProgressUpdate.items = defaultProjectProgressRows.map((fallback, itemIndex) => ({
+    ...fallback,
+    ...(sourceItems[itemIndex] ?? {}),
+  }))
+  const target = next.yearEnd.projectProgressUpdate.items[index]
+  if (!target) {
+    return
+  }
+  const raw = (event.target as HTMLInputElement | HTMLSelectElement).value
+  if (key === 'progress') {
+    target.progress = normalizeNumericValue(raw)
+  } else {
+    target.lineType = raw
+  }
+  emit('update:modelValue', next)
+}
+
+function getMarketCultivationItem(key: MarketCultivationKey): MarketCultivationItem {
+  return props.modelValue.yearEnd.marketCultivation?.[key] ?? createEmptyMarketCultivationItem()
+}
+
+function getMarketCultivationAnnualAmount() {
+  const marketCultivation = props.modelValue.yearEnd.marketCultivation
+  const items = marketCultivationFields.map((field) => marketCultivation?.[field.key] ?? createEmptyMarketCultivationItem())
+  if (marketCultivation?.stateApplied && items.some(hasMarketCultivationItemSignal)) {
+    return items.reduce((total, item) => total + getMarketCultivationEffectiveAnnual(item), 0)
+  }
+  if (items.some((item) => item.annualInvestment !== '' && item.annualInvestment !== undefined && item.annualInvestment !== null)) {
+    return items.reduce((total, item) => total + getMarketCultivationEffectiveAnnual(item), 0)
+  }
+  return toNumber(getYearEndFieldValue('assetAdjustment', 'marketCultivation'))
+}
+
+function getMarketCultivationEffectiveAnnual(item: MarketCultivationItem) {
+  if (item.lockedByPrevious) {
+    return 0
+  }
+  if (item.annualInvestment !== '' && item.annualInvestment !== undefined && item.annualInvestment !== null) {
+    return toNumber(item.annualInvestment)
+  }
+  return toNumber(item.effectiveAnnualInvestment)
+}
+
+function getMarketCultivationDisplayCumulative(key: MarketCultivationKey) {
+  const item = getMarketCultivationItem(key)
+  if (item.lockedByPrevious || item.locked || item.unlocked) {
+    return toNumber(item.cumulativeInvestment)
+  }
+  if (item.annualInvestment !== '' && item.annualInvestment !== undefined && item.annualInvestment !== null) {
+    return toNumber(item.previousCumulative) + getMarketCultivationEffectiveAnnual(item)
+  }
+  return toNumber(item.cumulativeInvestment)
+}
+
+function hasMarketCultivationItemSignal(item: MarketCultivationItem) {
+  return (
+    (item.annualInvestment !== '' && item.annualInvestment !== undefined && item.annualInvestment !== null) ||
+    toNumber(item.effectiveAnnualInvestment) !== 0 ||
+    toNumber(item.previousCumulative) !== 0 ||
+    toNumber(item.cumulativeInvestment) !== 0 ||
+    item.unlocked ||
+    item.locked ||
+    item.lockedByPrevious ||
+    item.willUnlock
+  )
+}
+
+function marketCultivationStatusText(key: MarketCultivationKey) {
+  const item = getMarketCultivationItem(key)
+  const field = marketCultivationFields.find((current) => current.key === key)
+  if (item.lockedByPrevious) {
+    return '已解锁（继承）'
+  }
+  if (item.locked || item.unlocked) {
+    return '已解锁'
+  }
+  if (item.willUnlock || (getMarketCultivationEffectiveAnnual(item) > 0 && getMarketCultivationDisplayCumulative(key) >= (field?.threshold ?? 0))) {
+    return '提交后解锁'
+  }
+  return `未解锁 / 门槛 ${field?.threshold ?? 0}M`
+}
+
+function marketCultivationInputClass(key: MarketCultivationKey) {
+  const item = getMarketCultivationItem(key)
+  const disabled = !isScopeEditable('YEAR_END') || item.locked || item.lockedByPrevious
+  const invalid = isMarketCultivationAnnualInvalid(item.annualInvestment)
+  const base = disabled ? 'market-cultivation-input locked-cell' : 'market-cultivation-input input-cell'
+  return invalid ? `${base} manual-integer-invalid-cell` : base
+}
+
+function isMarketCultivationAnnualInvalid(value: unknown) {
+  if (value === '' || value === undefined || value === null) {
+    return false
+  }
+  const parsed = parseNumber(value)
+  return parsed === null || !Number.isInteger(parsed) || (parsed !== 0 && parsed !== 1)
+}
+
+function updateMarketCultivationField(key: MarketCultivationKey, event: Event) {
+  const next = cloneOperatingPayload(props.modelValue)
+  const item = next.yearEnd.marketCultivation[key]
+  if (!isScopeEditable('YEAR_END') || item.locked || item.lockedByPrevious) {
+    return
+  }
+  item.annualInvestment = normalizeNumericValue((event.target as HTMLInputElement).value)
+  emit('update:modelValue', next)
+}
+
+function getQualificationItem(key: QualificationKey): QualificationItem {
+  return props.modelValue.yearEnd.qualificationCertification?.[key] ?? createEmptyQualificationItem()
+}
+
+function updateQualificationStatus(key: QualificationKey, event: Event) {
+  const next = cloneOperatingPayload(props.modelValue)
+  const item = next.yearEnd.qualificationCertification[key]
+  if (!isScopeEditable('YEAR_END') || item.locked || item.lockedByPrevious) {
+    return
+  }
+  const status = (event.target as HTMLSelectElement).value === '解锁' ? '解锁' : '未解锁'
+  item.status = status
+  item.unlocked = status === '解锁'
+  emit('update:modelValue', next)
+}
+
+function qualificationCellClass(key: QualificationKey) {
+  const item = getQualificationItem(key)
+  return !isScopeEditable('YEAR_END') || item.locked || item.lockedByPrevious ? 'qualification-input-cell locked-cell' : 'qualification-input-cell input-cell'
+}
+
 function displayExtraReadonlyCell(quarterKey: string, fieldKey: string) {
   return formatNumber(getQuarterFieldValue('incomeAndPenalty', quarterKey, fieldKey))
 }
@@ -990,6 +1287,28 @@ function createMarketBidRow(): MarketBidRow {
     businessVipTotal: '',
     memberCustomTotal: '',
     orderAmount: '',
+  }
+}
+
+function createEmptyMarketCultivationItem(): MarketCultivationItem {
+  return {
+    annualInvestment: '',
+    effectiveAnnualInvestment: 0,
+    previousCumulative: 0,
+    cumulativeInvestment: 0,
+    unlocked: false,
+    locked: false,
+    lockedByPrevious: false,
+    willUnlock: false,
+  }
+}
+
+function createEmptyQualificationItem(): QualificationItem {
+  return {
+    status: '未解锁',
+    unlocked: false,
+    locked: false,
+    lockedByPrevious: false,
   }
 }
 
@@ -1397,6 +1716,138 @@ function updateYearEndField(source: string, fieldKey: string, event: Event) {
   line-height: 1.5;
   padding: 10px 12px;
   letter-spacing: 0.02em;
+}
+
+.excel-nested-cell {
+  background: #ffffff;
+  padding: 0;
+}
+
+.nested-excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.nested-excel-table td {
+  height: 32px;
+  border: 1px solid var(--line);
+  padding: 0;
+  box-sizing: border-box;
+  color: #243447;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.nested-title-cell {
+  background: #fff1b3;
+  color: #8f3f00;
+  font-weight: 800;
+}
+
+.nested-title-cell span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.nested-head-cell,
+.nested-subhead-cell,
+.qualification-label-cell {
+  background: #f3f6fa;
+  color: #314458;
+  font-weight: 800;
+}
+
+.nested-subhead-cell {
+  font-size: 12px;
+}
+
+.nested-result-cell,
+.nested-status-cell {
+  background: var(--calc-bg);
+  color: #1f4f82;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-progress-title-cell {
+  width: 25%;
+  padding: 8px 10px !important;
+  line-height: 1.45 !important;
+}
+
+.project-factory-head,
+.project-factory-subhead,
+.project-factory-cell {
+  width: 11%;
+}
+
+.project-quarter-head {
+  width: 16%;
+}
+
+.market-rule-cell {
+  width: 25%;
+  padding: 8px 10px !important;
+  line-height: 1.45 !important;
+}
+
+.market-name-cell {
+  width: 9%;
+}
+
+.market-total-cell {
+  width: 13%;
+  line-height: 1.5 !important;
+}
+
+.market-cultivation-input,
+.qualification-input-cell {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.qualification-label-cell {
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.nested-excel-table input,
+.nested-excel-table select,
+.qualification-input-cell select {
+  width: 100%;
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  padding: 5px 6px;
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  outline: none;
+}
+
+.nested-excel-table input:focus,
+.nested-excel-table select:focus,
+.qualification-input-cell select:focus {
+  box-shadow: inset 0 0 0 2px #2563eb, 0 0 0 2px rgba(37, 99, 235, 0.14);
+}
+
+.nested-excel-table input:disabled,
+.nested-excel-table select:disabled,
+.qualification-input-cell select:disabled {
+  color: #8491a6;
+  cursor: not-allowed;
 }
 
 .dual-metric-cell {

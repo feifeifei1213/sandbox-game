@@ -73,7 +73,7 @@ export function buildOperatingPreviewCalculation(params: BuildOperatingPreviewPa
   const factorySale = toNumber(payload.yearEnd.assetAdjustment.sale)
   const factoryRent = toNumber(payload.yearEnd.assetAdjustment.rent)
   const workInConstruction = toNumber(payload.yearEnd.assetAdjustment.workInConstruction)
-  const marketCultivation = toNumber(payload.yearEnd.assetAdjustment.marketCultivation)
+  const marketCultivation = marketCultivationAnnual(payload)
   const discountExpense = sumQuarterField(payload.extra.incomeAndPenalty, 'discountExpense')
   const extraExpensePenalty = sumQuarterField(payload.extra.incomeAndPenalty, 'extraExpensePenalty')
   const extraIncomeReward = sumQuarterField(payload.extra.incomeAndPenalty, 'extraIncomeReward')
@@ -283,6 +283,48 @@ function computeOrderTotal(payload: OperatingPayload): number {
     const rowTotal = marketProductKeys.reduce((total: number, key) => total + toNumber(typedRow[key]), 0)
     return sum + rowTotal
   }, 0)
+}
+
+function marketCultivationAnnual(payload: OperatingPayload): number {
+  const marketCultivation = payload.yearEnd.marketCultivation
+  if (marketCultivation) {
+    const items = [marketCultivation.regional, marketCultivation.national, marketCultivation.global]
+    const hasSignal = items.some(hasMarketCultivationItemSignal)
+    if (marketCultivation.stateApplied === true && hasSignal) {
+      return items.reduce((total, item) => total + marketCultivationItemAnnual(item), 0)
+    }
+    const hasNewValue = items.some((item) => item && item.annualInvestment !== '' && item.annualInvestment !== undefined && item.annualInvestment !== null)
+    if (hasNewValue) {
+      return items.reduce((total, item) => total + marketCultivationItemAnnual(item), 0)
+    }
+  }
+  return toNumber(payload.yearEnd.assetAdjustment.marketCultivation)
+}
+
+function marketCultivationItemAnnual(item: OperatingPayload['yearEnd']['marketCultivation']['regional'] | undefined): number {
+  if (!item || item.lockedByPrevious) {
+    return 0
+  }
+  if (item.annualInvestment !== '' && item.annualInvestment !== undefined && item.annualInvestment !== null) {
+    return toNumber(item.annualInvestment)
+  }
+  return toNumber(item.effectiveAnnualInvestment)
+}
+
+function hasMarketCultivationItemSignal(item: OperatingPayload['yearEnd']['marketCultivation']['regional'] | undefined): boolean {
+  if (!item) {
+    return false
+  }
+  return (
+    (item.annualInvestment !== '' && item.annualInvestment !== undefined && item.annualInvestment !== null) ||
+    toNumber(item.effectiveAnnualInvestment) !== 0 ||
+    toNumber(item.previousCumulative) !== 0 ||
+    toNumber(item.cumulativeInvestment) !== 0 ||
+    item.unlocked === true ||
+    item.locked === true ||
+    item.lockedByPrevious === true ||
+    item.willUnlock === true
+  )
 }
 
 function sumQuarterField(source: QuarterSource, fieldKey: string): number {

@@ -398,10 +398,7 @@ func extractOperatingMetrics(value payload.OperatingPayload) operatingReportMetr
 		lookupAnyNumber(derived, "workInConstruction", "unfinishedLineValue", "o52"),
 		extractMetric(value.YearEnd.AssetAdjustment, false, "workInConstruction", "unfinishedLineValue", "unfinishedProductionLineValue", "o52"),
 	)
-	result.marketCultivation = firstNonZero(
-		lookupAnyNumber(derived, "marketCultivation", "o53"),
-		extractMetric(value.YearEnd.AssetAdjustment, false, "marketCultivation", "newMarketCultivation", "marketDevelopment", "o53"),
-	)
+	result.marketCultivation = extractMarketCultivationMetric(value, derived)
 	result.discountExpense = firstNonZero(
 		lookupAnyNumber(derived, "discountExpense", "o55"),
 		sumQuarterMetric(value.Extra.IncomeAndPenalty, false, "discountExpense", "factoringExpense", "discountCost", "o55"),
@@ -416,6 +413,17 @@ func extractOperatingMetrics(value payload.OperatingPayload) operatingReportMetr
 	)
 
 	return result
+}
+
+func extractMarketCultivationMetric(value payload.OperatingPayload, derived map[string]any) float64 {
+	amount, ok := payload.MarketCultivationAnnualAmount(value.YearEnd.MarketCultivation)
+	if ok {
+		return amount
+	}
+	return firstNonZero(
+		lookupAnyNumber(derived, "marketCultivation", "o53"),
+		extractMetric(value.YearEnd.AssetAdjustment, false, "marketCultivation", "newMarketCultivation", "marketDevelopment", "o53"),
+	)
 }
 
 func sumQuarterMetric(source payload.OperatingQuarterMap, allowFallbackTotal bool, keys ...string) float64 {

@@ -258,6 +258,20 @@
 | `selectedOrderTotal` | - | 经营页 | 订单总额 | `SYSTEM_DERIVED` | 正式年份由本组全部标段已选订单金额汇总 |
 | `marketInvestmentTotal` | - | 经营页 | 市场投入 | `SYSTEM_DERIVED` | 正式年份由本组当前订单模板全部标段投入汇总 |
 | `orderDeliveryStatus` | `delivery_status` | 年度订单页/经营页 | 当前交付状态 | `SYSTEM_DERIVED` | `SELECTED / DELIVERED / UNFINISHED`；回退或恢复快照后的旧交付只作为历史提示，不直接算当前有效交付 |
+| `projectProgressUpdate` | `project_progress_update` | 经营页第 3 项 | 项目进度更新 | `PLAYER_INPUT` | 仅记录当年项目/产线进度，不参与公式或跨年流转 |
+| `marketCultivationRegionalAnnualInvestment` | `market_cultivation_regional_annual_investment` | 经营页第 7 项 | 区域市场当年投入 | `PLAYER_INPUT` | 只允许 `0 / 1`，`1` 代表投入 `1M` |
+| `marketCultivationNationalAnnualInvestment` | `market_cultivation_national_annual_investment` | 经营页第 7 项 | 全国市场当年投入 | `PLAYER_INPUT` | 只允许 `0 / 1`，`1` 代表投入 `1M` |
+| `marketCultivationGlobalAnnualInvestment` | `market_cultivation_global_annual_investment` | 经营页第 7 项 | 全球市场当年投入 | `PLAYER_INPUT` | 只允许 `0 / 1`，`1` 代表投入 `1M` |
+| `marketCultivationRegionalCumulative` | `market_cultivation_regional_cumulative` | 经营页第 7 项 | 区域累计投入 | `SYSTEM_DERIVED` | 用于解锁判断 |
+| `marketCultivationNationalCumulative` | `market_cultivation_national_cumulative` | 经营页第 7 项 | 全国累计投入 | `SYSTEM_DERIVED` | 用于解锁判断 |
+| `marketCultivationGlobalCumulative` | `market_cultivation_global_cumulative` | 经营页第 7 项 | 全球累计投入 | `SYSTEM_DERIVED` | 用于解锁判断 |
+| `marketCultivationRegionalUnlocked` | `market_cultivation_regional_unlocked` | 经营页第 7 项 | 区域解锁状态 | `SYSTEM_DERIVED` | 达到门槛后锁定 |
+| `marketCultivationNationalUnlocked` | `market_cultivation_national_unlocked` | 经营页第 7 项 | 全国解锁状态 | `SYSTEM_DERIVED` | 达到门槛后锁定 |
+| `marketCultivationGlobalUnlocked` | `market_cultivation_global_unlocked` | 经营页第 7 项 | 全球解锁状态 | `SYSTEM_DERIVED` | 达到门槛后锁定 |
+| `qualificationQualityHealthUnlocked` | `qualification_quality_health_unlocked` | 经营页第 8 项 | 质量、环境健康体系认证企业 | `PLAYER_INPUT + SYSTEM_DERIVED` | `未解锁 / 解锁` |
+| `qualificationHighTechUnlocked` | `qualification_high_tech_unlocked` | 经营页第 8 项 | 高新技术企业 | `PLAYER_INPUT + SYSTEM_DERIVED` | `未解锁 / 解锁` |
+| `qualificationSpecializedGiantUnlocked` | `qualification_specialized_giant_unlocked` | 经营页第 8 项 | 专精特新小巨人 | `PLAYER_INPUT + SYSTEM_DERIVED` | `未解锁 / 解锁` |
+| `qualificationListedCompanyUnlocked` | `qualification_listed_company_unlocked` | 经营页第 8 项 | 上市企业 | `PLAYER_INPUT + SYSTEM_DERIVED` | `未解锁 / 解锁` |
 | `deliveredStageCode` | `delivered_stage_code` | 年度订单页/经营页 | 当前有效交付季度 | `SYSTEM_DERIVED` | 玩家执行交付操作时绑定当前经营季度；旧交付失效后，该值只作为历史留痕或修订记录展示 |
 | `pollingIntervalSeconds` | - | 年度订单页 | 自动轮询间隔 | `SYSTEM_DERIVED` | 首版固定 `3` 秒，不做 WebSocket |
 

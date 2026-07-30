@@ -271,10 +271,7 @@ func extractAnnualMetrics(value payload.OperatingPayload) annualOperatingMetrics
 			lookupAnyNumber(derived, "workInConstruction", "unfinishedLineValue", "o52"),
 			extractMetric(value.YearEnd.AssetAdjustment, false, "workInConstruction", "unfinishedLineValue", "unfinishedProductionLineValue", "o52"),
 		),
-		marketCultivation: firstNonZero(
-			lookupAnyNumber(derived, "marketCultivation", "o53"),
-			extractMetric(value.YearEnd.AssetAdjustment, false, "marketCultivation", "newMarketCultivation", "marketDevelopment", "o53"),
-		),
+		marketCultivation: extractMarketCultivationMetric(value, derived),
 		discountExpense: firstNonZero(
 			lookupAnyNumber(derived, "discountExpense", "o55"),
 			sumQuarterMetric(value.Extra.IncomeAndPenalty, false, "discountExpense", "factoringExpense", "discountCost", "o55"),
@@ -288,6 +285,17 @@ func extractAnnualMetrics(value payload.OperatingPayload) annualOperatingMetrics
 			sumAdjustmentMetric(value.Extra.IncomeAndPenalty, false, "extraIncomeReward", "reward", "bonus", "o58"),
 		),
 	}
+}
+
+func extractMarketCultivationMetric(value payload.OperatingPayload, derived map[string]any) float64 {
+	amount, ok := payload.MarketCultivationAnnualAmount(value.YearEnd.MarketCultivation)
+	if ok {
+		return amount
+	}
+	return firstNonZero(
+		lookupAnyNumber(derived, "marketCultivation", "o53"),
+		extractMetric(value.YearEnd.AssetAdjustment, false, "marketCultivation", "newMarketCultivation", "marketDevelopment", "o53"),
+	)
 }
 
 func extractQuarterMetrics(value payload.OperatingPayload) map[string]quarterOperatingMetrics {

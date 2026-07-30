@@ -75,6 +75,7 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
   )
   const manualIntegerIssues = computed(() => collectOperatingIntegerIssues(draftPayload.value))
   const supplyChainOrderQuantityIssues = computed(() => collectSupplyChainOrderQuantityIssues(draftPayload.value))
+  const operatingFeatureIssues = computed(() => collectOperatingFeatureIssues(draftPayload.value))
 
   async function bootstrap(preferredYear?: number) {
     loading.value = true
@@ -140,6 +141,13 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
       }
       return
     }
+    if (operatingFeatureIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: `经营页新增记录填写不符合规则：${operatingFeatureIssues.value.slice(0, 3).join('、')}`,
+      }
+      return
+    }
     saving.value = true
     try {
       const result = await savePlayerOperatingDraft({
@@ -183,6 +191,13 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
       pageMessage.value = {
         type: 'error',
         text: `订单数量必须为非负整数：${supplyChainOrderQuantityIssues.value.slice(0, 3).join('、')}`,
+      }
+      return
+    }
+    if (operatingFeatureIssues.value.length > 0) {
+      pageMessage.value = {
+        type: 'error',
+        text: `经营页新增记录填写不符合规则：${operatingFeatureIssues.value.slice(0, 3).join('、')}`,
       }
       return
     }
@@ -269,6 +284,7 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
     currentTab,
     previewCalculation,
     manualIntegerIssues,
+    operatingFeatureIssues,
     bootstrap,
     loadYearView,
     updateDraft,
@@ -332,7 +348,50 @@ function collectOperatingIntegerIssues(payload: OperatingPayload) {
   collectManualIntegerIssues('交货结算', normalized.quarter.deliverySettlement, issues)
   collectManualIntegerIssues('长期贷款', normalized.yearEnd.longTermLoan, issues)
   collectManualIntegerIssues('资产调整', normalized.yearEnd.assetAdjustment, issues)
+  collectManualIntegerIssues('项目进度', normalized.yearEnd.projectProgressUpdate.items, issues)
   collectManualIntegerIssues('其他收支', normalized.extra.incomeAndPenalty, issues)
+  return issues
+}
+
+function collectOperatingFeatureIssues(payload: OperatingPayload) {
+  const normalized = cloneOperatingPayload(payload)
+  const issues: string[] = []
+  const markets = [
+    { label: '区域市场培育', item: normalized.yearEnd.marketCultivation.regional },
+    { label: '全国市场培育', item: normalized.yearEnd.marketCultivation.national },
+    { label: '全球市场培育', item: normalized.yearEnd.marketCultivation.global },
+  ]
+  for (const market of markets) {
+    const raw = market.item.annualInvestment
+    if (raw === '' || raw === undefined || raw === null) {
+      continue
+    }
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || (parsed !== 0 && parsed !== 1)) {
+      issues.push(`${market.label}只能填0或1`)
+      continue
+    }
+    if (market.item.lockedByPrevious && parsed !== 0) {
+      issues.push(`${market.label}已解锁不能继续投入`)
+    }
+  }
+
+  const qualifications = [
+    { label: '质量、环境健康体系认证企业', item: normalized.yearEnd.qualificationCertification.qualityEnvironmentalHealth },
+    { label: '高新技术企业', item: normalized.yearEnd.qualificationCertification.highTechEnterprise },
+    { label: '专精特新小巨人', item: normalized.yearEnd.qualificationCertification.specializedInnovation },
+    { label: '上市企业', item: normalized.yearEnd.qualificationCertification.listedCompany },
+  ]
+  for (const qualification of qualifications) {
+    const status = qualification.item.status
+    if (status !== '未解锁' && status !== '解锁') {
+      issues.push(`${qualification.label}只能选择未解锁或解锁`)
+      continue
+    }
+    if (qualification.item.lockedByPrevious && status !== '解锁') {
+      issues.push(`${qualification.label}已继承解锁不能改回未解锁`)
+    }
+  }
   return issues
 }
 

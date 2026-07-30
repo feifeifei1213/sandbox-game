@@ -284,6 +284,11 @@ func (s *AdminGroupDataQueryService) loadOperatingCalculationContext(ctx context
 	if err != nil {
 		return calcctx.CalculationContext{}, nil, err
 	}
+	operatingPayload, err = applyOperatingFeatureState(ctx, s.operatingRepo, groupID, yearNo, operatingPayload, yearNo > 0 && calculationContext.PreviousReport != nil, calculationContext.YearState.YearStatus != enum.YearStatusOperating, false)
+	if err != nil {
+		return calcctx.CalculationContext{}, nil, err
+	}
+	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	return calculationContext, draft, nil
 }
@@ -347,6 +352,11 @@ func (s *AdminGroupDataQueryService) loadReportCalculationContext(ctx context.Co
 	if err != nil {
 		return calcctx.CalculationContext{}, err
 	}
+	operatingPayload, err = applyOperatingFeatureState(ctx, s.operatingRepo, groupID, yearNo, operatingPayload, yearNo > 0 && calculationContext.PreviousReport != nil, true, false)
+	if err != nil {
+		return calcctx.CalculationContext{}, err
+	}
+	calculationContext = calculationContext.WithOperatingPayload(&operatingPayload)
 
 	return calculationContext, nil
 }

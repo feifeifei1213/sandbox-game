@@ -2,6 +2,49 @@
 export type CellValue = number | string | boolean | null
 export type QuarterValueMap = Record<string, Record<string, NumericCellValue>>
 
+export interface ProjectProgressItem {
+  projectName: string
+  lineType: string
+  progress: NumericCellValue
+}
+
+export interface ProjectProgressUpdatePayload {
+  items: ProjectProgressItem[]
+}
+
+export interface MarketCultivationItem {
+  annualInvestment: NumericCellValue
+  effectiveAnnualInvestment: number
+  previousCumulative: number
+  cumulativeInvestment: number
+  unlocked: boolean
+  locked: boolean
+  lockedByPrevious: boolean
+  willUnlock: boolean
+}
+
+export interface MarketCultivationPayload {
+  regional: MarketCultivationItem
+  national: MarketCultivationItem
+  global: MarketCultivationItem
+  annualTotal: number
+  stateApplied: boolean
+}
+
+export interface QualificationItem {
+  status: string
+  unlocked: boolean
+  locked: boolean
+  lockedByPrevious: boolean
+}
+
+export interface QualificationCertificationPayload {
+  qualityEnvironmentalHealth: QualificationItem
+  highTechEnterprise: QualificationItem
+  specializedInnovation: QualificationItem
+  listedCompany: QualificationItem
+}
+
 export interface PlayerNoticeItem {
   id: number
   kind: string
@@ -86,6 +129,9 @@ export interface OperatingPayload {
   yearEnd: {
     longTermLoan: Record<string, NumericCellValue>
     assetAdjustment: Record<string, NumericCellValue>
+    projectProgressUpdate: ProjectProgressUpdatePayload
+    marketCultivation: MarketCultivationPayload
+    qualificationCertification: QualificationCertificationPayload
   }
   extra: {
     incomeAndPenalty: QuarterValueMap
@@ -198,6 +244,9 @@ export function createEmptyOperatingPayload(): OperatingPayload {
     yearEnd: {
       longTermLoan: {},
       assetAdjustment: {},
+      projectProgressUpdate: createEmptyProjectProgressUpdatePayload(),
+      marketCultivation: createEmptyMarketCultivationPayload(),
+      qualificationCertification: createEmptyQualificationCertificationPayload(),
     },
     extra: {
       incomeAndPenalty: {},
@@ -214,7 +263,133 @@ export function cloneOperatingPayload(payload?: OperatingPayload | null): Operat
   }
   const cloned = JSON.parse(JSON.stringify(payload)) as OperatingPayload
   cloned.quarter.supplyChainOrderRecord = cloned.quarter.supplyChainOrderRecord ?? {}
+  cloned.yearEnd.projectProgressUpdate = normalizeProjectProgressUpdatePayload(cloned.yearEnd.projectProgressUpdate)
+  cloned.yearEnd.marketCultivation = normalizeMarketCultivationPayload(cloned.yearEnd.marketCultivation)
+  cloned.yearEnd.qualificationCertification = normalizeQualificationCertificationPayload(cloned.yearEnd.qualificationCertification)
   return cloned
+}
+
+export function createEmptyProjectProgressUpdatePayload(): ProjectProgressUpdatePayload {
+  return {
+    items: [
+      { projectName: '生产厂房 A-第一季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 A-第二季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 A-第三季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 A-第四季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 B-第一季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 B-第二季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 B-第三季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 B-第四季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 C-第一季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 C-第二季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 C-第三季度', lineType: '', progress: '' },
+      { projectName: '生产厂房 C-第四季度', lineType: '', progress: '' },
+    ],
+  }
+}
+
+export function createEmptyMarketCultivationPayload(): MarketCultivationPayload {
+  return {
+    regional: createEmptyMarketCultivationItem(),
+    national: createEmptyMarketCultivationItem(),
+    global: createEmptyMarketCultivationItem(),
+    annualTotal: 0,
+    stateApplied: false,
+  }
+}
+
+export function createEmptyMarketCultivationItem(): MarketCultivationItem {
+  return {
+    annualInvestment: '',
+    effectiveAnnualInvestment: 0,
+    previousCumulative: 0,
+    cumulativeInvestment: 0,
+    unlocked: false,
+    locked: false,
+    lockedByPrevious: false,
+    willUnlock: false,
+  }
+}
+
+export function createEmptyQualificationCertificationPayload(): QualificationCertificationPayload {
+  return {
+    qualityEnvironmentalHealth: createEmptyQualificationItem(),
+    highTechEnterprise: createEmptyQualificationItem(),
+    specializedInnovation: createEmptyQualificationItem(),
+    listedCompany: createEmptyQualificationItem(),
+  }
+}
+
+export function createEmptyQualificationItem(): QualificationItem {
+  return {
+    status: '未解锁',
+    unlocked: false,
+    locked: false,
+    lockedByPrevious: false,
+  }
+}
+
+function normalizeProjectProgressUpdatePayload(payload?: ProjectProgressUpdatePayload | null): ProjectProgressUpdatePayload {
+  if (!payload || !Array.isArray(payload.items)) {
+    return createEmptyProjectProgressUpdatePayload()
+  }
+  const fallback = createEmptyProjectProgressUpdatePayload()
+  return {
+    items: fallback.items.map((item, index) => ({
+      ...item,
+      ...(payload.items[index] ?? {}),
+    })),
+  }
+}
+
+function normalizeMarketCultivationPayload(payload?: MarketCultivationPayload | null): MarketCultivationPayload {
+  const empty = createEmptyMarketCultivationPayload()
+  if (!payload) {
+    return empty
+  }
+  return {
+    regional: normalizeMarketCultivationItem(payload.regional),
+    national: normalizeMarketCultivationItem(payload.national),
+    global: normalizeMarketCultivationItem(payload.global),
+    annualTotal: normalizeNumber(payload.annualTotal),
+    stateApplied: payload.stateApplied === true,
+  }
+}
+
+function normalizeMarketCultivationItem(item?: MarketCultivationItem | null): MarketCultivationItem {
+  return {
+    ...createEmptyMarketCultivationItem(),
+    ...(item ?? {}),
+    effectiveAnnualInvestment: normalizeNumber(item?.effectiveAnnualInvestment),
+    previousCumulative: normalizeNumber(item?.previousCumulative),
+    cumulativeInvestment: normalizeNumber(item?.cumulativeInvestment),
+    unlocked: item?.unlocked === true,
+    locked: item?.locked === true,
+    lockedByPrevious: item?.lockedByPrevious === true,
+    willUnlock: item?.willUnlock === true,
+  }
+}
+
+function normalizeQualificationCertificationPayload(payload?: QualificationCertificationPayload | null): QualificationCertificationPayload {
+  const empty = createEmptyQualificationCertificationPayload()
+  if (!payload) {
+    return empty
+  }
+  return {
+    qualityEnvironmentalHealth: normalizeQualificationItem(payload.qualityEnvironmentalHealth),
+    highTechEnterprise: normalizeQualificationItem(payload.highTechEnterprise),
+    specializedInnovation: normalizeQualificationItem(payload.specializedInnovation),
+    listedCompany: normalizeQualificationItem(payload.listedCompany),
+  }
+}
+
+function normalizeQualificationItem(item?: QualificationItem | null): QualificationItem {
+  return {
+    status: item?.status === '解锁' ? '解锁' : '未解锁',
+    unlocked: item?.unlocked === true,
+    locked: item?.locked === true,
+    lockedByPrevious: item?.lockedByPrevious === true,
+  }
 }
 export interface ReportManualPayload {
   workInProgress: number | null
@@ -451,6 +626,13 @@ export function reportBalanceGap(payload?: ReportComputedPayload | null) {
 function normalizeNullableNumber(value: number | null | undefined) {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return null
+  }
+  return value
+}
+
+function normalizeNumber(value: number | null | undefined) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return 0
   }
   return value
 }

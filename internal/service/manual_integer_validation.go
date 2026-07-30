@@ -69,12 +69,17 @@ func validateOperatingManualIntegers(value payload.OperatingPayload) error {
 	collectManualIntegerIssues("quarter.deliverySettlement", normalized.Quarter.DeliverySettlement, &issues)
 	collectManualIntegerIssues("yearEnd.longTermLoan", normalized.YearEnd.LongTermLoan, &issues)
 	collectManualIntegerIssues("yearEnd.assetAdjustment", normalized.YearEnd.AssetAdjustment, &issues)
+	collectManualIntegerIssues("yearEnd.projectProgressUpdate", normalized.YearEnd.ProjectProgressUpdate.Items, &issues)
+	collectManualIntegerIssues("yearEnd.marketCultivation", normalized.YearEnd.MarketCultivation, &issues)
 	collectManualIntegerIssues("extra.incomeAndPenalty", normalized.Extra.IncomeAndPenalty, &issues)
 
 	if err := buildManualIntegerError("经营页手工数字", issues); err != nil {
 		return err
 	}
-	return validateSupplyChainOrderQuantities(normalized.Quarter.SupplyChainOrderRecord)
+	if err := validateSupplyChainOrderQuantities(normalized.Quarter.SupplyChainOrderRecord); err != nil {
+		return err
+	}
+	return validateOperatingFeatureInputs(normalized)
 }
 
 func validateSupplyChainOrderQuantities(value payload.OperatingQuarterMap) error {
@@ -182,6 +187,16 @@ func collectManualIntegerIssues(path string, value any, issues *[]ManualIntegerI
 			collectFloatIntegerIssue(path+"."+key, child, issues)
 		}
 	case map[string]int:
+		return
+	case payload.OperatingMarketCultivationPayload:
+		collectManualIntegerIssues(path+".regional", typed.Regional, issues)
+		collectManualIntegerIssues(path+".national", typed.National, issues)
+		collectManualIntegerIssues(path+".global", typed.Global, issues)
+	case payload.OperatingMarketCultivationItem:
+		collectManualIntegerIssues(path+".annualInvestment", typed.AnnualInvestment, issues)
+	case payload.OperatingQualificationCertification:
+		return
+	case payload.OperatingQualificationItem:
 		return
 	case payload.OperatingQuarterMap:
 		for key, child := range typed {
