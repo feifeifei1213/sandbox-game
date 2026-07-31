@@ -275,6 +275,7 @@ func NewRouter(cfg *appconfig.Config, logger *zap.Logger, db *gorm.DB) *gin.Engi
 
 		adminGroupData := protected.Group("/admin-group-data")
 		adminGroupData.GET("/list-groups", adminGroupDataHandler.ListGroups)
+		adminGroupData.GET("/get-operation-context", adminGroupDataHandler.GetOperationContext)
 		adminGroupData.GET("/get-operating-view", adminGroupDataHandler.GetOperatingView)
 		adminGroupData.GET("/get-report-view", adminGroupDataHandler.GetReportView)
 

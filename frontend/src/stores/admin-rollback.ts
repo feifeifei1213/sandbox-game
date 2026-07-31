@@ -8,9 +8,10 @@ import {
   listAdminSnapshots,
   restoreAdminGroupSnapshot,
 } from '@/api/sandbox-game/admin-rollback'
-import { listAdminGroups } from '@/api/sandbox-game/admin-group-data'
+import { getAdminGroupOperationContext, listAdminGroups } from '@/api/sandbox-game/admin-group-data'
 import type { PageMessage } from '@/stores/admin-shell'
 import type {
+  AdminGroupOperationContextResult,
   AdminGroupOption,
   SnapshotDetailResult,
   SnapshotScope,
@@ -33,6 +34,7 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
   const pageMessage = ref<PageMessage | null>(null)
   const selectedSnapshotId = ref<number | null>(null)
   const snapshotDetail = ref<SnapshotDetailResult | null>(null)
+  const operationContext = ref<AdminGroupOperationContextResult | null>(null)
 
   const filters = ref({
     snapshotScope: 'GROUP' as SnapshotScope | '',
@@ -58,11 +60,6 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
     description: '',
   })
 
-  const restoreForm = ref({
-    reason: '',
-    confirmText: '',
-  })
-
   const selectedGroup = computed(() => groups.value.find((item) => item.groupId === unlockForm.value.groupId) ?? null)
   const selectedSnapshot = computed(() => snapshots.value.find((item) => item.id === selectedSnapshotId.value) ?? null)
 
@@ -81,6 +78,7 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
       if (!filters.value.groupId) {
         filters.value.groupId = groups.value[0]?.groupId ?? null
       }
+      await loadOperationContext(unlockForm.value.groupId)
       await loadSnapshots({ silent: true })
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '初始化回退与修正页面失败')
@@ -129,6 +127,24 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
     }
   }
 
+  async function loadOperationContext(groupId = unlockForm.value.groupId) {
+    if (!groupId) {
+      operationContext.value = null
+      return null
+    }
+    try {
+      const result = await getAdminGroupOperationContext(groupId)
+      operationContext.value = result
+      unlockForm.value.groupId = result.groupId
+      unlockForm.value.yearNo = result.operationYearNo
+      return result
+    } catch (error) {
+      operationContext.value = null
+      pageMessage.value = toErrorMessage(error, '读取目标小组操作年份失败')
+      throw error
+    }
+  }
+
   async function submitUnlockRetry() {
     if (!unlockForm.value.groupId) {
       pageMessage.value = { type: 'error', text: '请选择目标小组' }
@@ -138,13 +154,26 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
       pageMessage.value = { type: 'error', text: '请选择经营阶段' }
       throw new Error('请选择经营阶段')
     }
+    const context =
+      operationContext.value?.groupId === unlockForm.value.groupId
+        ? operationContext.value
+        : await loadOperationContext(unlockForm.value.groupId)
+    if (!context) {
+      pageMessage.value = { type: 'error', text: '请先选择目标小组' }
+      throw new Error('请先选择目标小组')
+    }
+    if (!context.canUnlockRetry) {
+      const message = buildUnlockBlockedMessage(context)
+      pageMessage.value = { type: 'error', text: message }
+      throw new Error(message)
+    }
 
     operating.value = true
     pageMessage.value = null
     try {
       const result = await unlockAdminYear({
         groupId: unlockForm.value.groupId,
-        yearNo: unlockForm.value.yearNo,
+        yearNo: context.operationYearNo,
         unlockTargetType: unlockForm.value.unlockTargetType,
         targetStageCode: unlockForm.value.unlockTargetType === 'OPERATING' ? unlockForm.value.targetStageCode : null,
         reason: unlockForm.value.reason.trim(),
@@ -154,6 +183,7 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
         text: buildUnlockSuccessMessage(result, selectedGroup.value),
       }
       unlockForm.value.reason = ''
+      await loadOperationContext(result.groupId)
       await loadSnapshots({ silent: true })
       return result
     } catch (error) {
@@ -195,22 +225,16 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
     if (!selectedSnapshotId.value) {
       throw new Error('请选择要恢复的单组快照')
     }
-    if (!restoreForm.value.reason.trim()) {
-      throw new Error('恢复原因不能为空')
-    }
     operating.value = true
     try {
       const result = await restoreAdminGroupSnapshot({
         snapshotId: selectedSnapshotId.value,
-        reason: restoreForm.value.reason.trim(),
-        confirmText: restoreForm.value.confirmText.trim(),
       })
       pageMessage.value = {
         type: 'success',
         text: `快照恢复已完成，回退日志 #${result.rollbackLogId}，安全快照 #${result.safetySnapshotId}。`,
       }
-      restoreForm.value.reason = ''
-      restoreForm.value.confirmText = ''
+      await loadOperationContext(result.groupId)
       await loadSnapshots({ silent: true })
       if (selectedSnapshotId.value) {
         await selectSnapshot(selectedSnapshotId.value)
@@ -241,12 +265,13 @@ export const useAdminRollbackStore = defineStore('sandbox-admin-rollback', () =>
     filters,
     unlockForm,
     manualSnapshotForm,
-    restoreForm,
+    operationContext,
     selectedSnapshotId,
     selectedSnapshot,
     snapshotDetail,
     selectedGroup,
     bootstrap,
+    loadOperationContext,
     loadSnapshots,
     selectSnapshot,
     submitUnlockRetry,
@@ -269,6 +294,16 @@ function buildUnlockSuccessMessage(result: { yearNo: number; unlockTargetType: s
     return `已退回${groupLabel} ${result.yearNo} 年财报页，可重新提交财报。`
   }
   return `已退回${groupLabel} ${result.yearNo} 年经营页到 ${formatUnlockStage(result.editableStageCode ?? result.targetStageCode)}，可重新提交该阶段。`
+}
+
+function buildUnlockBlockedMessage(context: AdminGroupOperationContextResult) {
+  if (context.businessStatus === 'BANKRUPT') {
+    return '目标小组已破产，不能退回重提'
+  }
+  if (context.currentOpenYear > context.operationYearNo && !context.rollbackPending) {
+    return '普通退回重提只处理当前操作年份；跨年修正请使用恢复快照'
+  }
+  return '目标小组当前状态不能退回重提'
 }
 
 function formatUnlockStage(value?: string | null) {

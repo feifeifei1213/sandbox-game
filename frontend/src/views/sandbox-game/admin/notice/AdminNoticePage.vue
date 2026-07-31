@@ -63,18 +63,27 @@
         <div class="form-body">
           <label class="field">
             <span>目标小组</span>
-            <select v-model.number="store.adjustmentForm.groupId">
+            <select v-model.number="store.adjustmentForm.groupId" @change="handleAdjustmentGroupChange">
               <option :value="null" disabled>请选择小组</option>
               <option v-for="item in groups" :key="item.groupId" :value="item.groupId">第{{ item.groupNo }}组</option>
             </select>
           </label>
 
-          <label class="field">
-            <span>年份</span>
-            <select v-model.number="store.adjustmentForm.yearNo">
-              <option v-for="item in yearOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-            </select>
-          </label>
+          <div class="two-col-grid">
+            <div class="field readonly-field">
+              <span>系统归属年份</span>
+              <div class="readonly-value">{{ operationContext ? `${operationContext.operationYearNo}年` : '--' }}</div>
+            </div>
+
+            <div class="field readonly-field">
+              <span>系统归属阶段</span>
+              <div class="readonly-value">{{ operationContext?.adjustmentStageCode ? formatStage(operationContext.adjustmentStageCode) : '--' }}</div>
+            </div>
+          </div>
+
+          <div v-if="operationContext && !operationContext.canAdjust" class="context-note">
+            {{ operationContext.blockedReason || '目标小组当前状态无法下发奖惩。' }}
+          </div>
 
           <div class="two-col-grid">
             <label class="field">
@@ -107,7 +116,7 @@
           </label>
 
           <div class="form-actions">
-            <button type="button" class="btn primary" :disabled="previewingAdjustment || sendingAdjustment" @click="handlePreviewAdjustment">
+            <button type="button" class="btn primary" :disabled="previewingAdjustment || sendingAdjustment || !operationContext?.canAdjust" @click="handlePreviewAdjustment">
               {{ previewingAdjustment ? '计算中...' : '预览影响' }}
             </button>
           </div>
@@ -210,7 +219,7 @@
           </div>
 
           <dl class="impact-grid">
-            <div><dt>系统归属阶段</dt><dd>{{ impactPreview.resolvedStageCode }}</dd></div>
+            <div><dt>系统归属阶段</dt><dd>{{ formatStage(impactPreview.resolvedStageCode) }}</dd></div>
             <div><dt>计算依据时间</dt><dd>{{ impactPreview.calculationBasisSavedAt ? formatDateTime(impactPreview.calculationBasisSavedAt) : '尚无草稿保存时间' }}</dd></div>
             <div><dt>税后现金（调整前）</dt><dd>{{ formatAmount(impactPreview.cashBefore) }}</dd></div>
             <div><dt>税后现金（调整后）</dt><dd :class="{ negative: impactPreview.cashAfter < 0 }">{{ formatAmount(impactPreview.cashAfter) }}</dd></div>
@@ -244,7 +253,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useAdminShellStore } from '@/stores/admin-shell'
@@ -255,20 +264,11 @@ import type { AdjustmentImpactResult, AdjustmentRecordStatus } from '@/types/san
 
 const shellStore = useAdminShellStore()
 const store = useAdminNoticeStore()
-const { config } = storeToRefs(shellStore)
-const { groups, generalNotices, adjustments, loading, sendingGeneral, sendingAdjustment, previewingAdjustment, voidingAdjustment, pageMessage } = storeToRefs(store)
+const { groups, generalNotices, adjustments, loading, sendingGeneral, sendingAdjustment, previewingAdjustment, voidingAdjustment, pageMessage, operationContext } = storeToRefs(store)
 const impactPreview = ref<AdjustmentImpactResult | null>(null)
 const previewOperation = ref<'CREATE' | 'VOID'>('CREATE')
 const previewAdjustmentId = ref<number | null>(null)
 const voidReason = ref('')
-
-const yearOptions = computed(() => {
-  const currentOpenYear = Math.max(config.value?.currentOpenYear ?? 0, 0)
-  return Array.from({ length: currentOpenYear + 1 }, (_, index) => ({
-    value: index,
-    label: `${index}年`,
-  }))
-})
 
 const confirmButtonText = computed(() => {
   const action = previewOperation.value === 'CREATE' ? '下发' : '作废'
@@ -280,23 +280,15 @@ onMounted(async () => {
     if (!shellStore.config) {
       await shellStore.bootstrap()
     }
-    await store.bootstrap(config.value?.currentOpenYear ?? 0)
+    await store.bootstrap()
   } catch {
     // 页面消息由 store 统一处理。
   }
 })
 
-watch(
-  () => config.value?.currentOpenYear,
-  (value) => {
-    if (typeof value === 'number') {
-      store.adjustmentForm.yearNo = value
-    }
-  },
-)
-
 async function handleRefresh() {
   try {
+    await store.loadOperationContext()
     await store.refreshRecords()
   } catch {
     // 页面消息由 store 统一处理。
@@ -317,6 +309,14 @@ async function handlePreviewAdjustment() {
     previewOperation.value = 'CREATE'
     previewAdjustmentId.value = null
     voidReason.value = ''
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
+}
+
+async function handleAdjustmentGroupChange() {
+  try {
+    await store.loadOperationContext()
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -375,6 +375,17 @@ function formatAdjustmentStatus(value: AdjustmentRecordStatus) {
   if (value === 'EFFECTIVE') return '有效'
   if (value === 'VOIDED') return '已作废'
   return '快照失效'
+}
+
+function formatStage(value?: string | null) {
+  const map: Record<string, string> = {
+    Q1: 'Q1',
+    Q2: 'Q2',
+    Q3: 'Q3',
+    Q4: 'Q4',
+    YEAR_END: '年末',
+  }
+  return value ? map[value] ?? value : '--'
 }
 </script>
 
@@ -509,6 +520,26 @@ function formatAdjustmentStatus(value: AdjustmentRecordStatus) {
   background: #ffffff;
   padding: 10px 12px;
   font: inherit;
+}
+
+.readonly-value {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px 12px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.context-note {
+  border: 1px solid #fdb022;
+  border-radius: 12px;
+  background: #fffaeb;
+  padding: 10px 12px;
+  color: #93370d;
+  line-height: 1.5;
+  font-size: 13px;
 }
 
 .field input.invalid {

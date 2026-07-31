@@ -467,7 +467,7 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 		))
 		return
 	}
-	if req.YearNo == nil || *req.YearNo < 0 {
+	if req.YearNo != nil && *req.YearNo < 0 {
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusBadRequest,
 			enum.BadRequestCode,
@@ -484,11 +484,15 @@ func (h *AdminControlHandler) UnlockYear(c *gin.Context) {
 	if req.TargetStageCode != nil {
 		targetStageCode = *req.TargetStageCode
 	}
+	yearNo := -1
+	if req.YearNo != nil {
+		yearNo = *req.YearNo
+	}
 
 	identity, _ := middleware.GetAuthIdentity(c)
 	result, err := h.commandService.UnlockYear(c.Request.Context(), service.UnlockYearCommand{
 		GroupID:          *req.GroupID,
-		YearNo:           *req.YearNo,
+		YearNo:           yearNo,
 		UnlockTargetType: req.UnlockTargetType,
 		TargetStageCode:  targetStageCode,
 		Reason:           req.Reason,

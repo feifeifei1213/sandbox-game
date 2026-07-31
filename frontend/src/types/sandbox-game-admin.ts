@@ -330,6 +330,26 @@ export interface ListAdminGroupsResult {
   list: AdminGroupOption[]
 }
 
+export interface AdminGroupOperationContextResult {
+  groupId: number
+  groupNo: number
+  groupName: string
+  businessStatus: string
+  currentOpenYear: number
+  operationYearNo: number
+  yearStatus: string
+  stageStatus: string
+  reportStatus: string
+  currentStageCode: string
+  rollbackPending: boolean
+  rollbackTargetYearNo: number | null
+  rollbackTargetStageCode: string | null
+  canUnlockRetry: boolean
+  canAdjust: boolean
+  adjustmentStageCode: AdjustmentStageCode | ''
+  blockedReason: string
+}
+
 export interface AdminGeneralNoticeRecord {
   id: number
   targetScope: NoticeTargetScope
@@ -387,7 +407,7 @@ export interface SendAdminGeneralNoticeResult {
 
 export interface SendAdminAdjustmentRequest {
   groupId: number
-  yearNo: number
+  yearNo?: number
   adjustmentType: AdjustmentType
   amount: number
   reason: string
@@ -478,8 +498,8 @@ export interface CreateSnapshotRequest {
 
 export interface RestoreGroupSnapshotRequest {
   snapshotId: number
-  reason: string
-  confirmText: string
+  reason?: string
+  confirmText?: string
 }
 
 export interface RestoreGroupSnapshotResult {

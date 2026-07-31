@@ -1,7 +1,7 @@
 ﻿import { defineStore } from 'pinia'
 import { reactive, ref } from 'vue'
 
-import { listAdminGroups } from '@/api/sandbox-game/admin-group-data'
+import { getAdminGroupOperationContext, listAdminGroups } from '@/api/sandbox-game/admin-group-data'
 import {
   getAdminNoticeRecords,
   previewAdminAdjustment,
@@ -12,6 +12,7 @@ import {
 import type {
   AdminAdjustmentRecord,
   AdminGeneralNoticeRecord,
+  AdminGroupOperationContextResult,
   AdminGroupOption,
   AdjustmentType,
   NoticeTargetScope,
@@ -35,6 +36,7 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
   const previewingAdjustment = ref(false)
   const voidingAdjustment = ref(false)
   const pageMessage = ref<PageMessage | null>(null)
+  const operationContext = ref<AdminGroupOperationContextResult | null>(null)
 
   const generalForm = reactive({
     targetScope: 'ALL' as NoticeTargetScope,
@@ -51,7 +53,7 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
     reason: '',
   })
 
-  async function bootstrap(defaultYear = 0) {
+  async function bootstrap() {
     loading.value = true
     pageMessage.value = null
     try {
@@ -62,12 +64,30 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
       if (!adjustmentForm.groupId && groups.value.length > 0) {
         adjustmentForm.groupId = groups.value[0].groupId
       }
-      adjustmentForm.yearNo = defaultYear
+      await loadOperationContext(adjustmentForm.groupId)
     } catch (error) {
       pageMessage.value = toErrorMessage(error, '初始化通知与奖惩页面失败')
       throw error
     } finally {
       loading.value = false
+    }
+  }
+
+  async function loadOperationContext(groupId = adjustmentForm.groupId) {
+    if (!groupId) {
+      operationContext.value = null
+      return null
+    }
+    try {
+      const result = await getAdminGroupOperationContext(groupId)
+      operationContext.value = result
+      adjustmentForm.groupId = result.groupId
+      adjustmentForm.yearNo = result.operationYearNo
+      return result
+    } catch (error) {
+      operationContext.value = null
+      pageMessage.value = toErrorMessage(error, '读取目标小组操作年份失败')
+      throw error
     }
   }
 
@@ -107,19 +127,21 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
 
   async function sendAdjustmentNotice() {
     validateAdjustmentAmount()
+    const context = await ensureAdjustmentContext()
     sendingAdjustment.value = true
     pageMessage.value = null
     try {
       const amount = Number(adjustmentForm.amount)
       const result = await sendAdminAdjustment({
         groupId: adjustmentForm.groupId ?? 0,
-        yearNo: adjustmentForm.yearNo,
+        yearNo: context.operationYearNo,
         adjustmentType: adjustmentForm.adjustmentType,
         amount,
         reason: adjustmentForm.reason,
       })
       adjustmentForm.amount = ''
       adjustmentForm.reason = ''
+      await loadOperationContext(result.groupId)
       await refreshRecords({ silent: true })
       pageMessage.value = {
         type: 'success',
@@ -135,13 +157,14 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
 
   async function previewAdjustmentNotice() {
     validateAdjustmentAmount()
+    const context = await ensureAdjustmentContext()
     previewingAdjustment.value = true
     pageMessage.value = null
     try {
       return await previewAdminAdjustment({
         operation: 'CREATE',
         groupId: adjustmentForm.groupId ?? 0,
-        yearNo: adjustmentForm.yearNo,
+        yearNo: context.operationYearNo,
         adjustmentType: adjustmentForm.adjustmentType,
         amount: Number(adjustmentForm.amount),
         reason: adjustmentForm.reason,
@@ -152,6 +175,29 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
     } finally {
       previewingAdjustment.value = false
     }
+  }
+
+  async function ensureAdjustmentContext() {
+    if (!adjustmentForm.groupId) {
+      const error = new Error('请选择目标小组')
+      pageMessage.value = toErrorMessage(error, error.message)
+      throw error
+    }
+    const context =
+      operationContext.value?.groupId === adjustmentForm.groupId
+        ? operationContext.value
+        : await loadOperationContext(adjustmentForm.groupId)
+    if (!context) {
+      const error = new Error('请选择目标小组')
+      pageMessage.value = toErrorMessage(error, error.message)
+      throw error
+    }
+    if (!context.canAdjust) {
+      const error = new Error(context.blockedReason || '目标小组当前状态无法下发奖惩')
+      pageMessage.value = toErrorMessage(error, error.message)
+      throw error
+    }
+    return context
   }
 
   async function previewVoidAdjustment(adjustmentId: number) {
@@ -207,9 +253,11 @@ export const useAdminNoticeStore = defineStore('sandbox-admin-notice', () => {
     previewingAdjustment,
     voidingAdjustment,
     pageMessage,
+    operationContext,
     generalForm,
     adjustmentForm,
     bootstrap,
+    loadOperationContext,
     refreshRecords,
     sendGeneral,
     sendAdjustmentNotice,

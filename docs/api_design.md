@@ -1772,7 +1772,6 @@ Go DTO 建议：
 ```json
 {
   "groupId": 1,
-  "yearNo": 2,
   "unlockTargetType": "OPERATING",
   "targetStageCode": "Q2"
 }
@@ -1783,7 +1782,7 @@ Go DTO 建议：
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `groupId` | `int64` | 是 | 目标组 |
-| `yearNo` | `int` | 是 | 目标年份 |
+| `yearNo` | `int` | 否 | 兼容字段；为空时服务端按目标小组当前操作年份解析；若传入值不等于解析结果，返回业务错误 |
 | `unlockTargetType` | `string` | 是 | `OPERATING` / `REPORT` |
 | `targetStageCode` | `string` | 条件必填 | 当 `unlockTargetType = OPERATING` 时必填，允许值：`Q1 / Q2 / Q3 / Q4 / YEAR_END` |
 | `reason` | `string` | 否 | 退回说明；为空时服务端自动记录为 `管理员退回重提` |
@@ -1791,7 +1790,9 @@ Go DTO 建议：
 规则：
 
 - 仅管理员可执行。
-- 轻量退回重提仍优先用于下一年尚未开放前的本年修正；若需要跨年恢复，使用 `admin-rollback` 的单组快照恢复接口。
+- 轻量退回重提仍优先用于目标小组当前操作年份内修正；若需要跨年恢复，使用 `admin-rollback` 的单组快照恢复接口。
+- 当前操作年份由服务端解析：若目标小组存在待重提年份，取最早待重提年份；否则取全局当前开放年份。
+- 前端只读展示解析年份，不提供可编辑年份框；接口层也必须防止旧调用方手工传入历史年份。
 - 前端不做复杂可解锁预判，管理员点击后直接提交；服务端负责最终硬校验。
 - 仅允许对“已正式提交”的目标阶段或财报结果执行异常解锁。
 - 执行前必须自动创建目标组的回退前安全快照。
@@ -1983,8 +1984,8 @@ Go DTO 建议：
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `snapshotId` | `int64` | 是 | 目标单组快照 ID |
-| `reason` | `string` | 是 | 回退原因 |
-| `confirmText` | `string` | 是 | 二次确认文本，防止误操作 |
+| `reason` | `string` | 否 | 兼容字段；为空时服务端自动记录为 `管理员恢复快照` |
+| `confirmText` | `string` | 否 | 兼容字段；服务端不再校验确认文本 |
 
 响应字段建议：
 
@@ -2004,6 +2005,7 @@ Go DTO 建议：
 规则：
 
 - 首版只允许恢复 `GROUP` 快照，不允许恢复 `GLOBAL` 快照。
+- 恢复快照页面不再要求填写恢复原因和确认文本；系统必须用默认原因补齐回退日志。
 - 回退粒度是阶段级，不支持字段级回退。
 - 支持单组跨年度回退，例如从 `5年` 回到 `3年 Q2`。
 - 回退不改变全局当前开放年份。
@@ -2112,7 +2114,6 @@ Go DTO 建议：
 ```json
 {
   "groupId": 3,
-  "yearNo": 0,
   "adjustmentType": "REWARD",
   "amount": 88,
   "reason": "主持人现场奖励"
@@ -2124,14 +2125,15 @@ Go DTO 建议：
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `groupId` | `int64` | 是 | 目标组 |
-| `yearNo` | `int` | 是 | 目标年份 |
+| `yearNo` | `int` | 否 | 兼容字段；为空时服务端按目标小组当前操作年份解析；若传入值不等于解析结果，返回业务错误 |
 | `adjustmentType` | `string` | 是 | `REWARD` / `PENALTY` |
 | `amount` | `decimal` | 是 | 必须大于 `0` |
 | `reason` | `string` | 是 | 奖惩原因 |
 
 规则：
 
-- `stageCode` 不再由管理员提交，服务端必须根据目标组当前状态自动决定 `Q1 / Q2 / Q3 / Q4 / YEAR_END`；财报填写和财报草稿阶段统一归属 `YEAR_END`。
+- `yearNo` 和 `stageCode` 不再由管理员手工决定；服务端必须根据目标组当前状态自动决定年份与 `Q1 / Q2 / Q3 / Q4 / YEAR_END` 阶段；财报填写和财报草稿阶段统一归属 `YEAR_END`。
+- 当前操作年份解析规则：若目标小组存在待重提年份，取最早待重提年份；否则取全局当前开放年份。
 - 奖惩属于计算型业务事件，必须进入经营页计算，并继续进入财报承接口径。
 - 玩家端经营页中的 `额外收入 / 奖励` 与 `额外支出 / 罚款` 改为只读展示，不允许玩家自行录入。
 - 若目标年份尚未开放，返回 `422`。
@@ -2154,7 +2156,6 @@ Go DTO 建议：
 {
   "operation": "CREATE",
   "groupId": 3,
-  "yearNo": 1,
   "adjustmentType": "PENALTY",
   "amount": 10,
   "reason": "现场讨论决定"
@@ -2170,7 +2171,7 @@ Go DTO 建议：
 }
 ```
 
-- `operation = CREATE` 时，创建奖惩所需字段必填。
+- `operation = CREATE` 时，创建奖惩所需字段必填；`yearNo` 可省略，若传入则必须等于服务端解析出的目标小组当前操作年份。
 - `operation = VOID` 时，仅需 `adjustmentId`；服务端从原事件读取组、年份、阶段、类型和金额。
 - 财报填写阶段的预览和破产判定以服务端最新已保存财报草稿为依据；玩家浏览器内尚未保存的手工输入不作为管理员动作的权威数据源。
 
@@ -2240,7 +2241,40 @@ Go DTO 建议：
 - 路径：`/api/v1/sandbox-game/admin-group-data/get-report-view?groupId=1&yearNo=1`
 - 权限：`sandbox-game:admin-group-data:query`
 
-#### 6.7.3 分页查询阶段提交日志
+#### 6.7.3 获取管理员操作上下文
+
+- 方法：`GET`
+- 路径：`/api/v1/sandbox-game/admin-group-data/get-operation-context?groupId=1`
+- 权限：`sandbox-game:admin-group-data:query`
+
+用途：
+
+- 供 `回退与修正`、`通知与奖惩` 等管理员页面只读展示目标小组当前操作年份和系统归属阶段。
+- 前端不得用本接口结果替代提交接口的服务端校验；退回重提和奖惩提交时仍必须由服务端重新解析。
+
+响应字段建议：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `groupId` | `int64` | 目标小组 ID |
+| `groupNo` | `int` | 小组编号 |
+| `groupName` | `string` | 小组名称 |
+| `businessStatus` | `string` | 小组经营状态 |
+| `currentOpenYear` | `int` | 全局当前开放年份 |
+| `operationYearNo` | `int` | 服务端解析出的当前小组操作年份 |
+| `yearStatus` | `string` | 当前操作年份主状态 |
+| `stageStatus` | `string` | 当前经营阶段状态 |
+| `reportStatus` | `string` | 当前财报状态 |
+| `currentStageCode` | `string` | 当前经营阶段编码 |
+| `rollbackPending` | `bool` | 是否处于待重提链路 |
+| `rollbackTargetYearNo` | `int \| null` | 待重提目标年份 |
+| `rollbackTargetStageCode` | `string \| null` | 待重提目标阶段 |
+| `canUnlockRetry` | `bool` | 页面是否可尝试提交退回重提 |
+| `canAdjust` | `bool` | 当前是否可直接下发奖惩 |
+| `adjustmentStageCode` | `string` | 可下发奖惩时的系统归属阶段 |
+| `blockedReason` | `string` | 不可操作时的原因说明 |
+
+#### 6.7.4 分页查询阶段提交日志
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-group-data/page-stage-submissions`
@@ -2254,7 +2288,7 @@ Go DTO 建议：
 - `pageNo`
 - `pageSize`
 
-#### 6.7.4 分页查询财报提交日志
+#### 6.7.5 分页查询财报提交日志
 
 - 方法：`GET`
 - 路径：`/api/v1/sandbox-game/admin-group-data/page-report-submissions`

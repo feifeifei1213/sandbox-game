@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	rollbackConfirmText = "确认恢复"
-	rollbackStageReport = "REPORT"
+	defaultRestoreGroupSnapshotReason = "管理员恢复快照"
+	rollbackConfirmText               = "确认恢复"
+	rollbackStageReport               = "REPORT"
 )
 
 type SnapshotSummaryResult struct {
@@ -265,10 +266,7 @@ func (s *AdminRollbackCommandService) RestoreGroupSnapshot(ctx context.Context, 
 	operatorName := normalizeAdminOperatorName(cmd.OperatorName)
 	reason := strings.TrimSpace(cmd.Reason)
 	if reason == "" {
-		return nil, ErrRollbackReasonRequired
-	}
-	if strings.TrimSpace(cmd.ConfirmText) != rollbackConfirmText {
-		return nil, ErrRollbackConfirmRequired
+		reason = defaultRestoreGroupSnapshotReason
 	}
 	if cmd.SnapshotID <= 0 {
 		return nil, ErrRollbackSnapshotNotFound

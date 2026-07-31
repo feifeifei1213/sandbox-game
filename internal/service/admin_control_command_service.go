@@ -703,21 +703,21 @@ func (s *AdminControlCommandService) UnlockYear(ctx context.Context, cmd UnlockY
 		txOrderSelectionRepo := repository.NewGroupOrderSelectionRepository(tx)
 		txDeliveryRevisionRepo := repository.NewGroupOrderDeliveryRevisionRepository(tx)
 
-		gameConfig, err := txGameConfigRepo.GetCurrent(ctx)
+		operationContext, err := loadAdminGroupOperationContext(ctx, txGameConfigRepo, txGroupRepo, txGroupYearRepo, cmd.GroupID, true)
 		if err != nil {
-			return fmt.Errorf("load game config: %w", err)
+			return fmt.Errorf("load admin operation context: %w", err)
 		}
-		group, err := txGroupRepo.GetByID(ctx, cmd.GroupID)
-		if err != nil {
-			return fmt.Errorf("load group: %w", err)
+		if cmd.YearNo >= 0 && cmd.YearNo != operationContext.OperationYearNo {
+			return &UnlockNotAllowedError{Reason: "退回重提年份必须使用目标小组当前操作年份"}
 		}
-		yearState, err := txGroupYearRepo.GetByGroupIDAndYear(ctx, cmd.GroupID, cmd.YearNo)
-		if err != nil {
-			return fmt.Errorf("load group year state: %w", err)
-		}
+		cmd.YearNo = operationContext.OperationYearNo
+		gameConfig := &operationContext.GameConfig
+		group := &operationContext.Group
+		yearState := &operationContext.YearState
 
 		currentState := state.NewRuntimeStateFromEntities(*group, *yearState)
-		nextState, err := ensureUnlockYearAllowed(currentState, reason, targetType, targetStageCode, gameConfig.CurrentOpenYear > cmd.YearNo)
+		nextYearAlreadyOpened := gameConfig.CurrentOpenYear > cmd.YearNo && !yearState.RollbackPending
+		nextState, err := ensureUnlockYearAllowed(currentState, reason, targetType, targetStageCode, nextYearAlreadyOpened)
 		if err != nil {
 			return err
 		}

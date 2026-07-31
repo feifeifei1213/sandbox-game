@@ -50,6 +50,54 @@ func (h *AdminGroupDataHandler) ListGroups(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Success(result))
 }
 
+func (h *AdminGroupDataHandler) GetOperationContext(c *gin.Context) {
+	var req dto.AdminGroupDataGetOperationContextRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"groupId 参数不正确",
+			err,
+		))
+		return
+	}
+	if req.GroupID == nil || *req.GroupID <= 0 {
+		middleware.AbortWithAppError(c, middleware.NewAppError(
+			http.StatusBadRequest,
+			enum.BadRequestCode,
+			"groupId 参数不正确",
+			nil,
+		))
+		return
+	}
+	if !ensureAdminIdentity(c, "当前身份无权查看小组操作上下文") {
+		return
+	}
+
+	result, err := h.queryService.GetOperationContext(c.Request.Context(), *req.GroupID)
+	if err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusNotFound,
+				enum.NotFoundCode,
+				"未找到目标小组或年份状态",
+				err,
+			))
+		default:
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusInternalServerError,
+				enum.InternalServerErrorCode,
+				"获取小组操作上下文失败",
+				err,
+			))
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.Success(result))
+}
+
 func (h *AdminGroupDataHandler) GetOperatingView(c *gin.Context) {
 	var req dto.AdminGroupDataGetOperatingViewRequest
 	if err := c.ShouldBindQuery(&req); err != nil {

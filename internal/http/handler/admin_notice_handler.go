@@ -129,7 +129,7 @@ func (h *AdminNoticeHandler) SendAdjustment(c *gin.Context) {
 		))
 		return
 	}
-	if req.GroupID == nil || *req.GroupID <= 0 || req.YearNo == nil || *req.YearNo < 0 || req.Amount == nil {
+	if req.GroupID == nil || *req.GroupID <= 0 || (req.YearNo != nil && *req.YearNo < 0) || req.Amount == nil {
 		middleware.AbortWithAppError(c, middleware.NewAppError(
 			http.StatusBadRequest,
 			enum.BadRequestCode,
@@ -143,9 +143,13 @@ func (h *AdminNoticeHandler) SendAdjustment(c *gin.Context) {
 	}
 
 	identity, _ := middleware.GetAuthIdentity(c)
+	yearNo := -1
+	if req.YearNo != nil {
+		yearNo = *req.YearNo
+	}
 	result, err := h.commandService.SendAdjustment(c.Request.Context(), service.SendAdjustmentCommand{
 		GroupID:        *req.GroupID,
-		YearNo:         *req.YearNo,
+		YearNo:         yearNo,
 		AdjustmentType: req.AdjustmentType,
 		Amount:         *req.Amount,
 		Reason:         req.Reason,
@@ -168,7 +172,8 @@ func (h *AdminNoticeHandler) SendAdjustment(c *gin.Context) {
 			errors.Is(err, service.ErrAdminAdjustmentReasonRequired),
 			errors.Is(err, service.ErrAdminAdjustmentYearNotOpen),
 			errors.Is(err, service.ErrAdminAdjustmentStageLocked),
-			errors.Is(err, service.ErrAdminAdjustmentGroupNotAvailable):
+			errors.Is(err, service.ErrAdminAdjustmentGroupNotAvailable),
+			errors.Is(err, service.ErrAdminAdjustmentTargetMismatch):
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusUnprocessableEntity,
 				enum.UnprocessableEntityCode,
@@ -198,7 +203,7 @@ func (h *AdminNoticeHandler) PreviewAdjustment(c *gin.Context) {
 	if !ensureAdminIdentity(c, "当前身份无权预览奖惩影响") {
 		return
 	}
-	cmd := service.PreviewAdjustmentCommand{Operation: req.Operation, AdjustmentType: req.AdjustmentType, Reason: req.Reason}
+	cmd := service.PreviewAdjustmentCommand{Operation: req.Operation, YearNo: -1, AdjustmentType: req.AdjustmentType, Reason: req.Reason}
 	if req.AdjustmentID != nil {
 		cmd.AdjustmentID = *req.AdjustmentID
 	}
@@ -263,7 +268,8 @@ func isAdminAdjustmentBusinessError(err error) bool {
 		errors.Is(err, service.ErrAdminAdjustmentVoidReasonRequired) ||
 		errors.Is(err, service.ErrAdminAdjustmentYearNotOpen) ||
 		errors.Is(err, service.ErrAdminAdjustmentStageLocked) ||
-		errors.Is(err, service.ErrAdminAdjustmentGroupNotAvailable)
+		errors.Is(err, service.ErrAdminAdjustmentGroupNotAvailable) ||
+		errors.Is(err, service.ErrAdminAdjustmentTargetMismatch)
 }
 
 func resolveAdminNoticeErrorMessage(err error) string {
@@ -296,6 +302,8 @@ func resolveAdminNoticeErrorMessage(err error) string {
 		return "目标季度已经锁定，请先执行异常解锁再处理奖惩"
 	case errors.Is(err, service.ErrAdminAdjustmentGroupNotAvailable):
 		return "目标小组当前不可直接下发奖惩"
+	case errors.Is(err, service.ErrAdminAdjustmentTargetMismatch):
+		return "奖惩年份必须使用目标小组当前操作年份"
 	default:
 		return "通知与奖惩处理失败"
 	}

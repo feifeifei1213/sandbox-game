@@ -96,6 +96,15 @@ func (s *AdminGroupDataQueryService) ListGroups(ctx context.Context) (*ListAdmin
 	return &ListAdminGroupsResult{List: result}, nil
 }
 
+func (s *AdminGroupDataQueryService) GetOperationContext(ctx context.Context, groupID int64) (*AdminGroupOperationContextResult, error) {
+	operationContext, err := loadAdminGroupOperationContext(ctx, s.gameConfigRepo, s.groupRepo, s.groupYearRepo, groupID, false)
+	if err != nil {
+		return nil, fmt.Errorf("load admin group operation context: %w", err)
+	}
+	result := buildAdminGroupOperationContextResult(*operationContext)
+	return &result, nil
+}
+
 func (s *AdminGroupDataQueryService) GetOperatingView(ctx context.Context, groupID int64, yearNo int) (*assembler.PlayerOperatingView, error) {
 	calculationContext, draft, err := s.loadOperatingCalculationContext(ctx, groupID, yearNo)
 	if err != nil {

@@ -544,11 +544,25 @@ func createAdminNoticeFixtures(t *testing.T, ctx context.Context, tx *gorm.DB, y
 	t.Helper()
 
 	now := time.Now()
+	setIntegrationCurrentOpenYear(t, ctx, tx, 0)
 	groupID := createIntegrationGroup(t, ctx, tx, now, "IT_NOTICE")
 	createInitialBaselineRecord(t, ctx, tx, groupID, now)
 	createGroupYearStateRecord(t, ctx, tx, groupID, 0, enum.YearTypeDemo, yearStatus, stageStatus, enum.ReportStatusLocked)
 
 	return groupID
+}
+
+func setIntegrationCurrentOpenYear(t *testing.T, ctx context.Context, tx *gorm.DB, yearNo int) {
+	t.Helper()
+
+	gameConfigRepo := repository.NewGameConfigRepository(tx)
+	gameConfig, err := gameConfigRepo.GetCurrent(ctx)
+	if err != nil {
+		t.Fatalf("load game config: %v", err)
+	}
+	if err := gameConfigRepo.UpdateCurrentOpenYear(ctx, gameConfig.ID, yearNo, "integration-test", time.Now()); err != nil {
+		t.Fatalf("set current open year: %v", err)
+	}
 }
 
 func createLockedStageSubmission(t *testing.T, ctx context.Context, tx *gorm.DB, groupID int64, yearNo int, stageCode string) {

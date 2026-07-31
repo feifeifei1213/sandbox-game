@@ -230,34 +230,25 @@ func (s *AdminNoticeCommandService) SendAdjustment(
 		txRevisionRepo := repository.NewGroupAdjustmentRevisionRepository(tx)
 		txAdminActionLogRepo := repository.NewAdminActionLogRepository(tx)
 
-		group, err := txGroupRepo.GetByIDForUpdate(ctx, cmd.GroupID)
+		operationContext, err := loadAdminGroupOperationContext(ctx, txGameConfigRepo, txGroupRepo, txGroupYearRepo, cmd.GroupID, true)
 		if err != nil {
 			return err
 		}
-		if group.BusinessStatus == enum.BusinessStatusBankrupt {
+		if operationContext.Group.BusinessStatus == enum.BusinessStatusBankrupt {
 			return ErrAdminAdjustmentGroupNotAvailable
 		}
-
-		gameConfig, err := txGameConfigRepo.GetCurrent(ctx)
-		if err != nil {
-			return err
+		if cmd.YearNo >= 0 && cmd.YearNo != operationContext.OperationYearNo {
+			return ErrAdminAdjustmentTargetMismatch
 		}
-		if cmd.YearNo > gameConfig.CurrentOpenYear {
-			return ErrAdminAdjustmentYearNotOpen
-		}
-
-		yearState, err := txGroupYearRepo.GetByGroupIDAndYearForUpdate(ctx, cmd.GroupID, cmd.YearNo)
-		if err != nil {
-			return err
-		}
-		stageCode, err := resolveAdjustmentStage(*yearState)
+		targetYearNo := operationContext.OperationYearNo
+		stageCode, err := resolveAdjustmentStage(operationContext.YearState)
 		if err != nil {
 			return err
 		}
 
 		item := &entity.GroupAdjustment{
 			GroupID:        cmd.GroupID,
-			YearNo:         cmd.YearNo,
+			YearNo:         targetYearNo,
 			StageCode:      stageCode,
 			AdjustmentType: adjustmentType,
 			Amount:         cmd.Amount,
@@ -273,7 +264,7 @@ func (s *AdminNoticeCommandService) SendAdjustment(
 		}
 		impact, err := newAdjustmentImpactCalculator(tx).Calculate(ctx, AdjustmentImpactRequest{
 			Operation: adjustmentOperationCreate,
-			GroupID:   cmd.GroupID, YearNo: cmd.YearNo, Candidate: item,
+			GroupID:   cmd.GroupID, YearNo: targetYearNo, Candidate: item,
 		})
 		if err != nil {
 			return err
@@ -282,7 +273,7 @@ func (s *AdminNoticeCommandService) SendAdjustment(
 		if err := txAdjustmentRepo.Create(ctx, item); err != nil {
 			return err
 		}
-		revision, err := txRevisionRepo.Increment(ctx, cmd.GroupID, cmd.YearNo, publishedAt)
+		revision, err := txRevisionRepo.Increment(ctx, cmd.GroupID, targetYearNo, publishedAt)
 		if err != nil {
 			return err
 		}
@@ -293,10 +284,9 @@ func (s *AdminNoticeCommandService) SendAdjustment(
 			}
 		}
 
-		targetYearNo := cmd.YearNo
 		payloadJSON, err := marshalJSON(map[string]any{
 			"groupId":            cmd.GroupID,
-			"yearNo":             cmd.YearNo,
+			"yearNo":             targetYearNo,
 			"stageCode":          stageCode,
 			"adjustmentType":     adjustmentType,
 			"amount":             cmd.Amount,
@@ -348,12 +338,34 @@ func (s *AdminNoticeCommandService) PreviewAdjustment(ctx context.Context, cmd P
 		if err := validateAdjustmentInput(adjustmentType, cmd.Amount, reason); err != nil {
 			return nil, err
 		}
+		operationContext, err := loadAdminGroupOperationContext(
+			ctx,
+			repository.NewGameConfigRepository(s.db),
+			repository.NewGroupRepository(s.db),
+			repository.NewGroupYearStateRepository(s.db),
+			cmd.GroupID,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if operationContext.Group.BusinessStatus == enum.BusinessStatusBankrupt {
+			return nil, ErrAdminAdjustmentGroupNotAvailable
+		}
+		if cmd.YearNo >= 0 && cmd.YearNo != operationContext.OperationYearNo {
+			return nil, ErrAdminAdjustmentTargetMismatch
+		}
+		targetYearNo := operationContext.OperationYearNo
+		stageCode, err := resolveAdjustmentStage(operationContext.YearState)
+		if err != nil {
+			return nil, err
+		}
 		candidate := &entity.GroupAdjustment{
-			GroupID: cmd.GroupID, YearNo: cmd.YearNo,
+			GroupID: cmd.GroupID, YearNo: targetYearNo, StageCode: stageCode,
 			AdjustmentType: adjustmentType, Amount: cmd.Amount, Reason: reason, Effective: true,
 		}
 		return newAdjustmentImpactCalculator(s.db).Calculate(ctx, AdjustmentImpactRequest{
-			Operation: operation, GroupID: cmd.GroupID, YearNo: cmd.YearNo, Candidate: candidate,
+			Operation: operation, GroupID: cmd.GroupID, YearNo: targetYearNo, Candidate: candidate,
 		})
 	case adjustmentOperationVoid:
 		item, err := repository.NewGroupAdjustmentRepository(s.db).GetByID(ctx, cmd.AdjustmentID)

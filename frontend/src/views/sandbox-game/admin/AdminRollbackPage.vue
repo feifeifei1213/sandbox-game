@@ -28,14 +28,14 @@
       <div class="form-grid">
         <label class="field">
           <span>目标小组</span>
-          <select v-model.number="store.unlockForm.groupId">
+          <select v-model.number="store.unlockForm.groupId" @change="handleUnlockGroupChange">
             <option v-for="group in groups" :key="group.groupId" :value="group.groupId">第{{ group.groupNo }}组 · {{ group.groupName }}</option>
           </select>
         </label>
-        <label class="field">
-          <span>年份</span>
-          <input v-model.number="store.unlockForm.yearNo" type="number" min="0" step="1" data-enter-confirm @keydown.enter="confirmInputOnEnter">
-        </label>
+        <div class="field readonly-field">
+          <span>系统归属年份</span>
+          <div class="readonly-value">{{ operationContext ? `${operationContext.operationYearNo}年` : '--' }}</div>
+        </div>
         <label class="field">
           <span>目标类型</span>
           <select v-model="store.unlockForm.unlockTargetType" @change="handleUnlockTargetChange">
@@ -54,8 +54,14 @@
           </select>
         </label>
       </div>
+      <div v-if="operationContext" class="context-strip">
+        <span>当前阶段：{{ formatStage(operationContext.currentStageCode) }}</span>
+        <span>年度状态：{{ formatStatus(operationContext.yearStatus) }}</span>
+        <span v-if="operationContext.rollbackPending" class="status-tag warning">待重提</span>
+        <span v-if="!operationContext.canUnlockRetry" class="muted">{{ unlockBlockedHint }}</span>
+      </div>
       <div class="action-row">
-        <button type="button" class="primary-btn" :disabled="operating" @click="handleUnlockRetry">提交退回重提</button>
+        <button type="button" class="primary-btn" :disabled="operating || !operationContext?.canUnlockRetry" @click="handleUnlockRetry">提交退回重提</button>
       </div>
     </section>
 
@@ -217,14 +223,9 @@
                 <dd>{{ item.value }}</dd>
               </div>
             </dl>
-            <label class="field">
-              <span>恢复原因</span>
-              <textarea v-model="store.restoreForm.reason" rows="3"></textarea>
-            </label>
-            <label class="field">
-              <span>确认文本</span>
-              <input v-model="store.restoreForm.confirmText" placeholder="确认恢复">
-            </label>
+            <div v-if="snapshotDetail.snapshot.canRestore" class="readonly-warning">
+              恢复时系统会自动记录原因“管理员恢复快照”，并在恢复前生成安全快照。
+            </div>
             <button
               type="button"
               class="danger-btn full"
@@ -263,7 +264,21 @@ const {
   selectedSnapshotId,
   selectedSnapshot,
   snapshotDetail,
+  operationContext,
 } = storeToRefs(store)
+
+const unlockBlockedHint = computed(() => {
+  if (!operationContext.value || operationContext.value.canUnlockRetry) {
+    return ''
+  }
+  if (operationContext.value.businessStatus === 'BANKRUPT') {
+    return '目标小组已破产，不能退回重提。'
+  }
+  if (operationContext.value.currentOpenYear > operationContext.value.operationYearNo && !operationContext.value.rollbackPending) {
+    return '普通退回重提只处理当前操作年份；跨年修正请使用恢复快照。'
+  }
+  return '目标小组当前状态不能退回重提。'
+})
 
 const detailRows = computed(() => {
   if (!snapshotDetail.value) {
@@ -301,6 +316,7 @@ onMounted(async () => {
 async function handleRefresh() {
   try {
     await shellStore.refreshConfig({ silent: true })
+    await store.loadOperationContext()
     await store.loadSnapshots()
   } catch {
     // 页面消息由 store 统一处理。
@@ -318,6 +334,14 @@ async function handleSelectSnapshot(snapshotId: number) {
 async function handleUnlockRetry() {
   await store.submitUnlockRetry()
   await shellStore.refreshConfig({ silent: true })
+}
+
+async function handleUnlockGroupChange() {
+  try {
+    await store.loadOperationContext()
+  } catch {
+    // 页面消息由 store 统一处理。
+  }
 }
 
 async function handleCreateSnapshot() {
@@ -388,6 +412,16 @@ function formatStage(value?: string | null) {
     Q4: 'Q4',
     YEAR_END: '年末',
     REPORT: '财报',
+  }
+  return value ? map[value] ?? value : '--'
+}
+
+function formatStatus(value?: string | null) {
+  const map: Record<string, string> = {
+    LOCKED: '锁定',
+    OPEN: '开放',
+    COMPLETED: '已完成',
+    IN_PROGRESS: '进行中',
   }
   return value ? map[value] ?? value : '--'
 }
@@ -591,12 +625,52 @@ function formatDateTime(value?: string | null) {
   font: inherit;
 }
 
+.readonly-value {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 9px 10px;
+  color: var(--text);
+  font-weight: 700;
+}
+
 .field textarea {
   resize: vertical;
 }
 
 .action-field {
   align-self: end;
+}
+
+.context-strip {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: -4px 16px 14px;
+  border: 1px solid #dbe7ff;
+  border-radius: 12px;
+  background: #f5f8ff;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-tag {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 700;
+}
+
+.status-tag.warning {
+  color: #93370d;
+  background: #fffaeb;
+}
+
+.muted {
+  color: var(--muted);
 }
 
 .action-row {

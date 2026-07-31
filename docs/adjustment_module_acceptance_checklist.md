@@ -7,6 +7,8 @@
 - [ ] `sg_group_adjustment_revision` 存在，且 `(group_id, year_no)` 为唯一键。
 - [ ] `preview-adjustment`、`send-adjustment`、`void-adjustment` 和 `get-adjustment-sync` 均可访问。
 - [ ] 下发请求不包含 `stageCode`；响应中的 `resolvedStageCode` 或 `stageCode` 由服务端决定。
+- [ ] 下发请求可不包含 `yearNo`；若旧调用方传入 `yearNo`，必须等于服务端解析出的目标小组当前操作年份。
+- [ ] 管理员奖惩下发区不再提供年份下拉框，选择目标小组后只读展示系统解析出的当前操作年份和归属阶段。
 
 ## 2. 阶段自动归属
 
@@ -22,6 +24,8 @@
 | 财报正式提交或年份完成 | 无 | 禁止，先退回 |
 | 年份未开放 | 无 | 禁止 |
 | 小组已破产 | 无 | 永久禁止 |
+
+- [ ] 手工调用奖惩预览或下发接口传入非当前操作年份时，服务端拒绝。
 
 ## 3. 影响预览与权威执行
 
