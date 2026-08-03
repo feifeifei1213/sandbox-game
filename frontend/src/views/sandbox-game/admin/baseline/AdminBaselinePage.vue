@@ -105,6 +105,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 
 import { applyDictionaryToBaselineLabels, resolveBaselineLabels } from '@/configs/sandbox-game-service-labels'
 import { useAdminBaselineStore } from '@/stores/admin-baseline'
@@ -117,6 +118,7 @@ import { hasFractionInput } from '@/utils/manual-integer'
 const shellStore = useAdminShellStore()
 const baselineStore = useAdminBaselineStore()
 const dictionaryStore = useDictionaryStore()
+const router = useRouter()
 const { view, draftPayload, loading, submitting, pageMessage } = storeToRefs(baselineStore)
 
 const baselineLabels = computed(() =>
@@ -155,8 +157,8 @@ const fieldDefs = computed<Array<{
 
 onMounted(async () => {
   try {
-    if (!shellStore.config) {
-      await shellStore.bootstrap()
+    if (!(await ensureBaselinePageAvailable())) {
+      return
     }
     await Promise.all([
       baselineStore.bootstrap(),
@@ -174,7 +176,10 @@ onUnmounted(() => {
 
 async function handleRefresh() {
   try {
-    await Promise.all([shellStore.refreshConfig({ silent: true }), baselineStore.bootstrap()])
+    if (!(await ensureBaselinePageAvailable())) {
+      return
+    }
+    await baselineStore.bootstrap()
   } catch {
     // 页面消息由 store 统一处理。
   }
@@ -182,11 +187,23 @@ async function handleRefresh() {
 
 async function handleSubmit() {
   try {
+    if (!(await ensureBaselinePageAvailable())) {
+      return
+    }
     await baselineStore.submit()
     await shellStore.refreshConfig({ silent: true })
   } catch {
     // 页面消息由 store 统一处理。
   }
+}
+
+async function ensureBaselinePageAvailable() {
+  await shellStore.refreshAll({ silent: true })
+  if (!shellStore.setupStatus?.initialized) {
+    await router.replace('/sandbox-game/admin/setup')
+    return false
+  }
+  return true
 }
 
 function handleFieldInput(key: keyof BaselinePayload, event: Event) {

@@ -11,6 +11,7 @@ import (
 
 	"sandbox-game/internal/enum"
 	"sandbox-game/internal/model/entity"
+	"sandbox-game/internal/model/payload"
 	"sandbox-game/internal/repository"
 	"sandbox-game/internal/state"
 )
@@ -406,6 +407,48 @@ func TestInitializeGameLocksProductionEdition(t *testing.T) {
 	}
 }
 
+func TestSubmitInitialBaselineRejectsBeforeInitialization(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureIntegrationGameConfig(t, ctx, tx, 3, 0, false)
+	clearInitializationFixtures(t, ctx, tx)
+
+	service := NewAdminControlCommandService(tx)
+	_, err := service.SubmitInitialBaseline(ctx, SubmitInitialBaselineCommand{
+		BaselinePayload: &payload.BaselinePayload{BaselineCash: 36},
+		OperatorID:      90015,
+		OperatorName:    "integration-admin",
+	})
+	if !errors.Is(err, ErrAdminControlNotInitialized) {
+		t.Fatalf("expected ErrAdminControlNotInitialized, got %v", err)
+	}
+
+	gameConfig, err := repository.NewGameConfigRepository(tx).GetCurrent(ctx)
+	if err != nil {
+		t.Fatalf("reload game config after rejected baseline submit: %v", err)
+	}
+	if gameConfig.InitialBaselineSubmitted {
+		t.Fatalf("expected initial baseline submitted flag to remain false")
+	}
+
+	var baselineCount int64
+	if err := tx.WithContext(ctx).Model(&entity.InitialBaseline{}).Count(&baselineCount).Error; err != nil {
+		t.Fatalf("count initial baseline rows: %v", err)
+	}
+	if baselineCount != 0 {
+		t.Fatalf("expected no initial baseline rows before initialization, got %d", baselineCount)
+	}
+}
+
 func markAllExistingGroupsBankrupt(t *testing.T, ctx context.Context, tx *gorm.DB, yearNo int) {
 	t.Helper()
 
@@ -430,6 +473,9 @@ func clearInitializationFixtures(t *testing.T, ctx context.Context, tx *gorm.DB)
 
 	if err := tx.WithContext(ctx).Where("1 = 1").Delete(&entity.AdminActionLog{}).Error; err != nil {
 		t.Fatalf("clear admin action logs: %v", err)
+	}
+	if err := tx.WithContext(ctx).Where("1 = 1").Delete(&entity.InitialBaseline{}).Error; err != nil {
+		t.Fatalf("clear initial baselines: %v", err)
 	}
 	if err := tx.WithContext(ctx).Where("role_type = ?", enum.RoleTypeGroup).Delete(&entity.Account{}).Error; err != nil {
 		t.Fatalf("clear group accounts: %v", err)

@@ -1,6 +1,7 @@
 ﻿import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router'
 
 import { pinia } from '@/stores'
+import { useAdminShellStore } from '@/stores/admin-shell'
 import { useAuthStore } from '@/stores/auth'
 import type { AuthRoleType } from '@/types/auth'
 
@@ -144,12 +145,15 @@ router.beforeEach(async (to) => {
   }
 
   if (authStore.currentUser?.roleType === 'ADMIN') {
-    const defaultRoute = authStore.resolveDefaultRoute()
+    const shellStore = useAdminShellStore(pinia)
+    await shellStore.refreshSetupStatus({ silent: true })
+    const setupStatus = shellStore.setupStatus
+    const defaultRoute = setupStatus?.defaultRoute ?? authStore.resolveDefaultRoute()
     if (to.path === '/sandbox-game/admin') {
       return defaultRoute
     }
-    if (defaultRoute === '/sandbox-game/admin/setup' && to.path !== defaultRoute) {
-      return defaultRoute
+    if (!setupStatus?.initialized && to.path !== '/sandbox-game/admin/setup') {
+      return '/sandbox-game/admin/setup'
     }
   }
 

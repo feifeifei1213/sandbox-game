@@ -359,6 +359,13 @@ func (h *AdminControlHandler) GetInitialBaseline(c *gin.Context) {
 				"未找到初始基线数据",
 				err,
 			))
+		case errors.Is(err, service.ErrAdminControlNotInitialized):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusConflict,
+				enum.ConflictCode,
+				"比赛尚未初始化，请先完成赛前配置",
+				err,
+			))
 		default:
 			middleware.AbortWithAppError(c, middleware.NewAppError(
 				http.StatusInternalServerError,
@@ -410,6 +417,13 @@ func (h *AdminControlHandler) SubmitInitialBaseline(c *gin.Context) {
 				http.StatusNotFound,
 				enum.NotFoundCode,
 				"未找到游戏配置",
+				err,
+			))
+		case errors.Is(err, service.ErrAdminControlNotInitialized):
+			middleware.AbortWithAppError(c, middleware.NewAppError(
+				http.StatusConflict,
+				enum.ConflictCode,
+				"比赛尚未初始化，请先完成赛前配置",
 				err,
 			))
 		case errors.Is(err, service.ErrAdminControlInitialBaselineSubmitted):

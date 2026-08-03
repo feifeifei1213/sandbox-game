@@ -62,6 +62,10 @@ try {
     Copy-Item -Path (Join-Path $projectRoot 'scripts\init-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\init-competition.ps1') -Force
     Copy-Item -Path (Join-Path $projectRoot 'scripts\reset-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\reset-competition.ps1') -Force
     Copy-Item -Path (Join-Path $projectRoot 'scripts\start-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\start-competition.ps1') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'scripts\get-competition-port.ps1') -Destination (Join-Path $releaseRoot 'scripts\get-competition-port.ps1') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'scripts\ensure-mysql-service.ps1') -Destination (Join-Path $releaseRoot 'scripts\ensure-mysql-service.ps1') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'scripts\stop-competition-port.ps1') -Destination (Join-Path $releaseRoot 'scripts\stop-competition-port.ps1') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'scripts\start-competition-background.ps1') -Destination (Join-Path $releaseRoot 'scripts\start-competition-background.ps1') -Force
     Copy-Item -Path (Join-Path $projectRoot 'scripts\backup-competition-database.ps1') -Destination (Join-Path $releaseRoot 'scripts\backup-competition-database.ps1') -Force
     $launcherFiles = @(
         '首次初始化数据库.bat',

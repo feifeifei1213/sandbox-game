@@ -241,16 +241,16 @@ type GroupOrderDeliveryRevision struct {
 	GroupID         int64     `gorm:"column:group_id"`
 	YearNo          int       `gorm:"column:year_no"`
 	OrderID         int64     `gorm:"column:order_id"`
-	RevisionType    string    `gorm:"column:revision_type"`
-	StageCode       *string   `gorm:"column:stage_code"`
+	RevisionType    string    `gorm:"column:revision_type;type:varchar(32)"`
+	StageCode       *string   `gorm:"column:stage_code;type:varchar(16)"`
 	OrderAmount     float64   `gorm:"column:order_amount"`
 	EffectiveBefore bool      `gorm:"column:effective_before"`
 	EffectiveAfter  bool      `gorm:"column:effective_after"`
 	RollbackLogID   *int64    `gorm:"column:rollback_log_id"`
 	OperatedByID    *int64    `gorm:"column:operated_by_id"`
-	OperatedByName  string    `gorm:"column:operated_by_name"`
+	OperatedByName  string    `gorm:"column:operated_by_name;type:varchar(64)"`
 	OperatedAt      time.Time `gorm:"column:operated_at"`
-	Remark          *string   `gorm:"column:remark"`
+	Remark          *string   `gorm:"column:remark;type:varchar(500)"`
 	BaseEntity
 }
 

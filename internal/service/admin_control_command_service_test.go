@@ -102,6 +102,19 @@ func TestValidateInitialBaselineSubmissionAllowsFreshSubmit(t *testing.T) {
 	}
 }
 
+func TestEnsureAdminControlInitializedRejectsZeroGroups(t *testing.T) {
+	err := ensureAdminControlInitialized(0)
+	if !errors.Is(err, ErrAdminControlNotInitialized) {
+		t.Fatalf("expected ErrAdminControlNotInitialized, got %v", err)
+	}
+}
+
+func TestEnsureAdminControlInitializedAllowsPositiveGroups(t *testing.T) {
+	if err := ensureAdminControlInitialized(1); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+}
+
 func TestValidateInitializeGameEditionRequiresKnownEdition(t *testing.T) {
 	_, err := validateInitializeGameEdition("")
 	if !errors.Is(err, ErrAdminControlEditionRequired) {

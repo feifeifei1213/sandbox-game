@@ -37,6 +37,7 @@ var (
 	ErrAdminControlTargetYearMismatch       = errors.New("admin control target year mismatch")
 	ErrAdminControlFinalYearReached         = errors.New("admin control final year reached")
 	ErrAdminControlOpenNextYearBlocked      = errors.New("admin control open next year blocked")
+	ErrAdminControlNotInitialized           = errors.New("admin control not initialized")
 	ErrAdminControlInitialBaselineSubmitted = errors.New("admin control initial baseline already submitted")
 	ErrAdminControlInitialBaselineInvalid   = errors.New("admin control initial baseline invalid")
 	ErrAdminControlEditionRequired          = errors.New("admin control edition required")
@@ -610,6 +611,9 @@ func (s *AdminControlCommandService) SubmitInitialBaseline(ctx context.Context, 
 		if err != nil {
 			return fmt.Errorf("load groups: %w", err)
 		}
+		if err := ensureAdminControlInitialized(len(groups)); err != nil {
+			return err
+		}
 		groupIDs := make([]int64, 0, len(groups))
 		for _, group := range groups {
 			groupIDs = append(groupIDs, group.ID)
@@ -986,6 +990,13 @@ func validateInitialBaselineSubmission(alreadySubmitted bool, baselinePayload *p
 	}
 	if err := validateBaselineManualIntegers(*baselinePayload); err != nil {
 		return err
+	}
+	return nil
+}
+
+func ensureAdminControlInitialized(groupCount int) error {
+	if groupCount <= 0 {
+		return ErrAdminControlNotInitialized
 	}
 	return nil
 }

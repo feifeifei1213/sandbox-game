@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>玩家端经营页字体与间距调优 Demo</title>
+  <style>
+    :root {
+      --page-bg: #edf2f8;
+      --shell-bg: #ffffff;
+      --sheet-bg: #fbfcfd;
+      --line: #d7dee8;
+      --line-strong: #aeb9c8;
+      --text: #172033;
+      --muted: #647084;
+      --blue: #2563eb;
+      --blue-soft: rgba(37, 99, 235, 0.16);
+      --green: #cfe5be;
+      --green-strong: #b7d99f;
+      --locked: #edf1f6;
+      --calc: #fff59d;
+      --orange: #f8c15d;
+      --band-start: #f6dfcc;
+      --band-quarter: #d8efee;
+      --band-end: #dff0d2;
+      --band-misc: #f7ead4;
+      --danger: #b91c1c;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.12), transparent 28%),
+        radial-gradient(circle at 86% 12%, rgba(34, 197, 94, 0.10), transparent 24%),
+        linear-gradient(180deg, #eef4fb 0%, #f8fafc 100%);
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 18px;
+    }
+
+    .demo-header {
+      width: min(1760px, calc(100vw - 36px));
+      margin: 0 auto 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+    }
+
+    .demo-title {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .demo-note {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .demo-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border: 1px solid rgba(23, 32, 51, 0.18);
+      border-radius: 4px;
+    }
+
+    .swatch.input {
+      background: var(--green);
+    }
+
+    .swatch.locked {
+      background: var(--locked);
+    }
+
+    .swatch.focus {
+      background: var(--green);
+      box-shadow: inset 0 0 0 2px var(--blue), 0 0 0 2px var(--blue-soft);
+    }
+
+    .comparison-grid {
+      width: min(1760px, calc(100vw - 36px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .mock-shell {
+      overflow: hidden;
+      border: 1px solid #dbe2ea;
+      border-radius: 20px;
+      background: var(--shell-bg);
+      box-shadow: var(--shadow);
+    }
+
+    .mock-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .mock-label strong {
+      font-size: 15px;
+    }
+
+    .mock-label span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid #dde5ef;
+      background: linear-gradient(180deg, #fbfdff 0%, #eef4fb 100%);
+    }
+
+    .compact .app-header {
+      padding: 22px 24px 18px;
+    }
+
+    .comfortable .app-header {
+      padding: 16px 20px 14px;
+    }
+
+    .brand-kicker {
+      margin: 0 0 4px;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .brand-title {
+      margin: 0 0 6px;
+    }
+
+    .compact .brand-title {
+      font-size: 28px;
+    }
+
+    .comfortable .brand-title {
+      font-size: 25px;
+    }
+
+    .brand-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .header-pills {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-content: flex-start;
+      gap: 8px;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ffffff;
+      color: #2a3548;
+      font-size: 13px;
+    }
+
+    .compact .pill {
+      padding: 8px 12px;
+    }
+
+    .comfortable .pill {
+      padding: 7px 11px;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .compact .toolbar {
+      padding: 16px 18px;
+    }
+
+    .comfortable .toolbar {
+      padding: 12px 14px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      border: 1px solid #d8e1ec;
+      border-radius: 999px;
+      background: #ffffff;
+      padding: 7px 12px;
+      font-size: 13px;
+    }
+
+    .tab.active {
+      border-color: var(--blue);
+      background: #edf4ff;
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 1px solid #cad5e3;
+      border-radius: 10px;
+      background: #ffffff;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .toolbar-actions button {
+      padding: 7px 10px;
+      font-size: 13px;
+    }
+
+    .toolbar-actions button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #ffffff;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      align-items: start;
+    }
+
+    .compact .workspace {
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .comfortable .workspace {
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .main-panel {
+      min-width: 0;
+    }
+
+    .status-banner {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .status-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #ffffff;
+    }
+
+    .compact .status-card {
+      padding: 14px 16px;
+    }
+
+    .comfortable .status-card {
+      padding: 12px 14px;
+    }
+
+    .status-card span {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status-card strong {
+      font-size: 17px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sheet-frame {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #ffffff;
+    }
+
+    .sheet-scroll {
+      overflow: auto;
+      background: var(--sheet-bg);
+    }
+
+    table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: collapse;
+      table-layout: fixed;
+      background: #ffffff;
+    }
+
+    col.index {
+      width: 4%;
+    }
+
+    col.band {
+      width: 5%;
+    }
+
+    col.main {
+      width: 14%;
+    }
+
+    col.sub {
+      width: 14%;
+    }
+
+    col.stage {
+      width: 10%;
+    }
+
+    col.total {
+      width: 9%;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 0;
+      vertical-align: middle;
+    }
+
+    th,
+    .row-head {
+      background: #f1f4f8;
+      color: #5d6878;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    th {
+      height: 30px;
+      font-size: 12px;
+    }
+
+    .row-head {
+      font-size: 12px;
+    }
+
+    .section-band {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      text-align: center;
+      letter-spacing: 1.5px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .band-start {
+      background: var(--band-start);
+    }
+
+    .band-quarter {
+      background: var(--band-quarter);
+    }
+
+    .band-end {
+      background: var(--band-end);
+    }
+
+    .band-misc {
+      background: var(--band-misc);
+    }
+
+    .label-cell,
+    .sub-cell,
+    .note-cell {
+      background: #f8fafc;
+      line-height: var(--cell-line-height);
+      padding: var(--cell-padding-y) var(--cell-padding-x);
+      font-size: var(--cell-font-size);
+    }
+
+    .label-cell {
+      font-weight: 700;
+      color: #26364d;
+    }
+
+    .sub-cell {
+      color: #33475b;
+    }
+
+    .input-cell,
+    .locked-cell,
+    .calc-cell,
+    .orange-cell {
+      text-align: center;
+      font-size: var(--cell-font-size);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .input-cell {
+      background: var(--green);
+    }
+
+    .locked-cell {
+      background: var(--locked);
+      color: #8491a6;
+      font-weight: 700;
+    }
+
+    .calc-cell {
+      background: var(--calc);
+      font-weight: 700;
+      padding: var(--cell-padding-y) var(--cell-padding-x);
+    }
+
+    .orange-cell {
+      background: var(--orange);
+      font-weight: 800;
+      padding: var(--cell-padding-y) var(--cell-padding-x);
+    }
+
+    .input-cell input {
+      display: block;
+      width: 100%;
+      min-height: var(--input-min-height);
+      border: none;
+      outline: none;
+      background: transparent;
+      color: inherit;
+      text-align: center;
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      padding: var(--input-padding-y) var(--cell-padding-x);
+    }
+
+    .compact {
+      --cell-font-size: 13px;
+      --cell-line-height: 1.45;
+      --cell-padding-y: 8px;
+      --cell-padding-x: 10px;
+      --input-padding-y: 8px;
+      --input-min-height: 0px;
+    }
+
+    .comfortable {
+      --cell-font-size: 14px;
+      --cell-line-height: 1.5;
+      --cell-padding-y: 8px;
+      --cell-padding-x: 10px;
+      --input-padding-y: 8px;
+      --input-min-height: 34px;
+    }
+
+    .comfortable .input-cell:focus-within {
+      position: relative;
+      z-index: 1;
+      box-shadow: inset 0 0 0 2px var(--blue), 0 0 0 2px var(--blue-soft);
+    }
+
+    .compact .input-cell:focus-within {
+      position: relative;
+      z-index: 1;
+      box-shadow: inset 0 0 0 1px var(--blue);
+    }
+
+    .side-panel {
+      display: grid;
+      gap: 10px;
+      position: sticky;
+      top: 12px;
+    }
+
+    .side-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #ffffff;
+      padding: 13px;
+    }
+
+    .side-card h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .side-card p,
+    .side-card li {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .side-card p {
+      margin: 0;
+    }
+
+    .side-card ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .focus-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .mini-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mini-actions button {
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+
+    .invalid {
+      background: #fff5f5;
+      color: var(--danger);
+    }
+
+    @media (max-width: 1500px) {
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .demo-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .demo-legend {
+        justify-content: flex-start;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .status-banner {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .app-header,
+      .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .header-pills,
+      .toolbar-actions {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="demo-header">
+      <div>
+        <h1 class="demo-title">玩家端经营页视觉调优 Demo</h1>
+        <p class="demo-note">左侧模拟当前偏紧凑观感，右侧模拟“主表更清楚、输入格更好点、页面壳子更轻”的建议版。这个页面只用于看视觉方向，不连接后端。</p>
+      </div>
+      <div class="demo-legend" aria-label="颜色说明">
+        <span class="legend-item"><i class="swatch input"></i> 可编辑</span>
+        <span class="legend-item"><i class="swatch locked"></i> 锁定</span>
+        <span class="legend-item"><i class="swatch focus"></i> 当前输入格</span>
+      </div>
+    </header>
+
+    <section class="comparison-grid" aria-label="经营页视觉调优对比">
+      <article class="mock-shell compact">
+        <div class="mock-label">
+          <strong>当前偏紧凑观感</strong>
+          <span>13px 主体字 / 外层留白较多 / 输入高度随内容</span>
+        </div>
+        <div class="app-header">
+          <div>
+            <p class="brand-kicker">SANDBOX GAME</p>
+            <h2 class="brand-title">玩家经营页</h2>
+            <p class="brand-subtitle">第 2 组 · 1 年经营 · Q2_OPEN</p>
+          </div>
+          <div class="header-pills">
+            <span class="pill">当前阶段：Q2</span>
+            <span class="pill">草稿：已保存</span>
+            <span class="pill">状态：经营中</span>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="tabs">
+            <span class="tab">0 年</span>
+            <span class="tab active">1 年</span>
+            <span class="tab">2 年</span>
+          </div>
+          <div class="toolbar-actions">
+            <button type="button">保存草稿</button>
+            <button class="primary" type="button">提交阶段</button>
+          </div>
+        </div>
+        <div class="workspace">
+          <div class="main-panel">
+            <div class="status-banner">
+              <div class="status-card"><span>当前现金</span><strong>12,600</strong></div>
+              <div class="status-card"><span>订单总额</span><strong>8,400</strong></div>
+              <div class="status-card"><span>市场投入</span><strong>1,200</strong></div>
+              <div class="status-card"><span>可填阶段</span><strong>Q2</strong></div>
+            </div>
+            <div class="sheet-frame">
+              <div class="sheet-scroll">
+                <table aria-label="当前偏紧凑经营表格示例">
+                  <colgroup>
+                    <col class="index">
+                    <col class="band">
+                    <col class="main">
+                    <col class="sub">
+                    <col class="stage">
+                    <col class="stage">
+                    <col class="stage">
+                    <col class="stage">
+                    <col class="total">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>A</th>
+                      <th>B</th>
+                      <th>C</th>
+                      <th>Q1</th>
+                      <th>Q2</th>
+                      <th>Q3</th>
+                      <th>Q4</th>
+                      <th>合计</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="row-head">1</td>
+                      <td class="section-band band-start" rowspan="2">年初</td>
+                      <td class="label-cell">年初现金</td>
+                      <td class="sub-cell">上一年结转</td>
+                      <td class="calc-cell">12,000</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">12,000</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">2</td>
+                      <td class="label-cell">短期贷款</td>
+                      <td class="sub-cell">本季净增减</td>
+                      <td class="locked-cell">0</td>
+                      <td class="input-cell"><input value="300" inputmode="numeric" aria-label="当前版 Q2 短期贷款"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">300</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">3</td>
+                      <td class="section-band band-quarter" rowspan="5">季度</td>
+                      <td class="label-cell">市场投入</td>
+                      <td class="sub-cell">本地 / 区域 / 国内 / 亚洲</td>
+                      <td class="locked-cell">1,200</td>
+                      <td class="input-cell"><input value="800" inputmode="numeric" aria-label="当前版 Q2 市场投入"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">2,000</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">4</td>
+                      <td class="label-cell">生产人力</td>
+                      <td class="sub-cell">手工填写</td>
+                      <td class="locked-cell">18</td>
+                      <td class="input-cell"><input value="21" inputmode="numeric" aria-label="当前版 Q2 生产人力"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">39</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">5</td>
+                      <td class="label-cell">销售收入</td>
+                      <td class="sub-cell">订单交付金额</td>
+                      <td class="locked-cell">5,600</td>
+                      <td class="input-cell"><input value="2800" inputmode="numeric" aria-label="当前版 Q2 销售收入"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">8,400</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">6</td>
+                      <td class="label-cell">额外收入及奖励</td>
+                      <td class="sub-cell">管理员下发</td>
+                      <td class="locked-cell">0</td>
+                      <td class="locked-cell">500</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">500</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">7</td>
+                      <td class="label-cell">核对季末现金</td>
+                      <td class="sub-cell">供线下自核</td>
+                      <td class="orange-cell">13,800</td>
+                      <td class="orange-cell">14,900</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="orange-cell">14,900</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">8</td>
+                      <td class="section-band band-end">年末</td>
+                      <td class="label-cell">下新供应链订单</td>
+                      <td class="sub-cell">空桶订单留痕</td>
+                      <td class="locked-cell">0</td>
+                      <td class="input-cell invalid"><input value="1.5" inputmode="numeric" aria-label="当前版 Q2 空桶订单"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">1.5</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <aside class="side-panel" aria-label="当前版侧栏">
+            <div class="side-card">
+              <h3>右侧工作栏</h3>
+              <p>信息可读，但外层区域比较舒展，主表第一屏空间略少。</p>
+            </div>
+            <div class="side-card">
+              <h3>输入感受</h3>
+              <ul>
+                <li>数字略小。</li>
+                <li>输入格高度偏紧。</li>
+                <li>焦点能看见，但连续录入时追踪感一般。</li>
+              </ul>
+            </div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="mock-shell comfortable">
+        <div class="mock-label">
+          <strong>建议舒适化观感</strong>
+          <span>14px 主体字 / 壳子收紧 / 输入格 34px / 数字等宽 / 蓝色焦点</span>
+        </div>
+        <div class="app-header">
+          <div>
+            <p class="brand-kicker">SANDBOX GAME</p>
+            <h2 class="brand-title">玩家经营页</h2>
+            <p class="brand-subtitle">第 2 组 · 1 年经营 · Q2_OPEN</p>
+          </div>
+          <div class="header-pills">
+            <span class="pill">当前阶段：Q2</span>
+            <span class="pill">草稿：已保存</span>
+            <span class="pill">状态：经营中</span>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="tabs">
+            <span class="tab">0 年</span>
+            <span class="tab active">1 年</span>
+            <span class="tab">2 年</span>
+          </div>
+          <div class="toolbar-actions">
+            <button type="button">保存草稿</button>
+            <button class="primary" type="button">提交阶段</button>
+          </div>
+        </div>
+        <div class="workspace">
+          <div class="main-panel">
+            <div class="status-banner">
+              <div class="status-card"><span>当前现金</span><strong>12,600</strong></div>
+              <div class="status-card"><span>订单总额</span><strong>8,400</strong></div>
+              <div class="status-card"><span>市场投入</span><strong>1,200</strong></div>
+              <div class="status-card"><span>可填阶段</span><strong>Q2</strong></div>
+            </div>
+            <div class="sheet-frame">
+              <div class="sheet-scroll">
+                <table aria-label="建议舒适化经营表格示例">
+                  <colgroup>
+                    <col class="index">
+                    <col class="band">
+                    <col class="main">
+                    <col class="sub">
+                    <col class="stage">
+                    <col class="stage">
+                    <col class="stage">
+                    <col class="stage">
+                    <col class="total">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>A</th>
+                      <th>B</th>
+                      <th>C</th>
+                      <th>Q1</th>
+                      <th>Q2</th>
+                      <th>Q3</th>
+                      <th>Q4</th>
+                      <th>合计</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="row-head">1</td>
+                      <td class="section-band band-start" rowspan="2">年初</td>
+                      <td class="label-cell">年初现金</td>
+                      <td class="sub-cell">上一年结转</td>
+                      <td class="calc-cell">12,000</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">12,000</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">2</td>
+                      <td class="label-cell">短期贷款</td>
+                      <td class="sub-cell">本季净增减</td>
+                      <td class="locked-cell">0</td>
+                      <td class="input-cell"><input data-demo-input data-label="Q2 短期贷款" value="300" inputmode="numeric" aria-label="建议版 Q2 短期贷款"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">300</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">3</td>
+                      <td class="section-band band-quarter" rowspan="5">季度</td>
+                      <td class="label-cell">市场投入</td>
+                      <td class="sub-cell">本地 / 区域 / 国内 / 亚洲</td>
+                      <td class="locked-cell">1,200</td>
+                      <td class="input-cell"><input data-demo-input data-label="Q2 市场投入" value="800" inputmode="numeric" aria-label="建议版 Q2 市场投入"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">2,000</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">4</td>
+                      <td class="label-cell">生产人力</td>
+                      <td class="sub-cell">手工填写</td>
+                      <td class="locked-cell">18</td>
+                      <td class="input-cell"><input data-demo-input data-label="Q2 生产人力" value="21" inputmode="numeric" aria-label="建议版 Q2 生产人力"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">39</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">5</td>
+                      <td class="label-cell">销售收入</td>
+                      <td class="sub-cell">订单交付金额</td>
+                      <td class="locked-cell">5,600</td>
+                      <td class="input-cell"><input data-demo-input data-label="Q2 销售收入" value="2800" inputmode="numeric" aria-label="建议版 Q2 销售收入"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">8,400</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">6</td>
+                      <td class="label-cell">额外收入及奖励</td>
+                      <td class="sub-cell">管理员下发</td>
+                      <td class="locked-cell">0</td>
+                      <td class="locked-cell">500</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">500</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">7</td>
+                      <td class="label-cell">核对季末现金</td>
+                      <td class="sub-cell">供线下自核</td>
+                      <td class="orange-cell">13,800</td>
+                      <td class="orange-cell">14,900</td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="orange-cell">14,900</td>
+                    </tr>
+                    <tr>
+                      <td class="row-head">8</td>
+                      <td class="section-band band-end">年末</td>
+                      <td class="label-cell">下新供应链订单</td>
+                      <td class="sub-cell">空桶订单留痕</td>
+                      <td class="locked-cell">0</td>
+                      <td class="input-cell invalid"><input data-demo-input data-label="Q2 空桶订单" value="1.5" inputmode="numeric" aria-label="建议版 Q2 空桶订单"></td>
+                      <td class="locked-cell">--</td>
+                      <td class="locked-cell">--</td>
+                      <td class="calc-cell">1.5</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <aside class="side-panel" aria-label="建议版侧栏">
+            <div class="side-card">
+              <h3>视觉变化</h3>
+              <ul>
+                <li>主体文字提高到 14px。</li>
+                <li>输入格保持绿色语义，只叠加蓝色焦点。</li>
+                <li>数字使用等宽显示，横向核对更稳。</li>
+              </ul>
+            </div>
+            <div class="side-card">
+              <h3>焦点体验</h3>
+              <p>点击右侧表格输入格，或用下面按钮模拟连续跳格。</p>
+              <div class="focus-line">
+                <span>当前格</span>
+                <span id="focusLabel">未选择</span>
+              </div>
+              <div class="mini-actions">
+                <button type="button" id="focusFirst">聚焦第一个</button>
+                <button type="button" id="focusPrev">上一个</button>
+                <button type="button" id="focusNext">下一个</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const inputs = Array.from(document.querySelectorAll('[data-demo-input]'));
+    const focusLabel = document.getElementById('focusLabel');
+    const focusFirst = document.getElementById('focusFirst');
+    const focusPrev = document.getElementById('focusPrev');
+    const focusNext = document.getElementById('focusNext');
+
+    function updateFocusLabel(input) {
+      if (!focusLabel) return;
+      focusLabel.textContent = input ? input.dataset.label : '未选择';
+    }
+
+    function focusAt(index) {
+      if (!inputs.length) return;
+      const safeIndex = Math.max(0, Math.min(inputs.length - 1, index));
+      inputs[safeIndex].focus();
+      inputs[safeIndex].select();
+      updateFocusLabel(inputs[safeIndex]);
+    }
+
+    function focusByOffset(offset) {
+      const current = document.activeElement;
+      const currentIndex = inputs.indexOf(current);
+      if (currentIndex === -1) {
+        focusAt(offset > 0 ? 0 : inputs.length - 1);
+        return;
+      }
+      focusAt(currentIndex + offset);
+    }
+
+    inputs.forEach((input) => {
+      input.addEventListener('focus', () => updateFocusLabel(input));
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === 'ArrowDown') {
+          event.preventDefault();
+          focusByOffset(1);
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          focusByOffset(-1);
+        }
+      });
+    });
+
+    focusFirst.addEventListener('click', () => focusAt(0));
+    focusPrev.addEventListener('click', () => focusByOffset(-1));
+    focusNext.addEventListener('click', () => focusByOffset(1));
+  </script>
+</body>
+</html>

@@ -92,12 +92,12 @@ function Parse-MySqlDsn {
         throw "MySQL DSN 中用户名为空"
     }
 
-    $host = $endpoint
+    $mysqlHost = $endpoint
     $port = '3306'
     if ($endpoint.StartsWith('[')) {
         $closingBracket = $endpoint.IndexOf(']')
         if ($closingBracket -gt 0) {
-            $host = $endpoint.Substring(1, $closingBracket - 1)
+            $mysqlHost = $endpoint.Substring(1, $closingBracket - 1)
             if ($endpoint.Length -gt ($closingBracket + 2) -and $endpoint.Substring($closingBracket + 1, 1) -eq ':') {
                 $port = $endpoint.Substring($closingBracket + 2)
             }
@@ -106,7 +106,7 @@ function Parse-MySqlDsn {
     else {
         $lastColon = $endpoint.LastIndexOf(':')
         if ($lastColon -gt 0) {
-            $host = $endpoint.Substring(0, $lastColon)
+            $mysqlHost = $endpoint.Substring(0, $lastColon)
             $port = $endpoint.Substring($lastColon + 1)
         }
     }
@@ -114,7 +114,7 @@ function Parse-MySqlDsn {
     [pscustomobject]@{
         User     = $user
         Password = $password
-        Host     = $host
+        Host     = $mysqlHost
         Port     = $port
         Database = $database
     }

@@ -52,11 +52,8 @@ const { currentUser } = storeToRefs(authStore)
 const currentEditionName = computed(() => config.value?.editionName || setupStatus.value?.editionName || '--')
 
 onMounted(async () => {
-  if (config.value) {
-    return
-  }
   try {
-    await shellStore.bootstrap()
+    await shellStore.refreshAll({ silent: true })
   } catch {
     // 错误消息由 store 统一展示。
   }

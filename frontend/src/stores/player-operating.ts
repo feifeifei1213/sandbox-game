@@ -150,10 +150,11 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
     }
     saving.value = true
     try {
+      const payloadForWrite = sanitizeOperatingPayloadForWrite(draftPayload.value)
       const result = await savePlayerOperatingDraft({
         yearNo: selectedYear.value,
         stageStatus: view.stageStatus,
-        operatingPayload: draftPayload.value,
+        operatingPayload: payloadForWrite,
         clientSaveTime: new Date().toISOString(),
       })
       currentView.value = {
@@ -203,10 +204,11 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
     }
     submitting.value = true
     try {
+      const payloadForWrite = sanitizeOperatingPayloadForWrite(draftPayload.value)
       const result = await submitPlayerOperatingStage({
         yearNo: selectedYear.value,
         stageCode: view.currentStageCode,
-        operatingPayload: draftPayload.value,
+        operatingPayload: payloadForWrite,
       })
       pageMessage.value = {
         type: 'success',
@@ -295,6 +297,44 @@ export const usePlayerOperatingStore = defineStore('sandbox-player-operating', (
     syncAdjustments,
   }
 })
+
+const serviceMarketBidProductKeys = ['agencyInspectionTotal', 'twoCabinVipTotal', 'businessVipTotal', 'memberCustomTotal'] as const
+const legacyMarketBidProductKeys = ['basicProductTotal', 'standardProductTotal', 'precisionProductTotal', 'intelligentProductTotal'] as const
+
+function sanitizeOperatingPayloadForWrite(payload: OperatingPayload) {
+  const next = cloneOperatingPayload(payload)
+  pruneBlankInactiveMarketBidFields(next)
+  return next
+}
+
+function pruneBlankInactiveMarketBidFields(payload: OperatingPayload) {
+  for (const row of payload.beginning.marketBid ?? []) {
+    const hasServiceValue = serviceMarketBidProductKeys.some((key) => hasNonBlankCellValue(row[key]))
+    const hasLegacyValue = legacyMarketBidProductKeys.some((key) => hasNonBlankCellValue(row[key]))
+    if (hasServiceValue && !hasLegacyValue) {
+      deleteBlankFields(row, legacyMarketBidProductKeys)
+    }
+    if (hasLegacyValue && !hasServiceValue) {
+      deleteBlankFields(row, serviceMarketBidProductKeys)
+    }
+  }
+}
+
+function deleteBlankFields(row: Record<string, unknown>, fieldKeys: ReadonlyArray<string>) {
+  for (const fieldKey of fieldKeys) {
+    if (isBlankCellValue(row[fieldKey])) {
+      delete row[fieldKey]
+    }
+  }
+}
+
+function hasNonBlankCellValue(value: unknown) {
+  return !isBlankCellValue(value)
+}
+
+function isBlankCellValue(value: unknown) {
+  return value === '' || value === undefined || value === null
+}
 
 function resolveInitialYear(result: YearTabsResult, preferredYear?: number) {
   if (typeof preferredYear === 'number' && Number.isFinite(preferredYear)) {

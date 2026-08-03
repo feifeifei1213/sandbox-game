@@ -830,6 +830,13 @@ const labels = computed(() => props.labels ?? serviceOperatingLabels)
 const marketProductFields = computed(() => labels.value.marketProductFields as ReadonlyArray<{ key: MarketBidKey; label: string }>)
 
 const legacyMarketProductKeys = ['basicProductTotal', 'standardProductTotal', 'precisionProductTotal', 'intelligentProductTotal'] as const satisfies ReadonlyArray<MarketBidKey>
+const allMarketProductKeys = [
+  ...legacyMarketProductKeys,
+  'agencyInspectionTotal',
+  'twoCabinVipTotal',
+  'businessVipTotal',
+  'memberCustomTotal',
+] as const satisfies ReadonlyArray<MarketBidKey>
 
 const quarterList = [
   { key: 'q1', label: '第一季度', scope: 'Q1' },
@@ -1424,6 +1431,21 @@ function syncMarketBidDerived(next: OperatingPayload) {
   next.beginning.taxAndPlanning.marketInvestmentTotal = marketInvestment
   delete next.beginning.taxAndPlanning.marketBidCost
   next.beginning.taxAndPlanning.orderTotal = orderTotal
+  pruneInactiveMarketBidBlankFields(next)
+}
+
+function pruneInactiveMarketBidBlankFields(next: OperatingPayload) {
+  const activeKeys = new Set(marketProductFields.value.map((field) => field.key))
+  next.beginning.marketBid.forEach((row) => {
+    allMarketProductKeys.forEach((key) => {
+      if (activeKeys.has(key)) {
+        return
+      }
+      if (row[key] === '' || row[key] === undefined || row[key] === null) {
+        delete row[key]
+      }
+    })
+  })
 }
 
 function updateMarketBidField(index: number, key: MarketBidKey, event: Event) {

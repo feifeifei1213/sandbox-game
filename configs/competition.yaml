@@ -16,7 +16,7 @@ log:
   level: info
 
 mysql:
-  dsn: root:CHANGE_ME@tcp(127.0.0.1:3306)/sandbox_game_competition?charset=utf8mb4&parseTime=True&loc=Local
+  dsn: root:123456@tcp(127.0.0.1:3306)/sandbox_game_competition_20260803?charset=utf8mb4&parseTime=True&loc=Local
   maxOpenConns: 20
   maxIdleConns: 10
 

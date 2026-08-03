@@ -209,6 +209,13 @@ func (s *AdminControlQueryService) GetInitialBaseline(ctx context.Context) (*Ini
 	if err != nil {
 		return nil, fmt.Errorf("load game config: %w", err)
 	}
+	groupCount, err := s.groupRepo.CountAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("count groups for initial baseline: %w", err)
+	}
+	if err := ensureAdminControlInitialized(int(groupCount)); err != nil {
+		return nil, err
+	}
 
 	baselinePayload := payload.BaselinePayload{}
 	appliedGroupCount := 0

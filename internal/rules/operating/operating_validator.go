@@ -96,6 +96,20 @@ var supplyChainOrderRecordFieldKeys = []string{
 	"intelligentProduct",
 }
 
+var marketBidServiceProductKeys = []string{
+	"agencyInspectionTotal",
+	"twoCabinVipTotal",
+	"businessVipTotal",
+	"memberCustomTotal",
+}
+
+var marketBidLegacyProductKeys = []string{
+	"basicProductTotal",
+	"standardProductTotal",
+	"precisionProductTotal",
+	"intelligentProductTotal",
+}
+
 func validateSupplyChainOrderRecord(operatingPayload payload.OperatingPayload, stageCode string) []ValidationIssue {
 	quarterKey := ""
 	switch strings.ToUpper(strings.TrimSpace(stageCode)) {
@@ -148,6 +162,9 @@ func validateRequiredScopes(operatingPayload payload.OperatingPayload, stageCode
 	for _, scope := range scopes {
 		issues = append(issues, validateScope(scope)...)
 	}
+	if strings.ToUpper(strings.TrimSpace(stageCode)) == state.StageCodeQ1 {
+		issues = append(issues, validateMarketBidRows(operatingPayload.Beginning.MarketBid)...)
+	}
 	return issues
 }
 
@@ -191,11 +208,6 @@ func buildQuarterStageScopes(operatingPayload payload.OperatingPayload, quarterK
 				path:  "beginning.taxAndPlanning",
 				label: "年初规划区",
 				value: operatingPayload.Beginning.TaxAndPlanning,
-			},
-			requiredScope{
-				path:  "beginning.marketBid",
-				label: "年初市场竞标区",
-				value: operatingPayload.Beginning.MarketBid,
 			},
 		)
 	}
@@ -249,6 +261,75 @@ func buildQuarterStageScopes(operatingPayload payload.OperatingPayload, quarterK
 	)
 
 	return scopes
+}
+
+func validateMarketBidRows(rows []map[string]any) []ValidationIssue {
+	basePath := "beginning.marketBid"
+	if len(rows) == 0 {
+		return []ValidationIssue{{
+			Field:   basePath,
+			Message: "年初市场竞标区未填写",
+		}}
+	}
+
+	issues := make([]ValidationIssue, 0)
+	for index, row := range rows {
+		rowPath := fmt.Sprintf("%s[%d]", basePath, index)
+		if len(row) == 0 {
+			issues = append(issues, ValidationIssue{
+				Field:   rowPath,
+				Message: rowPath + " 未填写",
+			})
+			continue
+		}
+		hasServiceKey, _ := hasAnyMarketBidField(row, marketBidServiceProductKeys)
+		hasLegacyKey, _ := hasAnyMarketBidField(row, marketBidLegacyProductKeys)
+		if !hasServiceKey && !hasLegacyKey {
+			walkMissingValues(rowPath, "年初市场竞标区", row, &issues)
+			continue
+		}
+
+		for _, fieldKey := range resolveMarketBidProductKeys(row) {
+			value, exists := row[fieldKey]
+			if exists && !isMissingLeaf(value) {
+				continue
+			}
+			fieldPath := rowPath + "." + fieldKey
+			issues = append(issues, ValidationIssue{
+				Field:   fieldPath,
+				Message: fieldPath + " 未填写",
+			})
+		}
+	}
+	return issues
+}
+
+func resolveMarketBidProductKeys(row map[string]any) []string {
+	hasServiceKey, hasServiceValue := hasAnyMarketBidField(row, marketBidServiceProductKeys)
+	hasLegacyKey, hasLegacyValue := hasAnyMarketBidField(row, marketBidLegacyProductKeys)
+	if hasServiceValue || (hasServiceKey && !hasLegacyValue) {
+		return marketBidServiceProductKeys
+	}
+	if hasLegacyValue || hasLegacyKey {
+		return marketBidLegacyProductKeys
+	}
+	return marketBidServiceProductKeys
+}
+
+func hasAnyMarketBidField(row map[string]any, fieldKeys []string) (bool, bool) {
+	hasKey := false
+	hasValue := false
+	for _, fieldKey := range fieldKeys {
+		value, exists := row[fieldKey]
+		if !exists {
+			continue
+		}
+		hasKey = true
+		if !isMissingLeaf(value) {
+			hasValue = true
+		}
+	}
+	return hasKey, hasValue
 }
 
 func findQuarterValue(source payload.OperatingQuarterMap, quarterKey string) any {

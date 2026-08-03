@@ -139,6 +139,35 @@ func TestBuildInitialBaselineViewResultFormatsSubmittedMeta(t *testing.T) {
 	}
 }
 
+func TestGetInitialBaselineRejectsBeforeInitialization(t *testing.T) {
+	db := openIntegrationMySQL(t)
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		t.Fatalf("begin transaction: %v", tx.Error)
+	}
+	defer func() {
+		_ = tx.Rollback().Error
+	}()
+
+	ctx := context.Background()
+	ensureIntegrationGameConfig(t, ctx, tx, 3, 0, false)
+	clearInitializationFixtures(t, ctx, tx)
+
+	service := NewAdminControlQueryService(
+		repository.NewGameConfigRepository(tx),
+		repository.NewGroupRepository(tx),
+		repository.NewGroupYearStateRepository(tx),
+		repository.NewInitialBaselineRepository(tx),
+		repository.NewAccountRepository(tx),
+		repository.NewAdminActionLogRepository(tx),
+	)
+	_, err := service.GetInitialBaseline(ctx)
+	if !errors.Is(err, ErrAdminControlNotInitialized) {
+		t.Fatalf("expected ErrAdminControlNotInitialized, got %v", err)
+	}
+}
+
 func TestAdminActionLogFindLatestEmptyDoesNotEmitRecordNotFound(t *testing.T) {
 	db := openIntegrationMySQL(t)
 
