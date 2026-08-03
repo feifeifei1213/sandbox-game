@@ -242,11 +242,12 @@
                     v-for="order in visibleSegment.selectedOrders"
                     :key="order.orderId"
                     class="selected-order-row"
-                    :class="{ delivered: isDeliveredOrder(order), invalidated: isInvalidatedDeliveryOrder(order) }"
+                    :class="{ delivered: isDeliveredOrder(order), invalidated: isInvalidatedDeliveryOrder(order), unfinished: isUnfinishedOrder(order) }"
                   >
                     <span>
                       第 {{ order.roundNo }} 轮 · {{ formatOrderNo(order) }} · 金额 {{ formatIntegerAmount(order.orderAmount) }} · 账期 {{ order.accountTerm }} 季度
                       <small v-if="isInvalidatedDeliveryOrder(order)">上次提交已失效，可重新交付</small>
+                      <small v-if="isUnfinishedOrder(order)">年末仍未交付，不能在后续年份补交</small>
                     </span>
                     <em>{{ formatOrderDeliveryText(order) }}</em>
                   </div>
@@ -862,6 +863,10 @@ function isDeliveredOrder(order: PlayerOrderPoolItem) {
   return order.deliveryStatus === 'DELIVERED' && order.deliveryEffective !== false
 }
 
+function isUnfinishedOrder(order: PlayerOrderPoolItem) {
+  return order.deliveryStatus === 'UNFINISHED'
+}
+
 function isPendingDeliveryOrder(order: PlayerOrderPoolItem) {
   return order.deliveryStatus === 'SELECTED'
 }
@@ -880,7 +885,7 @@ function formatDeliveryStatus(value: string) {
   const map: Record<string, string> = {
     SELECTED: '待交付',
     DELIVERED: '已交付',
-    UNFINISHED: '未完成',
+    UNFINISHED: '未交付',
   }
   return value ? map[value] ?? value : '待交付'
 }
@@ -1526,6 +1531,23 @@ function formatDeliveryStage(value: string) {
 
 .selected-order-row.invalidated em {
   color: #b45309;
+}
+
+.selected-order-row.unfinished {
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 8px 10px;
+}
+
+.selected-order-row.unfinished em {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.selected-order-row.unfinished small {
+  color: #b91c1c;
 }
 
 .delivery-actions {
