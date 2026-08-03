@@ -163,7 +163,7 @@
               <table class="nested-excel-table project-progress-table">
                 <tbody>
                   <tr>
-                    <td class="nested-title-cell project-progress-title-cell" rowspan="5">
+                    <td class="nested-title-cell project-progress-title-cell" :rowspan="projectProgressTableRowspan">
                       <div>3. 项目进度更新</div>
                       <span>（每个在建交付项目向前移动一格，满格的移动到项目交付库）</span>
                     </td>
@@ -179,31 +179,33 @@
                       <td class="nested-subhead-cell">进度</td>
                     </template>
                   </tr>
-                  <tr v-for="factory in projectFactoryRows" :key="factory.key">
-                    <td class="nested-head-cell project-factory-cell">{{ factory.label }}</td>
-                    <template v-for="quarter in quarterList" :key="`${factory.key}-${quarter.key}`">
-                      <td :class="projectProgressCellClass(quarter.scope, getProjectProgressCell(factory.key, quarter.key, 'lineType'))">
-                        <select
-                          :value="getProjectProgressCell(factory.key, quarter.key, 'lineType')"
-                          :disabled="!isScopeEditable(quarter.scope)"
-                          @change="updateProjectProgressCell(factory.key, quarter.key, 'lineType', $event)"
-                        >
-                          <option value=""></option>
-                          <option v-for="option in projectLineTypeOptions" :key="option" :value="option">{{ option }}</option>
-                        </select>
-                      </td>
-                      <td :class="projectProgressCellClass(quarter.scope, getProjectProgressCell(factory.key, quarter.key, 'progress'))">
-                        <input
-                          :value="displayCell(getProjectProgressCell(factory.key, quarter.key, 'progress'))"
-                          :disabled="!isScopeEditable(quarter.scope)"
-                          inputmode="numeric"
-                          pattern="[0-9-]*"
-                          data-enter-nav
-                          @input="updateProjectProgressCell(factory.key, quarter.key, 'progress', $event)"
-                        />
-                      </td>
-                    </template>
-                  </tr>
+                  <template v-for="factory in projectFactoryRows" :key="factory.key">
+                    <tr v-for="slotNo in factory.slotCount" :key="`${factory.key}-${slotNo}`">
+                      <td v-if="slotNo === 1" class="nested-head-cell project-factory-cell" :rowspan="factory.slotCount">{{ factory.label }}</td>
+                      <template v-for="quarter in quarterList" :key="`${factory.key}-${slotNo}-${quarter.key}`">
+                        <td :class="projectProgressCellClass(quarter.scope, getProjectProgressCell(factory.key, slotNo, quarter.key, 'lineType'), 'lineType')">
+                          <select
+                            :value="getProjectProgressCell(factory.key, slotNo, quarter.key, 'lineType')"
+                            :disabled="!isScopeEditable(quarter.scope)"
+                            @change="updateProjectProgressCell(factory.key, slotNo, quarter.key, 'lineType', $event)"
+                          >
+                            <option value=""></option>
+                            <option v-for="option in projectLineTypeOptions" :key="option" :value="option">{{ option }}</option>
+                          </select>
+                        </td>
+                        <td :class="projectProgressCellClass(quarter.scope, getProjectProgressCell(factory.key, slotNo, quarter.key, 'progress'), 'progress')">
+                          <input
+                            :value="displayCell(getProjectProgressCell(factory.key, slotNo, quarter.key, 'progress'))"
+                            :disabled="!isScopeEditable(quarter.scope)"
+                            inputmode="numeric"
+                            pattern="[0-4]*"
+                            data-enter-nav
+                            @input="updateProjectProgressCell(factory.key, slotNo, quarter.key, 'progress', $event)"
+                          />
+                        </td>
+                      </template>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </td>
@@ -798,6 +800,7 @@ type ProjectProgressQuarterKey = 'q1' | 'q2' | 'q3' | 'q4'
 type ProjectProgressCellKey = 'lineType' | 'progress'
 type MarketCultivationKey = 'regional' | 'national' | 'global'
 type QualificationKey = 'qualityEnvironmentalHealth' | 'highTechEnterprise' | 'specializedInnovation' | 'listedCompany'
+type ProjectFactoryRow = { key: ProjectFactoryKey; label: string; slotCount: number }
 
 const props = defineProps<{
   modelValue: OperatingPayload
@@ -840,17 +843,26 @@ const extraPeriodList = [
 ] as const
 
 const projectFactoryRows = [
-  { key: 'factoryA', label: '生产厂房 A' },
-  { key: 'factoryB', label: '生产厂房 B' },
-  { key: 'factoryC', label: '生产厂房 C' },
-] as const satisfies ReadonlyArray<{ key: ProjectFactoryKey; label: string }>
+  { key: 'factoryA', label: '生产厂房 A', slotCount: 4 },
+  { key: 'factoryB', label: '生产厂房 B', slotCount: 3 },
+  { key: 'factoryC', label: '生产厂房 C', slotCount: 1 },
+] as const satisfies ReadonlyArray<ProjectFactoryRow>
+
+const projectProgressTableRowspan = 2 + projectFactoryRows.reduce((total, factory) => total + factory.slotCount, 0)
 
 const defaultProjectProgressRows: ProjectProgressItem[] = projectFactoryRows.flatMap((factory) =>
-  quarterList.map((quarter) => ({
-    projectName: `${factory.label}-${quarter.label}`,
-    lineType: '',
-    progress: '',
-  })),
+  Array.from({ length: factory.slotCount }, (_, slotIndex) => slotIndex + 1).flatMap((slotNo) =>
+    quarterList.map((quarter) => ({
+      projectName: `${factory.label}-槽位${slotNo}-${quarter.label}`,
+      factoryKey: factory.key,
+      factoryLabel: factory.label,
+      slotNo,
+      quarterKey: quarter.key,
+      quarterLabel: quarter.label,
+      lineType: '',
+      progress: '',
+    })),
+  ),
 )
 const projectLineTypeOptions = ['人工', '半自动', '自动', '智能'] as const
 
@@ -899,10 +911,7 @@ const materialFieldKeys = computed(() => materialFields.value.map((item) => item
 const marketBidRows = computed(() => buildFixedMarketBidRows(props.modelValue.beginning.marketBid))
 const projectProgressRows = computed<ProjectProgressItem[]>(() => {
   const items = props.modelValue.yearEnd.projectProgressUpdate?.items ?? []
-  return defaultProjectProgressRows.map((fallback, index) => ({
-    ...fallback,
-    ...(items[index] ?? {}),
-  }))
+  return normalizeProjectProgressRows(items)
 })
 const marketOrderTotal = computed(() => resolveMetric(props.modelValue.beginning.taxAndPlanning.orderTotal, props.derivedValues.orderTotal, marketBidRows.value.reduce((total, _row, index) => total + getMarketRowTotal(index), 0)))
 const marketInvestmentTotal = computed(() => getStoredMarketInvestmentValue())
@@ -1040,42 +1049,89 @@ function supplyChainOrderCellClass(scope: string, value?: unknown) {
   return baseClass
 }
 
-function projectProgressIndex(factoryKey: ProjectFactoryKey, quarterKey: ProjectProgressQuarterKey) {
-  const factoryIndex = projectFactoryRows.findIndex((item) => item.key === factoryKey)
-  const quarterIndex = quarterList.findIndex((item) => item.key === quarterKey)
-  if (factoryIndex === -1 || quarterIndex === -1) {
-    return -1
-  }
-  return factoryIndex * quarterList.length + quarterIndex
+function projectProgressRecordKey(factoryKey: string, slotNo: number, quarterKey: string) {
+  return `${factoryKey}:${slotNo}:${quarterKey}`
 }
 
-function getProjectProgressCell(factoryKey: ProjectFactoryKey, quarterKey: ProjectProgressQuarterKey, key: ProjectProgressCellKey) {
-  const index = projectProgressIndex(factoryKey, quarterKey)
+function normalizeProjectProgressRows(items: ProjectProgressItem[]): ProjectProgressItem[] {
+  const keyedItems = new Map<string, ProjectProgressItem>()
+  items.forEach((item) => {
+    const factoryKey = typeof item.factoryKey === 'string' ? item.factoryKey : ''
+    const slotNo = typeof item.slotNo === 'number' ? item.slotNo : Number(item.slotNo)
+    const quarterKey = typeof item.quarterKey === 'string' ? item.quarterKey : ''
+    if (factoryKey && Number.isInteger(slotNo) && quarterKey) {
+      keyedItems.set(projectProgressRecordKey(factoryKey, slotNo, quarterKey), item)
+    }
+  })
+
+  const legacyItems = items.filter((item) => !item.factoryKey && item.slotNo === undefined && !item.quarterKey)
+  const legacyFactoryKeys = projectFactoryRows.map((factory) => factory.key)
+  const legacyQuarterKeys = quarterList.map((quarter) => quarter.key)
+
+  return defaultProjectProgressRows.map((fallback, index) => {
+    const keyed = keyedItems.get(projectProgressRecordKey(fallback.factoryKey ?? '', fallback.slotNo ?? 0, fallback.quarterKey ?? ''))
+    if (keyed) {
+      return {
+        ...fallback,
+        lineType: keyed.lineType ?? '',
+        progress: keyed.progress ?? '',
+      }
+    }
+
+    const factoryIndex = legacyFactoryKeys.indexOf(fallback.factoryKey as ProjectFactoryKey)
+    const quarterIndex = legacyQuarterKeys.indexOf(fallback.quarterKey as ProjectProgressQuarterKey)
+    const legacyIndex = factoryIndex >= 0 && quarterIndex >= 0 && fallback.slotNo === 1 ? factoryIndex * legacyQuarterKeys.length + quarterIndex : -1
+    const legacy = legacyIndex >= 0 ? legacyItems[legacyIndex] : undefined
+    const positional = items.length >= defaultProjectProgressRows.length ? items[index] : undefined
+    const source = legacy ?? positional
+    return {
+      ...fallback,
+      lineType: source?.lineType ?? '',
+      progress: source?.progress ?? '',
+    }
+  })
+}
+
+function projectProgressIndex(factoryKey: ProjectFactoryKey, slotNo: number, quarterKey: ProjectProgressQuarterKey) {
+  return projectProgressRows.value.findIndex((item) => item.factoryKey === factoryKey && item.slotNo === slotNo && item.quarterKey === quarterKey)
+}
+
+function getProjectProgressCell(factoryKey: ProjectFactoryKey, slotNo: number, quarterKey: ProjectProgressQuarterKey, key: ProjectProgressCellKey) {
+  const index = projectProgressIndex(factoryKey, slotNo, quarterKey)
   if (index < 0) {
     return ''
   }
   return projectProgressRows.value[index]?.[key] ?? ''
 }
 
-function projectProgressCellClass(scope: string, value?: unknown) {
-  return editableCellClass(scope, value)
+function projectProgressCellClass(scope: string, value: unknown, key: ProjectProgressCellKey) {
+  const baseClass = editableCellClass(scope, value)
+  if (key === 'progress' && isProjectProgressProgressInvalid(value)) {
+    return `${baseClass} manual-integer-invalid-cell`
+  }
+  return baseClass
 }
 
-function updateProjectProgressCell(factoryKey: ProjectFactoryKey, quarterKey: ProjectProgressQuarterKey, key: ProjectProgressCellKey, event: Event) {
+function isProjectProgressProgressInvalid(value: unknown) {
+  if (value === '' || value === undefined || value === null) {
+    return false
+  }
+  const parsed = parseNumber(value)
+  return parsed === null || !Number.isInteger(parsed) || parsed < 0 || parsed > 4
+}
+
+function updateProjectProgressCell(factoryKey: ProjectFactoryKey, slotNo: number, quarterKey: ProjectProgressQuarterKey, key: ProjectProgressCellKey, event: Event) {
   const quarter = quarterList.find((item) => item.key === quarterKey)
   if (!quarter || !isScopeEditable(quarter.scope)) {
     return
   }
-  const index = projectProgressIndex(factoryKey, quarterKey)
+  const index = projectProgressIndex(factoryKey, slotNo, quarterKey)
   if (index < 0) {
     return
   }
   const next = cloneOperatingPayload(props.modelValue)
   const sourceItems = next.yearEnd.projectProgressUpdate.items ?? []
-  next.yearEnd.projectProgressUpdate.items = defaultProjectProgressRows.map((fallback, itemIndex) => ({
-    ...fallback,
-    ...(sourceItems[itemIndex] ?? {}),
-  }))
+  next.yearEnd.projectProgressUpdate.items = normalizeProjectProgressRows(sourceItems)
   const target = next.yearEnd.projectProgressUpdate.items[index]
   if (!target) {
     return

@@ -45,6 +45,40 @@ func TestValidateOperatingManualIntegersIgnoresMarketMetadata(t *testing.T) {
 	}
 }
 
+func TestValidateOperatingManualIntegersAllowsProjectProgressMetadata(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["factoryKey"] = "factoryA"
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["factoryLabel"] = "生产厂房 A"
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["quarterKey"] = "q1"
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["quarterLabel"] = "第一季度"
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["lineType"] = "人工"
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["progress"] = 4
+
+	if err := validateOperatingManualIntegers(operatingPayload); err != nil {
+		t.Fatalf("expected project progress metadata to be ignored by integer validation, got %v", err)
+	}
+}
+
+func TestValidateOperatingManualIntegersRejectsInvalidProjectProgressLineType(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["lineType"] = "无人"
+
+	err := validateOperatingManualIntegers(operatingPayload)
+	if err == nil || !strings.Contains(err.Error(), "项目进度更新") {
+		t.Fatalf("expected project progress line type validation error, got %v", err)
+	}
+}
+
+func TestValidateOperatingManualIntegersRejectsInvalidProjectProgressValue(t *testing.T) {
+	operatingPayload := buildValidQ1OperatingPayload()
+	operatingPayload.YearEnd.ProjectProgressUpdate.Items[0]["progress"] = 5
+
+	err := validateOperatingManualIntegers(operatingPayload)
+	if err == nil || !strings.Contains(err.Error(), "进度只能填写 0~4") {
+		t.Fatalf("expected project progress value validation error, got %v", err)
+	}
+}
+
 func TestValidateOperatingManualIntegersRejectsNegativeSupplyChainOrderQuantity(t *testing.T) {
 	operatingPayload := buildValidQ1OperatingPayload()
 	operatingPayload.Quarter.SupplyChainOrderRecord["q1"]["basicProduct"] = -1

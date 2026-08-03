@@ -100,6 +100,30 @@ type QualificationCarryState struct {
 	ListedCompanyUnlocked              bool
 }
 
+type projectProgressFactoryDefinition struct {
+	Key       string
+	Label     string
+	SlotCount int
+}
+
+type projectProgressQuarterDefinition struct {
+	Key   string
+	Label string
+}
+
+var projectProgressFactories = []projectProgressFactoryDefinition{
+	{Key: "factoryA", Label: "生产厂房 A", SlotCount: 4},
+	{Key: "factoryB", Label: "生产厂房 B", SlotCount: 3},
+	{Key: "factoryC", Label: "生产厂房 C", SlotCount: 1},
+}
+
+var projectProgressQuarters = []projectProgressQuarterDefinition{
+	{Key: "q1", Label: "第一季度"},
+	{Key: "q2", Label: "第二季度"},
+	{Key: "q3", Label: "第三季度"},
+	{Key: "q4", Label: "第四季度"},
+}
+
 // OperatingExtraPayload 对应额外收入/罚款区。
 type OperatingExtraPayload struct {
 	IncomeAndPenalty OperatingQuarterMap `json:"incomeAndPenalty"`
@@ -145,14 +169,7 @@ func NewOperatingPayload() OperatingPayload {
 }
 
 func NewOperatingProjectProgressPayload() OperatingProjectProgressPayload {
-	return OperatingProjectProgressPayload{
-		Items: []map[string]any{
-			{"projectName": "项目1", "lineType": "", "progress": ""},
-			{"projectName": "项目2", "lineType": "", "progress": ""},
-			{"projectName": "项目3", "lineType": "", "progress": ""},
-			{"projectName": "项目4", "lineType": "", "progress": ""},
-		},
-	}
+	return OperatingProjectProgressPayload{Items: newOperatingProjectProgressItems()}
 }
 
 func NewOperatingMarketCultivationPayload() OperatingMarketCultivationPayload {
@@ -224,7 +241,96 @@ func normalizeProjectProgressPayload(value OperatingProjectProgressPayload) Oper
 	if value.Items == nil {
 		return NewOperatingProjectProgressPayload()
 	}
-	return value
+	fallback := newOperatingProjectProgressItems()
+	keyedItems := make(map[string]map[string]any)
+	for _, item := range value.Items {
+		factoryKey := projectProgressString(item["factoryKey"])
+		slotNo, slotOK := parseWholeNumber(item["slotNo"])
+		quarterKey := projectProgressString(item["quarterKey"])
+		if factoryKey != "" && slotOK && quarterKey != "" {
+			keyedItems[projectProgressRecordKey(factoryKey, slotNo, quarterKey)] = item
+		}
+	}
+
+	legacyItems := make([]map[string]any, 0)
+	for _, item := range value.Items {
+		if projectProgressString(item["factoryKey"]) == "" && item["slotNo"] == nil && projectProgressString(item["quarterKey"]) == "" {
+			legacyItems = append(legacyItems, item)
+		}
+	}
+
+	normalized := make([]map[string]any, len(fallback))
+	for index, item := range fallback {
+		source := keyedItems[projectProgressRecordKey(toString(item["factoryKey"]), intNumber(item["slotNo"]), toString(item["quarterKey"]))]
+		if source == nil && intNumber(item["slotNo"]) == 1 {
+			factoryIndex := projectProgressFactoryIndex(toString(item["factoryKey"]))
+			quarterIndex := projectProgressQuarterIndex(toString(item["quarterKey"]))
+			legacyIndex := factoryIndex*len(projectProgressQuarters) + quarterIndex
+			if factoryIndex >= 0 && quarterIndex >= 0 && legacyIndex >= 0 && legacyIndex < len(legacyItems) {
+				source = legacyItems[legacyIndex]
+			}
+		}
+		if source == nil && len(value.Items) >= len(fallback) && index < len(value.Items) {
+			source = value.Items[index]
+		}
+		if source != nil {
+			item["lineType"] = source["lineType"]
+			item["progress"] = source["progress"]
+		}
+		normalized[index] = item
+	}
+
+	return OperatingProjectProgressPayload{Items: normalized}
+}
+
+func newOperatingProjectProgressItems() []map[string]any {
+	items := make([]map[string]any, 0, 32)
+	for _, factory := range projectProgressFactories {
+		for slotNo := 1; slotNo <= factory.SlotCount; slotNo++ {
+			for _, quarter := range projectProgressQuarters {
+				items = append(items, map[string]any{
+					"projectName":  fmt.Sprintf("%s-槽位%d-%s", factory.Label, slotNo, quarter.Label),
+					"factoryKey":   factory.Key,
+					"factoryLabel": factory.Label,
+					"slotNo":       slotNo,
+					"quarterKey":   quarter.Key,
+					"quarterLabel": quarter.Label,
+					"lineType":     "",
+					"progress":     "",
+				})
+			}
+		}
+	}
+	return items
+}
+
+func projectProgressRecordKey(factoryKey string, slotNo int, quarterKey string) string {
+	return fmt.Sprintf("%s:%d:%s", factoryKey, slotNo, quarterKey)
+}
+
+func projectProgressString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(toString(value))
+}
+
+func projectProgressFactoryIndex(factoryKey string) int {
+	for index, factory := range projectProgressFactories {
+		if factory.Key == factoryKey {
+			return index
+		}
+	}
+	return -1
+}
+
+func projectProgressQuarterIndex(quarterKey string) int {
+	for index, quarter := range projectProgressQuarters {
+		if quarter.Key == quarterKey {
+			return index
+		}
+	}
+	return -1
 }
 
 func normalizeMarketCultivationPayload(value OperatingMarketCultivationPayload) OperatingMarketCultivationPayload {
@@ -505,6 +611,23 @@ func ParseManualNumber(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func parseWholeNumber(value any) (int, bool) {
+	number, ok := ParseManualNumber(value)
+	if !ok {
+		return 0, false
+	}
+	whole := int(number)
+	if number != float64(whole) {
+		return 0, false
+	}
+	return whole, true
+}
+
+func intNumber(value any) int {
+	number, _ := parseWholeNumber(value)
+	return number
 }
 
 func toString(value any) string {

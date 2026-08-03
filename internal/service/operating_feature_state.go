@@ -81,6 +81,9 @@ func loadPreviousEffectiveOperatingPayload(
 
 func validateOperatingFeatureInputs(value payload.OperatingPayload) error {
 	normalized := value.Normalize()
+	if err := validateProjectProgressInputs(normalized.YearEnd.ProjectProgressUpdate); err != nil {
+		return err
+	}
 	if err := validateMarketCultivationInputs(normalized.YearEnd.MarketCultivation); err != nil {
 		return err
 	}
@@ -88,6 +91,45 @@ func validateOperatingFeatureInputs(value payload.OperatingPayload) error {
 		return err
 	}
 	return nil
+}
+
+func validateProjectProgressInputs(value payload.OperatingProjectProgressPayload) error {
+	lineTypeOptions := map[string]bool{
+		"":    true,
+		"人工":  true,
+		"半自动": true,
+		"自动":  true,
+		"智能":  true,
+	}
+	issues := make([]string, 0)
+	for _, item := range value.Items {
+		projectName := strings.TrimSpace(fmt.Sprint(item["projectName"]))
+		if projectName == "" {
+			projectName = "项目进度"
+		}
+
+		lineType := ""
+		if raw, exists := item["lineType"]; exists && raw != nil {
+			lineType = strings.TrimSpace(fmt.Sprint(raw))
+		}
+		if !lineTypeOptions[lineType] {
+			issues = append(issues, fmt.Sprintf("%s产线=%s", projectName, lineType))
+		}
+
+		rawProgress, exists := item["progress"]
+		if !exists || rawProgress == nil || strings.TrimSpace(fmt.Sprint(rawProgress)) == "" {
+			continue
+		}
+		progress, ok := payload.ParseManualNumber(rawProgress)
+		if !ok || !isWholeNumber(progress) || progress < 0 || progress > 4 {
+			issues = append(issues, fmt.Sprintf("%s进度=%s", projectName, strings.TrimSpace(fmt.Sprint(rawProgress))))
+		}
+	}
+
+	if len(issues) == 0 {
+		return nil
+	}
+	return fmt.Errorf("项目进度更新的产线只能填写“人工 / 半自动 / 自动 / 智能”，进度只能填写 0~4：%s", strings.Join(issues, "、"))
 }
 
 func validateMarketCultivationInputs(value payload.OperatingMarketCultivationPayload) error {

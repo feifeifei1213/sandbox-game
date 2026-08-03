@@ -4,6 +4,11 @@ export type QuarterValueMap = Record<string, Record<string, NumericCellValue>>
 
 export interface ProjectProgressItem {
   projectName: string
+  factoryKey?: string
+  factoryLabel?: string
+  slotNo?: number
+  quarterKey?: string
+  quarterLabel?: string
   lineType: string
   progress: NumericCellValue
 }
@@ -224,6 +229,19 @@ export interface SubmitStageResponse {
   submittedAt: string
 }
 
+const projectProgressFactoryDefinitions = [
+  { key: 'factoryA', label: '生产厂房 A', slotCount: 4 },
+  { key: 'factoryB', label: '生产厂房 B', slotCount: 3 },
+  { key: 'factoryC', label: '生产厂房 C', slotCount: 1 },
+] as const
+
+const projectProgressQuarterDefinitions = [
+  { key: 'q1', label: '第一季度' },
+  { key: 'q2', label: '第二季度' },
+  { key: 'q3', label: '第三季度' },
+  { key: 'q4', label: '第四季度' },
+] as const
+
 export function createEmptyOperatingPayload(): OperatingPayload {
   return {
     beginning: {
@@ -271,20 +289,7 @@ export function cloneOperatingPayload(payload?: OperatingPayload | null): Operat
 
 export function createEmptyProjectProgressUpdatePayload(): ProjectProgressUpdatePayload {
   return {
-    items: [
-      { projectName: '生产厂房 A-第一季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 A-第二季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 A-第三季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 A-第四季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 B-第一季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 B-第二季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 B-第三季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 B-第四季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 C-第一季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 C-第二季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 C-第三季度', lineType: '', progress: '' },
-      { projectName: '生产厂房 C-第四季度', lineType: '', progress: '' },
-    ],
+    items: createDefaultProjectProgressItems(),
   }
 }
 
@@ -333,13 +338,67 @@ function normalizeProjectProgressUpdatePayload(payload?: ProjectProgressUpdatePa
   if (!payload || !Array.isArray(payload.items)) {
     return createEmptyProjectProgressUpdatePayload()
   }
-  const fallback = createEmptyProjectProgressUpdatePayload()
+  const fallback = createDefaultProjectProgressItems()
+  const currentItems = payload.items
+  const keyedItems = new Map<string, ProjectProgressItem>()
+  currentItems.forEach((item) => {
+    const factoryKey = typeof item.factoryKey === 'string' ? item.factoryKey : ''
+    const slotNo = typeof item.slotNo === 'number' ? item.slotNo : Number(item.slotNo)
+    const quarterKey = typeof item.quarterKey === 'string' ? item.quarterKey : ''
+    if (factoryKey && Number.isInteger(slotNo) && quarterKey) {
+      keyedItems.set(projectProgressKey(factoryKey, slotNo, quarterKey), item)
+    }
+  })
+
+  const legacyItems = currentItems.filter((item) => !item.factoryKey && item.slotNo === undefined && !item.quarterKey)
+  const legacyFactories: string[] = projectProgressFactoryDefinitions.map((factory) => factory.key)
+  const legacyQuarters: string[] = projectProgressQuarterDefinitions.map((quarter) => quarter.key)
+
   return {
-    items: fallback.items.map((item, index) => ({
-      ...item,
-      ...(payload.items[index] ?? {}),
-    })),
+    items: fallback.map((item, index) => {
+      const keyed = keyedItems.get(projectProgressKey(item.factoryKey ?? '', item.slotNo ?? 0, item.quarterKey ?? ''))
+      if (keyed) {
+        return {
+          ...item,
+          lineType: keyed.lineType ?? '',
+          progress: keyed.progress ?? '',
+        }
+      }
+
+      const factoryIndex = legacyFactories.indexOf(item.factoryKey ?? '')
+      const quarterIndex = legacyQuarters.indexOf(item.quarterKey ?? '')
+      const legacyIndex = factoryIndex >= 0 && quarterIndex >= 0 && item.slotNo === 1 ? factoryIndex * legacyQuarters.length + quarterIndex : -1
+      const legacy = legacyIndex >= 0 ? legacyItems[legacyIndex] : undefined
+      const positional = currentItems.length >= fallback.length ? currentItems[index] : undefined
+      const source = legacy ?? positional
+      return {
+        ...item,
+        lineType: source?.lineType ?? '',
+        progress: source?.progress ?? '',
+      }
+    }),
   }
+}
+
+function createDefaultProjectProgressItems(): ProjectProgressItem[] {
+  return projectProgressFactoryDefinitions.flatMap((factory) =>
+    Array.from({ length: factory.slotCount }, (_, slotIndex) => slotIndex + 1).flatMap((slotNo) =>
+      projectProgressQuarterDefinitions.map((quarter) => ({
+        projectName: `${factory.label}-槽位${slotNo}-${quarter.label}`,
+        factoryKey: factory.key,
+        factoryLabel: factory.label,
+        slotNo,
+        quarterKey: quarter.key,
+        quarterLabel: quarter.label,
+        lineType: '',
+        progress: '',
+      })),
+    ),
+  )
+}
+
+function projectProgressKey(factoryKey: string, slotNo: number, quarterKey: string) {
+  return `${factoryKey}:${slotNo}:${quarterKey}`
 }
 
 function normalizeMarketCultivationPayload(payload?: MarketCultivationPayload | null): MarketCultivationPayload {

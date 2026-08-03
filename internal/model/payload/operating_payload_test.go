@@ -43,6 +43,58 @@ func TestOperatingPayloadNormalizePreservesSupplyChainOrderRecord(t *testing.T) 
 	}
 }
 
+func TestOperatingProjectProgressDefaultsUseFactorySlotQuarterStructure(t *testing.T) {
+	value := NewOperatingProjectProgressPayload()
+	if len(value.Items) != 32 {
+		t.Fatalf("expected 32 project progress records, got %d", len(value.Items))
+	}
+
+	first := value.Items[0]
+	if first["projectName"] != "生产厂房 A-槽位1-第一季度" || first["factoryKey"] != "factoryA" || first["slotNo"] != 1 || first["quarterKey"] != "q1" {
+		t.Fatalf("unexpected first project progress item: %#v", first)
+	}
+
+	last := value.Items[len(value.Items)-1]
+	if last["projectName"] != "生产厂房 C-槽位1-第四季度" || last["factoryKey"] != "factoryC" || last["slotNo"] != 1 || last["quarterKey"] != "q4" {
+		t.Fatalf("unexpected last project progress item: %#v", last)
+	}
+}
+
+func TestOperatingProjectProgressNormalizeMapsLegacyTwelveItemsToFirstSlot(t *testing.T) {
+	value := NewOperatingProjectProgressPayload()
+	value.Items = []map[string]any{
+		{"projectName": "生产厂房 A-第一季度", "lineType": "人工", "progress": 1},
+		{"projectName": "生产厂房 A-第二季度", "lineType": "半自动", "progress": 2},
+		{"projectName": "生产厂房 A-第三季度", "lineType": "", "progress": ""},
+		{"projectName": "生产厂房 A-第四季度", "lineType": "", "progress": ""},
+		{"projectName": "生产厂房 B-第一季度", "lineType": "自动", "progress": 3},
+		{"projectName": "生产厂房 B-第二季度", "lineType": "", "progress": ""},
+		{"projectName": "生产厂房 B-第三季度", "lineType": "", "progress": ""},
+		{"projectName": "生产厂房 B-第四季度", "lineType": "", "progress": ""},
+		{"projectName": "生产厂房 C-第一季度", "lineType": "智能", "progress": 4},
+		{"projectName": "生产厂房 C-第二季度", "lineType": "", "progress": ""},
+		{"projectName": "生产厂房 C-第三季度", "lineType": "", "progress": ""},
+		{"projectName": "生产厂房 C-第四季度", "lineType": "", "progress": ""},
+	}
+
+	normalized := normalizeProjectProgressPayload(value)
+	if len(normalized.Items) != 32 {
+		t.Fatalf("expected 32 normalized project progress records, got %d", len(normalized.Items))
+	}
+	if got := normalized.Items[0]["lineType"]; got != "人工" {
+		t.Fatalf("expected legacy A Q1 to map to A slot 1 Q1, got %#v", got)
+	}
+	if got := normalized.Items[4]["lineType"]; got != "" {
+		t.Fatalf("expected A slot 2 Q1 to stay empty, got %#v", got)
+	}
+	if got := normalized.Items[16]["lineType"]; got != "自动" {
+		t.Fatalf("expected legacy B Q1 to map to B slot 1 Q1, got %#v", got)
+	}
+	if got := normalized.Items[28]["lineType"]; got != "智能" {
+		t.Fatalf("expected legacy C Q1 to map to C slot 1 Q1, got %#v", got)
+	}
+}
+
 func TestApplyMarketCultivationStateLeavesLegacyFallbackWhenNewFieldsAreEmpty(t *testing.T) {
 	value := NewOperatingMarketCultivationPayload()
 
