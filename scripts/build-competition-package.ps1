@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ConfigPath = '.\configs\competition.yaml',
     [string]$OutputDir = '.\.runtime\competition-package'
 )
@@ -62,6 +62,20 @@ try {
     Copy-Item -Path (Join-Path $projectRoot 'scripts\init-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\init-competition.ps1') -Force
     Copy-Item -Path (Join-Path $projectRoot 'scripts\reset-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\reset-competition.ps1') -Force
     Copy-Item -Path (Join-Path $projectRoot 'scripts\start-competition.ps1') -Destination (Join-Path $releaseRoot 'scripts\start-competition.ps1') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'scripts\backup-competition-database.ps1') -Destination (Join-Path $releaseRoot 'scripts\backup-competition-database.ps1') -Force
+    $launcherFiles = @(
+        '首次初始化数据库.bat',
+        '启动沙盘系统.bat',
+        '重启沙盘系统.bat',
+        '停止沙盘系统.bat',
+        '备份当前比赛数据库.bat',
+        '赛前重置当前比赛.bat'
+    )
+    foreach ($launcherFile in $launcherFiles) {
+        Copy-Item -Path (Join-Path $projectRoot "scripts\competition-launchers\$launcherFile") -Destination (Join-Path $releaseRoot $launcherFile) -Force
+    }
+    Copy-Item -Path (Join-Path $projectRoot 'scripts\competition-launchers\安装部署手册-正式版.txt') -Destination (Join-Path $releaseRoot '安装部署手册-正式版.txt') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'scripts\competition-launchers\操作手册-正式版.txt') -Destination (Join-Path $releaseRoot '操作手册-正式版.txt') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0001_init.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0001_init.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0003_notice_adjustment.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0003_notice_adjustment.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0004_seed_competition_admin.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0004_seed_competition_admin.sql') -Force
@@ -77,8 +91,10 @@ try {
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0014_order_unit_price_precision.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0014_order_unit_price_precision.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0015_adjustment_lifecycle.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0015_adjustment_lifecycle.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0016_order_multi_round.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0016_order_multi_round.sql') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'migrations\mysql\0017_order_delivery_revenue.sql') -Destination (Join-Path $releaseRoot 'migrations\mysql\0017_order_delivery_revenue.sql') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\competition_launch_runbook.md') -Destination (Join-Path $releaseRoot 'docs\competition_launch_runbook.md') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\competition_deploy_checklist.md') -Destination (Join-Path $releaseRoot 'docs\competition_deploy_checklist.md') -Force
+    Copy-Item -Path (Join-Path $projectRoot 'docs\competition_backup_single_deploy_plan.md') -Destination (Join-Path $releaseRoot 'docs\competition_backup_single_deploy_plan.md') -Force
     Copy-Item -Path (Join-Path $projectRoot 'docs\README.md') -Destination (Join-Path $releaseRoot 'README.md') -Force
 
     Compress-Archive -Path (Join-Path $releaseRoot '*') -DestinationPath $zipPath -Force

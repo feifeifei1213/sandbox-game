@@ -9,7 +9,7 @@
 这份手册解决的是：
 1. 管理员电脑怎么准备数据库
 2. 正式包应该放到哪里
-3. 启动脚本应该放到哪里
+3. 如果电脑上已有旧比赛数据，怎么先备份
 4. 第一次怎么验证系统能正常打开
 
 
@@ -28,9 +28,9 @@
 三、你将收到哪些文件
 --------------------
 你会收到三类内容：
-1. 制造业正式包
-2. 服务版正式包
-3. 启动脚本和手册目录
+1. 沙盘系统正式包
+2. 启动脚本和手册
+3. 如有旧比赛数据，还会使用备份脚本
 
 你不需要理解源码，也不需要自己编译程序。
 
@@ -56,103 +56,75 @@
 2. 这个服务当前状态是“正在运行”
 
 
-五、第二步：创建两个数据库
---------------------------
-打开你的 MySQL 管理工具，或者使用命令行，创建下面两个数据库：
+五、第二步：创建正式比赛数据库
+------------------------------
+打开你的 MySQL 管理工具，或者使用命令行，创建下面数据库：
 
-1. `sandbox_game_shengchan_prod`
-2. `sandbox_game_guibing_prod`
+1. `sandbox_game_competition`
 
 只要数据库名字完全一致即可。
 不要改成别的名字。
 
+如果管理员电脑以前已经跑过比赛，不要直接复用旧比赛数据库。请先备份旧库，再为新比赛创建新的数据库。
 
-六、第三步：放置正式包目录
+
+六、第三步：如果已有旧比赛数据，先备份
+--------------------------------------
+如果管理员电脑已经做过一次比赛，请先找到旧系统目录，双击旧目录或新工具包中的：
+
+1. `备份当前比赛数据库.bat`
+
+然后按提示输入备份文件名，例如：
+
+1. `第一场正式比赛数据`
+
+脚本会在当前系统目录下创建或复用 `backup` 文件夹，并生成 zip 文件。
+确认 zip 文件存在后，再继续部署新系统。
+
+
+七、第四步：放置正式包目录
 --------------------------
-请在管理员电脑上创建下面这两个目录：
+请在管理员电脑上创建新目录：
 
-1. `D:\deploy\sandbox-game-shengchan`
-2. `D:\deploy\sandbox-game-guibing`
+1. `E:\deploy\sandbox-game-competition`
 
-然后：
-1. 把制造业正式包完整解压到 `D:\deploy\sandbox-game-shengchan`
-2. 把服务版正式包完整解压到 `D:\deploy\sandbox-game-guibing`
+然后把沙盘系统正式包完整解压到这个新目录。
+不要覆盖旧系统目录。
 
 解压完成后，请确认目录里至少有这些内容：
 
-制造业版：
-1. `D:\deploy\sandbox-game-shengchan\bin\sandbox-game-server.exe`
-2. `D:\deploy\sandbox-game-shengchan\bin\dbtool.exe`
-3. `D:\deploy\sandbox-game-shengchan\frontend\dist\index.html`
-4. `D:\deploy\sandbox-game-shengchan\configs\competition.yaml`
-5. `D:\deploy\sandbox-game-shengchan\scripts\start-competition.ps1`
-
-服务版：
-1. `D:\deploy\sandbox-game-guibing\bin\sandbox-game-server.exe`
-2. `D:\deploy\sandbox-game-guibing\bin\dbtool.exe`
-3. `D:\deploy\sandbox-game-guibing\frontend\dist\index.html`
-4. `D:\deploy\sandbox-game-guibing\configs\competition.yaml`
-5. `D:\deploy\sandbox-game-guibing\scripts\start-competition.ps1`
-
-
-七、第四步：放置启动脚本和手册
-------------------------------
-请创建目录：
-
-1. `D:\deploy\launcher`
-
-然后把启动脚本和两份手册完整复制到这个目录。
-
-复制完成后，`D:\deploy\launcher` 里至少应有：
-1. 启动制造业版.bat
-2. 启动服务版.bat
-3. 首次初始化制造业版数据库.bat
-4. 首次初始化服务版数据库.bat
-5. 重启制造业版服务.bat
-6. 重启服务版服务.bat
-7. 赛前重置制造业版数据库.bat
-8. 赛前重置服务版数据库.bat
-9. 停止全部服务.bat
-10. 安装部署手册-正式版.txt
-11. 操作手册-正式版.txt
+1. `E:\deploy\sandbox-game-competition\bin\sandbox-game-server.exe`
+2. `E:\deploy\sandbox-game-competition\bin\dbtool.exe`
+3. `E:\deploy\sandbox-game-competition\frontend\dist\index.html`
+4. `E:\deploy\sandbox-game-competition\configs\competition.yaml`
+5. `E:\deploy\sandbox-game-competition\scripts\start-competition.ps1`
+6. `E:\deploy\sandbox-game-competition\scripts\backup-competition-database.ps1`
+7. `E:\deploy\sandbox-game-competition\启动沙盘系统.bat`
+8. `E:\deploy\sandbox-game-competition\备份当前比赛数据库.bat`
 
 
 八、第五步：检查配置文件是否正确
 --------------------------------
-请分别打开两套正式包中的配置文件。
+请打开正式包中的配置文件：
 
-制造业版配置文件路径：
-`D:\deploy\sandbox-game-shengchan\configs\competition.yaml`
-
-服务版配置文件路径：
-`D:\deploy\sandbox-game-guibing\configs\competition.yaml`
+`E:\deploy\sandbox-game-competition\configs\competition.yaml`
 
 请重点检查以下内容：
 
-制造业版应为：
-1. 端口：`18080`
-2. 数据库：`sandbox_game_shengchan_prod`
-3. 密码：`123456`
-
-服务版应为：
-1. 端口：`28080`
-2. 数据库：`sandbox_game_guibing_prod`
-3. 密码：`123456`
+1. 端口：建议 `8080`，或按现场确认值填写
+2. 数据库：`sandbox_game_competition`
+3. 密码：与本机 MySQL root 密码一致
+4. `tokenSecret` 已替换为正式随机字符串
 
 如果你收到的正式包已经是预配置好的，一般不需要手动改。
 
 
 九、第六步：首次初始化数据库
 ----------------------------
-第一次部署时，请不要敲命令，直接双击 `D:\deploy\launcher` 里的脚本。
+第一次部署时，请不要敲命令，直接双击新部署目录里的脚本。
 
-制造业版：
-1. 双击 `首次初始化制造业版数据库.bat`
-2. 按提示输入 `INIT`
-3. 等待脚本显示“初始化完成”
-
-服务版：
-1. 双击 `首次初始化服务版数据库.bat`
+操作：
+1. 双击 `首次初始化数据库.bat`
 2. 按提示输入 `INIT`
 3. 等待脚本显示“初始化完成”
 
@@ -164,21 +136,17 @@
 十、第七步：试运行
 ------------------
 现在请不要直接手工运行 exe。
-请只通过 `D:\deploy\launcher` 里的 `.bat` 文件来测试。
+请只通过新部署目录里的 `.bat` 文件来测试。
 
-先测试制造业版：
-1. 双击 `启动制造业版.bat`
-2. 看浏览器是否自动打开
-3. 看是否能进入登录页
-
-再测试服务版：
-1. 双击 `启动服务版.bat`
+操作：
+1. 双击 `启动沙盘系统.bat`
 2. 看浏览器是否自动打开
 3. 看是否能进入登录页
 
 本机测试地址一般是：
-1. 制造业版：`http://127.0.0.1:18080/sandbox-game/login`
-2. 服务版：`http://127.0.0.1:28080/sandbox-game/login`
+1. `http://127.0.0.1:8080/sandbox-game/login`
+
+登录管理员账号后，在赛前配置页选择本场比赛版本包，例如生产制造版或贵宾服务版。
 
 
 十一、第八步：局域网联通测试
@@ -186,11 +154,10 @@
 找到管理员电脑的局域网 IP，例如 `192.168.1.50`。
 
 然后从另一台同网络电脑访问：
-1. 制造业版：`http://192.168.1.50:18080/sandbox-game/login`
-2. 服务版：`http://192.168.1.50:28080/sandbox-game/login`
+1. `http://192.168.1.50:8080/sandbox-game/login`
 
 如果其他电脑打不开，请检查：
-1. 管理员电脑防火墙是否已放行 `18080` 和 `28080`
+1. 管理员电脑防火墙是否已放行 `8080`，或配置文件中的实际端口
 2. 两台电脑是否在同一局域网
 
 
@@ -199,7 +166,7 @@
 请按这个顺序检查：
 1. MySQL 服务是否存在，且服务名是否属于脚本可自动识别的常见名称
 2. MySQL 服务是否正在运行
-3. 两个数据库是否已创建
+3. 正式比赛数据库是否已创建
 4. 正式包是否放在正确目录
 5. `frontend\dist\index.html` 是否存在
 6. 端口是否与配置文件一致

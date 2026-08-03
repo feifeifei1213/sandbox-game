@@ -145,6 +145,7 @@ npm run dev
 
 - [competition_launch_runbook.md](E:\project\sand box game\docs\competition_launch_runbook.md)
 - [competition_deploy_checklist.md](E:\project\sand box game\docs\competition_deploy_checklist.md)
+- [competition_backup_single_deploy_plan.md](E:\project\sand box game\docs\competition_backup_single_deploy_plan.md)
 
 ### 7.5.1 正式版上线包落点
 
@@ -153,8 +154,12 @@ npm run dev
 - `scripts/init-competition.ps1`
 - `scripts/reset-competition.ps1`
 - `scripts/start-competition.ps1`
+- `scripts/backup-competition-database.ps1`
 - `scripts/build-competition-package.ps1`
+- `首次初始化数据库.bat / 启动沙盘系统.bat / 重启沙盘系统.bat / 停止沙盘系统.bat / 备份当前比赛数据库.bat / 赛前重置当前比赛.bat`
+- `安装部署手册-正式版.txt / 操作手册-正式版.txt`
 - `docs/competition_deploy_checklist.md`
+- `docs/competition_backup_single_deploy_plan.md`
 
 ### 7.6 看 Excel 规则与对账样例
 
@@ -177,12 +182,14 @@ npm run dev
 
 推荐按以下顺序执行：
 
-1. 修改 `configs/competition.yaml`
-2. 执行 `scripts/init-competition.ps1`
-3. 执行 `scripts/build-competition-package.ps1`
-4. 在比赛主机启动 `scripts/start-competition.ps1`
-5. 直接访问 `http://比赛主机IP:server.port/sandbox-game/login`
-6. 管理员登录后先完成 `赛前配置页` 初始化，再开始正式比赛
+1. 如果管理员电脑已有旧比赛数据，先执行 `备份当前比赛数据库.bat`
+2. 新代码解压到新部署目录，不覆盖旧目录
+3. 修改 `configs/competition.yaml`
+4. 执行 `scripts/build-competition-package.ps1`
+5. 在比赛主机双击 `首次初始化数据库.bat`
+6. 双击 `启动沙盘系统.bat`
+7. 直接访问 `http://比赛主机IP:server.port/sandbox-game/login`
+8. 管理员登录后先在 `赛前配置页` 选择版本包并初始化比赛，再开始正式比赛
 
 现场如果需要逐条照着执行，请直接使用：
 

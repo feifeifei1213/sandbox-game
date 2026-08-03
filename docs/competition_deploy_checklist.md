@@ -1,6 +1,6 @@
 # 沙盘经营系统现场一键部署清单
 
-> 更新日期：2026-04-02  
+> 更新日期：2026-08-03
 > 适用对象：比赛现场技术支持、部署执行人、主持人  
 > 文档定位：本文件不是解释“为什么这样部署”，而是给现场直接照着执行的清单。若要看完整背景和边界，请同时参考 `docs/competition_launch_runbook.md`。
 
@@ -12,6 +12,8 @@
 - 使用 `Go + MySQL` 提供统一访问地址，由 Go 服务同时提供前端静态页面与业务 API
 - 正式比赛库只保留 `admin + sg_game_config` 初始化结果
 - 由管理员首次登录后，在系统内完成“赛前配置页”初始化小组数量
+- 场景 B：管理员电脑已经跑过一次比赛时，先备份旧比赛数据库，再把新代码部署到新文件夹
+- 新部署推荐采用单实例入口，生产制造版 / 贵宾服务版在网页赛前配置页选择，不再通过不同启动脚本区分
 
 本清单默认你已经拿到了当前仓库。
 
@@ -38,6 +40,8 @@
 - 正式比赛库已初始化，但尚未预建玩家组
 - 管理员首次登录后进入 `赛前配置页`
 - 管理员在页面中配置小组数量并点击“初始化比赛”后，才真正生成 `group01 ~ groupNN`
+- 若是已有旧比赛数据的管理员电脑，旧代码目录和旧数据库备份文件已经保留，新比赛使用新部署目录和新数据库
+- 管理员日常只需要双击 `启动沙盘系统.bat`，版本差异由系统内版本包处理
 
 ---
 
@@ -45,6 +49,8 @@
 
 比赛前一天，先逐项确认：
 
+- 如果管理员电脑已有旧比赛数据，已先执行 `备份当前比赛数据库.bat`，并确认 `backup` 文件夹下生成 zip
+- 新代码部署目录不会覆盖旧代码目录
 - 比赛主机固定 IP 已确认，例如 `192.168.8.200`
 - 比赛主机和所有参赛电脑在同一局域网
 - MySQL 已安装并可用
@@ -103,10 +109,45 @@ Set-Location 'E:\project\sand box game'
 - `scripts\init-competition.ps1`
 - `scripts\reset-competition.ps1`
 - `scripts\start-competition.ps1`
+- `scripts\backup-competition-database.ps1`
+- `migrations\mysql\0017_order_delivery_revenue.sql`
+- `首次初始化数据库.bat`
+- `启动沙盘系统.bat`
+- `重启沙盘系统.bat`
+- `停止沙盘系统.bat`
+- `备份当前比赛数据库.bat`
+- `赛前重置当前比赛.bat`
+- `安装部署手册-正式版.txt`
+- `操作手册-正式版.txt`
 - `docs\competition_launch_runbook.md`
 - `docs\competition_deploy_checklist.md`
+- `docs\competition_backup_single_deploy_plan.md`
 
 如果比赛主机不能直接编译，也可以把整个 `sandbox-game-competition` 目录复制到比赛主机。
+
+---
+
+## 5.1 场景 B：已有旧比赛数据时的额外动作
+
+如果管理员电脑已经做过一次比赛，先不要覆盖旧目录，也不要直接重置旧数据库。
+
+推荐顺序：
+
+1. 进入旧系统目录。
+2. 双击 `备份当前比赛数据库.bat`。
+3. 按提示输入备份文件名，例如 `第一场正式比赛数据`。
+4. 确认旧系统目录下生成 `backup\第一场正式比赛数据.zip`。
+5. 新建新的部署目录，例如 `E:\deploy\sandbox-game-competition`。
+6. 将最新上线包解压到新目录。
+7. 新比赛使用新的数据库，例如 `sandbox_game_competition`。
+
+备份 zip 第一版应包含：
+
+- 完整数据库 SQL；
+- 结果摘要 CSV；
+- 备份说明 TXT。
+
+结果摘要用于快速查看每组排名、收入、利润、权益、CEO / CFO 等数据；严肃追溯仍以 SQL 恢复到临时数据库后的查询为准。
 
 ---
 
@@ -117,6 +158,12 @@ Set-Location 'E:\project\sand box game'
 ```powershell
 Set-Location 'E:\deploy\sandbox-game-competition'
 .\scripts\init-competition.ps1 -ConfigPath .\configs\competition.yaml
+```
+
+如果使用正式包根目录中的管理员双击入口，也可以直接双击：
+
+```text
+首次初始化数据库.bat
 ```
 
 这一步只会初始化：
@@ -142,6 +189,12 @@ Set-Location 'E:\deploy\sandbox-game-competition'
 ```powershell
 Set-Location 'E:\deploy\sandbox-game-competition'
 .\scripts\start-competition.ps1 -ConfigPath .\configs\competition.yaml
+```
+
+如果使用正式包根目录中的管理员双击入口，也可以直接双击：
+
+```text
+启动沙盘系统.bat
 ```
 
 后端默认监听：
@@ -191,6 +244,7 @@ curl.exe -s -i "http://127.0.0.1:8080/healthz"
 7. 玩家默认进入 `0年经营页`
 8. 玩家端页面刷新后仍可正常访问
 9. 管理员端刷新后仍可正常访问
+10. 赛前配置页中可选择本场比赛版本包，例如生产制造版或贵宾服务版
 
 ---
 
